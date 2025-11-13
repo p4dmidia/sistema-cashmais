@@ -1,0 +1,1 @@
+DELETE FROM companies WHERE cnpj = '12345678000195';

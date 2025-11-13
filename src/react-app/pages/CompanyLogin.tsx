@@ -1,0 +1,185 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router';
+import { Building2, CreditCard, Lock, AlertCircle, Users } from 'lucide-react';
+
+export default function CompanyLogin() {
+  const [identifier, setIdentifier] = useState('');
+  const [senha, setSenha] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+
+  // Detectar se é CNPJ ou CPF baseado no comprimento
+  const isCompany = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    return digits.length >= 14; // CNPJ tem 14 dígitos, CPF tem 11
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      const isCompanyLogin = isCompany(identifier);
+      const endpoint = isCompanyLogin ? '/api/empresa/login' : '/api/caixa/login';
+      
+      // Para CNPJ (empresa), enviar no campo 'cnpj' se contém apenas dígitos, senão é email
+      let payload;
+      if (isCompanyLogin) {
+        const cleanIdentifier = identifier.replace(/\D/g, '');
+        const isCNPJ = cleanIdentifier.length === 14;
+        payload = isCNPJ 
+          ? { cnpj: identifier, senha }
+          : { email: identifier, senha };
+      } else {
+        payload = { cpf: identifier, password: senha };
+      }
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+        credentials: 'include',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        if (isCompanyLogin) {
+          navigate('/empresa/dashboard');
+        } else {
+          navigate('/caixa/compras');
+        }
+      } else {
+        setError(data.error || 'Erro ao fazer login');
+      }
+    } catch (err) {
+      setError('Erro de conexão. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getPlaceholder = () => {
+    if (!identifier) return 'CNPJ da empresa ou CPF do caixa';
+    const cleanIdentifier = identifier.replace(/\D/g, '');
+    if (isCompany(identifier)) {
+      const isCNPJ = cleanIdentifier.length === 14;
+      return isCNPJ ? '00.000.000/0001-00' : 'exemplo@empresa.com';
+    }
+    return '000.000.000-00';
+  };
+
+  const getIcon = () => {
+    if (!identifier) return CreditCard;
+    return isCompany(identifier) ? Building2 : Users;
+  };
+
+  const Icon = getIcon();
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011]">
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-md w-full space-y-8">
+          <div className="text-center">
+            <div className="mx-auto h-16 w-16 bg-[#70ff00] rounded-xl flex items-center justify-center">
+              <span className="text-white font-bold text-2xl">C</span>
+            </div>
+            <h2 className="mt-6 text-3xl font-bold text-white">Acesso Empresarial</h2>
+            <p className="mt-2 text-gray-300">Entre com CNPJ (empresa) ou CPF (caixa)</p>
+          </div>
+
+          <div className="bg-white/5 backdrop-blur-md rounded-2xl p-8 border border-white/10">
+            <form className="space-y-6" onSubmit={handleSubmit}>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="identifier" className="block text-sm font-medium text-gray-200 mb-2">
+                    {!identifier ? 'CNPJ ou CPF' : isCompany(identifier) ? 'CNPJ ou Email da Empresa' : 'CPF do Caixa'}
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Icon className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      id="identifier"
+                      type="text"
+                      required
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                      placeholder={getPlaceholder()}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="senha" className="block text-sm font-medium text-gray-200 mb-2">
+                    Senha
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Lock className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      id="senha"
+                      type="password"
+                      required
+                      value={senha}
+                      onChange={(e) => setSenha(e.target.value)}
+                      className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                      placeholder="Sua senha"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {error && (
+                <div className="flex items-center space-x-2 text-red-400 bg-red-900/20 p-3 rounded-lg border border-red-800/50">
+                  <AlertCircle className="h-5 w-5" />
+                  <span className="text-sm">{error}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-gradient-to-r from-[#70ff00] to-[#50cc00] hover:from-[#50cc00] hover:to-[#70ff00] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#70ff00] disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 hover:scale-[1.02]"
+              >
+                {loading ? 'Entrando...' : 'Entrar'}
+              </button>
+
+              <div className="text-center">
+                <p className="text-sm text-gray-300">
+                  Não tem uma conta?{' '}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/empresa/cadastro')}
+                    className="font-medium text-[#70ff00] hover:text-[#50cc00] transition-colors"
+                  >
+                    Cadastre sua empresa
+                  </button>
+                </p>
+              </div>
+
+              <div className="text-center pt-4 border-t border-white/10">
+                <p className="text-xs text-gray-400">
+                  Voltando para afiliados?{' '}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/')}
+                    className="font-medium text-[#70ff00] hover:text-[#50cc00] transition-colors"
+                  >
+                    Página inicial
+                  </button>
+                </p>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

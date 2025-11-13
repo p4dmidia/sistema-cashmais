@@ -1,0 +1,1 @@
+UPDATE companies SET senha_hash = '$2a$12$rWKqG8WQZ3mGkY7o0WZ5ZuJ8X5.LsO7u/zKZ8JX5.LsO7u/zKZ8J.' WHERE cnpj = '12345678000195';

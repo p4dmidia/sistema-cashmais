@@ -1,0 +1,5 @@
+
+DROP INDEX idx_commission_distributions_affiliate;
+DROP INDEX idx_commission_distributions_purchase;
+DROP TABLE commission_distributions;
+DROP TABLE system_commission_settings;

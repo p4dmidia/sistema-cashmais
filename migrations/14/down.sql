@@ -1,0 +1,2 @@
+
+DELETE FROM customer_coupons WHERE coupon_code IN ('CM000123', 'CM000124', 'CM000125', 'CM000126', 'CM000127');

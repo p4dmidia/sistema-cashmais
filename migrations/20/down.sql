@@ -1,0 +1,4 @@
+
+DROP INDEX idx_affiliate_password_reset_tokens_affiliate_id;
+DROP INDEX idx_affiliate_password_reset_tokens_token;
+DROP TABLE affiliate_password_reset_tokens;
