@@ -23,5 +23,10 @@
       "binding": "R2_BUCKET",
       "bucket_name": "01995053-6d08-799d-99f1-d9898351a40a"
     }
-  ]
+  ],
+  "vars": {
+    "SUPABASE_URL": "https://hffxmntvtsimwlsapfod.supabase.co",
+    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmZnhtbnR2dHNpbXdsc2FwZm9kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI3NDYwNDgsImV4cCI6MjA3ODMyMjA0OH0.Fb9Ey9l1YI_Znt4kH5605mxhPGYgML7DXZEJMY5grOc",
+    "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmZnhtbnR2dHNpbXdsc2FwZm9kIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2Mjc0NjA0OCwiZXhwIjoyMDc4MzIyMDQ4fQ.4cPUqXeAEkA5kVwDQU1pmVJoiJRoAtnPtojySH3l_mI"
+  }
 }

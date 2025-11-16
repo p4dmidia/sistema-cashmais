@@ -56,7 +56,7 @@ export function useCompanyAuth() {
       if (hasCompanyCookie) {
         try {
           console.log('[COMPANY_AUTH] Attempting company auth...');
-          const response = await fetch('/api/company/me', {
+          const response = await fetch('/api/empresa/me', {
             credentials: 'include',
           });
 
@@ -84,7 +84,7 @@ export function useCompanyAuth() {
       if (hasCashierCookie) {
         try {
           console.log('[COMPANY_AUTH] Attempting cashier auth...');
-          const cashierResponse = await fetch('/api/cashier/me', {
+          const cashierResponse = await fetch('/api/caixa/me', {
             credentials: 'include',
           });
 
@@ -220,7 +220,7 @@ export function setupAuthInterceptor() {
       // Handle forbidden access - redirect based on role
       try {
         // Try to get current user role - check company first
-        const authResponse = await originalFetch('/api/company/me', { credentials: 'include' });
+        const authResponse = await originalFetch('/api/empresa/me', { credentials: 'include' });
         if (authResponse.ok) {
           // Company user hitting forbidden endpoint - something's wrong, redirect to dashboard
           window.location.href = '/empresa/dashboard';
@@ -228,7 +228,7 @@ export function setupAuthInterceptor() {
         }
         
         // Try cashier auth
-        const cashierResponse = await originalFetch('/api/cashier/me', { credentials: 'include' });
+        const cashierResponse = await originalFetch('/api/caixa/me', { credentials: 'include' });
         if (cashierResponse.ok) {
           // Cashier trying to access company area - redirect to cashier page
           window.location.href = '/empresa/caixa';

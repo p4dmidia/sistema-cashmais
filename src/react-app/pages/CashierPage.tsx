@@ -30,10 +30,10 @@ export default function CashierPage() {
         const data = await response.json();
         setCashier(data.cashier);
       } else {
-        navigate('/caixa/login');
+        navigate('/empresa/login');
       }
     } catch (error) {
-      navigate('/caixa/login');
+      navigate('/empresa/login');
     }
   };
 

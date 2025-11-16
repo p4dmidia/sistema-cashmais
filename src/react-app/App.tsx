@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router';
+import { Suspense, lazy } from 'react';
 import Home from '@/react-app/pages/Home';
 import Login from '@/react-app/pages/Login';
 import Register from '@/react-app/pages/Register';
@@ -7,8 +8,9 @@ import Dashboard from '@/react-app/pages/Dashboard';
 import Profile from '@/react-app/pages/Profile';
 import Extract from '@/react-app/pages/Extract';
 import Network from '@/react-app/pages/Network';
+const TestSupabase = lazy(() => import('@/react-app/pages/TestSupabase'));
 
-
+const TestSupabaseComplete = lazy(() => import('@/react-app/pages/TestSupabaseComplete'));
 
 import Withdrawal from '@/react-app/pages/Withdrawal';
 import AffiliatePasswordRecovery from '@/react-app/pages/AffiliatePasswordRecovery';
@@ -35,6 +37,11 @@ function App() {
           {/* Home routes */}
           <Route path="/" element={<Home />} />
           
+          {/* Test routes */}
+          <Route path="/test-supabase" element={<Suspense fallback={null}><TestSupabase /></Suspense>} />
+
+          <Route path="/test-supabase-complete" element={<Suspense fallback={null}><TestSupabaseComplete /></Suspense>} />
+          
           {/* Affiliate authentication routes (no redirect protection) */}
           <Route path="/login" element={<Login />} />
           <Route path="/cadastro" element={<Register />} />
@@ -58,6 +65,7 @@ function App() {
           {/* Cashier routes */}
           <Route path="/caixa/login" element={<CashierLogin />} />
           <Route path="/caixa/compras" element={<CashierPage />} />
+          <Route path="/empresa/caixa" element={<CashierPage />} />
           
           {/* Admin routes */}
           <Route path="/admin/login" element={<AdminLogin />} />

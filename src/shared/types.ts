@@ -1,30 +1,38 @@
-import z from "zod";
+export interface UserProfile {
+  id: number;
+  mocha_user_id: string;
+  cpf: string;
+  role: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
-// User profile roles
-export const UserRole = z.enum(['admin', 'company', 'affiliate', 'cashier']);
-export type UserRoleType = z.infer<typeof UserRole>;
+export interface Affiliate {
+  id: number;
+  full_name: string;
+  email: string;
+  cpf: string;
+  phone: string;
+  referral_code: string;
+  sponsor_referral_code?: string;
+  is_active: boolean;
+  created_at: string;
+}
 
-// User profile schema
-export const UserProfileSchema = z.object({
-  id: z.number(),
-  mocha_user_id: z.string(),
-  cpf: z.string().nullable(),
-  role: UserRole,
-  is_active: z.boolean(),
-  sponsor_id: z.number().nullable(),
-  company_name: z.string().nullable(),
-  created_at: z.string(),
-  updated_at: z.string(),
-});
+export interface Transaction {
+  id: number;
+  user_id: number;
+  amount: number;
+  type: 'credit' | 'debit';
+  description: string;
+  created_at: string;
+}
 
-export type UserProfile = z.infer<typeof UserProfileSchema>;
-
-// Combined user data (Mocha user + profile)
-export const CashMaisUserSchema = z.object({
-  id: z.string(),
-  email: z.string(),
-  google_sub: z.string(),
-  profile: UserProfileSchema.nullable(),
-});
-
-export type CashMaisUser = z.infer<typeof CashMaisUserSchema>;
+export interface CashMaisUser {
+  id: number;
+  full_name: string;
+  email: string;
+  cpf: string;
+  role: string;
+}

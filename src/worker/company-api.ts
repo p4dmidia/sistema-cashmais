@@ -64,6 +64,8 @@ app.post('/api/empresa/registrar', async (c) => {
   try {
     const data = CompanyRegisterSchema.parse(await c.req.json());
     
+    console.log('Company registration data received:', JSON.stringify(data, null, 2));
+    
     // Check if email already exists
     const existing = await c.env.DB.prepare('SELECT id FROM companies WHERE email = ?').bind(data.email).first();
     if (existing) {
@@ -89,11 +91,22 @@ app.post('/api/empresa/registrar', async (c) => {
       data.site_instagram || ''
     ).run();
 
+    // Debug: Log the result structure
+    console.log('D1 Insert Result:', JSON.stringify(result, null, 2));
+    
+    // Get the company ID with proper fallback
+    const companyId = result.meta?.lastRowId || result.meta?.last_row_id || (result as any).lastRowId || (result as any).last_row_id;
+    
+    if (!companyId) {
+      console.error('Failed to get company ID from result:', result);
+      throw new Error('Failed to get inserted company ID - database may not support last insert ID');
+    }
+
     // Create cashback config
     await c.env.DB.prepare(`
       INSERT INTO company_cashback_config (company_id, cashback_percentage)
       VALUES (?, 5.0)
-    `).bind(result.meta.last_row_id).run();
+    `).bind(companyId).run();
 
     return c.json({ success: true, message: 'Empresa cadastrada com sucesso!' });
   } catch (error: any) {
@@ -114,12 +127,17 @@ app.post('/api/empresa/login', async (c) => {
       email = body.email;
       senha = body.senha;
     } else if (body.cnpj) {
-      // Se receber CNPJ, buscar o email correspondente
-      const company = await c.env.DB.prepare('SELECT email FROM companies WHERE cnpj = ? AND is_active = 1').bind(body.cnpj).first();
+      const cleanCnpj = String(body.cnpj).replace(/\D/g, '');
+      // Try with clean CNPJ first
+      let company = await c.env.DB.prepare('SELECT email FROM companies WHERE cnpj = ? AND is_active = 1').bind(cleanCnpj).first();
+      // Fallback to original masked CNPJ
+      if (!company) {
+        company = await c.env.DB.prepare('SELECT email FROM companies WHERE cnpj = ? AND is_active = 1').bind(body.cnpj).first();
+      }
       if (!company) {
         return c.json({ error: 'CNPJ ou senha inválidos' }, 401);
       }
-      email = company.email as string;
+      email = (company as any).email as string;
       senha = body.senha;
     } else {
       return c.json({ error: 'Email ou CNPJ é obrigatório' }, 400);
@@ -148,11 +166,13 @@ app.post('/api/empresa/login', async (c) => {
       VALUES (?, ?, ?)
     `).bind(company.id, sessionToken, expiresAt.toISOString()).run();
 
-    // Set cookie
+    const origin = c.req.header('Origin') || c.req.header('Host') || '';
+    const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1');
+    const secureCookie = !isLocal;
     setCookie(c, 'company_session', sessionToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'None',
+      secure: secureCookie,
+      sameSite: secureCookie ? 'None' : 'Lax',
       maxAge: 24 * 60 * 60,
       path: '/'
     });
@@ -177,16 +197,24 @@ app.post('/api/empresa/login', async (c) => {
 app.post('/api/caixa/login', async (c) => {
   try {
     const { cpf, password } = z.object({
-      cpf: z.string().min(11),
+      cpf: z.string().min(10),
       password: z.string().min(1)
     }).parse(await c.req.json());
+    const cleanCpf = cpf.replace(/\D/g, '');
     
     // Find cashier
-    const cashier = await c.env.DB.prepare(`
+    let cashier = await c.env.DB.prepare(`
       SELECT cc.*, c.nome_fantasia as company_name FROM company_cashiers cc
       JOIN companies c ON cc.company_id = c.id
       WHERE cc.cpf = ? AND cc.is_active = 1 AND c.is_active = 1
-    `).bind(cpf).first();
+    `).bind(cleanCpf).first();
+    if (!cashier && cpf !== cleanCpf) {
+      cashier = await c.env.DB.prepare(`
+        SELECT cc.*, c.nome_fantasia as company_name FROM company_cashiers cc
+        JOIN companies c ON cc.company_id = c.id
+        WHERE cc.cpf = ? AND cc.is_active = 1 AND c.is_active = 1
+      `).bind(cpf).first();
+    }
     
     if (!cashier) {
       return c.json({ error: 'CPF ou senha inválidos' }, 401);
@@ -214,11 +242,13 @@ app.post('/api/caixa/login', async (c) => {
       VALUES (?, ?, ?)
     `).bind(cashier.id, sessionToken, expiresAt.toISOString()).run();
 
-    // Set cookie
+    const origin = c.req.header('Origin') || c.req.header('Host') || '';
+    const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1');
+    const secureCookie = !isLocal;
     setCookie(c, 'cashier_session', sessionToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'None',
+      secure: secureCookie,
+      sameSite: secureCookie ? 'None' : 'Lax',
       maxAge: 8 * 60 * 60,
       path: '/'
     });
@@ -301,7 +331,7 @@ app.post('/api/empresa/caixas', async (c) => {
     const userProfileResult = await c.env.DB.prepare(`
       INSERT INTO user_profiles (mocha_user_id, cpf, role, is_active)
       VALUES (?, ?, 'cashier', 1)
-    `).bind(`cashier_${cpf}_${Date.now()}`, cpf).run();
+    `).bind(`cashier_${cleanCpf}_${Date.now()}`, cleanCpf).run();
 
     const userProfileId = userProfileResult.meta.last_row_id;
 
@@ -309,7 +339,7 @@ app.post('/api/empresa/caixas', async (c) => {
     await c.env.DB.prepare(`
       INSERT INTO company_cashiers (company_id, user_id, name, cpf, password_hash)
       VALUES (?, ?, ?, ?, ?)
-    `).bind(session.id, userProfileId, name, cpf, passwordHash).run();
+    `).bind(session.id, userProfileId, name, cleanCpf, passwordHash).run();
 
     return c.json({ success: true, message: 'Caixa cadastrado com sucesso!' });
   } catch (error: any) {

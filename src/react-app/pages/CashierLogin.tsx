@@ -20,17 +20,25 @@ export default function CashierLogin() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ cpf, password }),
+        body: JSON.stringify({ cpf: cpf.replace(/\D/g, ''), password }),
         credentials: 'include',
       });
-
-      const data = await response.json();
-
-      if (data.success) {
-        navigate('/caixa/compras');
-      } else {
-        setError(data.error || 'Erro ao fazer login');
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
       }
+
+      if (response.ok) {
+        navigate('/empresa/caixa');
+        return;
+      }
+
+      const statusMessage =
+        (data && data.error) ||
+        (response.status === 401 ? 'CPF ou senha inválidos' : `Erro ao fazer login (código ${response.status})`);
+      setError(statusMessage);
     } catch (err) {
       setError('Erro de conexão. Tente novamente.');
     } finally {

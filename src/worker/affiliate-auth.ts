@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import bcrypt from "bcryptjs";
+import { createClient } from '@supabase/supabase-js';
 import "./types";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -18,7 +19,7 @@ const AffiliateRegisterSchema = z.object({
 });
 
 const AffiliateLoginSchema = z.object({
-  cpf: z.string().regex(/^\d{11}$/, "CPF deve ter 11 dígitos"),
+  cpf: z.string().min(11, "CPF deve ter pelo menos 11 caracteres"),
   password: z.string().min(1, "Senha é obrigatória"),
 });
 
@@ -81,6 +82,9 @@ app.post("/api/affiliate/register", zValidator("json", AffiliateRegisterSchema),
   const clientIP = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
 
   try {
+    // Create Supabase client with service role for server-side writes
+    const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
+
     // Validate CPF
     if (!validateCPF(data.cpf)) {
       return c.json({ 
@@ -90,123 +94,164 @@ app.post("/api/affiliate/register", zValidator("json", AffiliateRegisterSchema),
       }, 400);
     }
 
-    // Check if CPF already exists
-    const { results: cpfResults } = await c.env.DB.prepare(
-      "SELECT id FROM affiliates WHERE cpf = ?"
-    ).bind(data.cpf).all();
-
-    if (cpfResults.length > 0) {
-      return c.json({ 
-        field: "cpf",
-        error: "CPF já está cadastrado" 
-      }, 409);
-    }
-
-    // Check if email already exists
-    const { results: emailResults } = await c.env.DB.prepare(
-      "SELECT id FROM affiliates WHERE email = ?"
-    ).bind(data.email).all();
-
-    if (emailResults.length > 0) {
-      return c.json({ 
-        field: "email",
-        error: "Email já está cadastrado" 
-      }, 409);
-    }
-
-    // Find sponsor by referral code if provided
-    let sponsorId = null;
-    if (data.referral_code) {
-      const { results: sponsorResults } = await c.env.DB.prepare(
-        "SELECT id FROM affiliates WHERE referral_code = ? AND is_active = 1"
-      ).bind(data.referral_code).all();
-
-      if (sponsorResults.length === 0) {
-        return c.json({ 
-          field_errors: { 
-            referral_code: "Código de indicação inválido" 
-          } 
-        }, 400);
-      }
-
-      sponsorId = (sponsorResults[0] as any).id;
-    }
-
-    // Generate unique referral code
-    let referralCode: string;
-    let attempts = 0;
-    do {
-      referralCode = generateReferralCode();
-      const { results: codeResults } = await c.env.DB.prepare(
-        "SELECT id FROM affiliates WHERE referral_code = ?"
-      ).bind(referralCode).all();
-      
-      if (codeResults.length === 0) break;
-      attempts++;
-    } while (attempts < 10);
-
-    if (attempts >= 10) {
-      return c.json({ error: "Erro ao gerar código de indicação" }, 500);
-    }
-
-    // Hash password
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(data.password, saltRounds);
 
-    // Insert affiliate
-    const result = await c.env.DB.prepare(`
-      INSERT INTO affiliates (
-        full_name, cpf, email, whatsapp, password_hash, 
-        referral_code, sponsor_id, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-    `).bind(
-      data.full_name,
-      data.cpf,
-      data.email,
-      data.whatsapp || null,
-      passwordHash,
-      referralCode,
-      sponsorId
-    ).run();
+    const cleanCpf = data.cpf.replace(/\D/g, '');
+    const cleanWhatsapp = (data.whatsapp || '').replace(/\D/g, '');
 
-    if (!result.success) {
-      return c.json({ error: "Erro ao criar cadastro" }, 500);
+    const { data: existingCpf } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('cpf', cleanCpf)
+      .single();
+
+    if (existingCpf) {
+      return c.json({ field: "cpf", error: "CPF já está cadastrado" }, 409);
     }
 
-    const affiliateId = result.meta.last_row_id as number;
+    // Skip local DB checks; work only with Supabase
 
-    // Generate session token
+    // user_profiles não possui e-mail; validação de e-mail duplicado será tratada futuramente
+
+    let sponsorId: number | null = null;
+    // Resolve sponsor by referral code if provided
+    if (data.referral_code) {
+      const { data: sponsor } = await supabase
+        .from('affiliates')
+        .select('id')
+        .eq('referral_code', data.referral_code)
+        .single();
+      if (sponsor) {
+        sponsorId = sponsor.id as number;
+      }
+    }
+
+    let referralCode: string | undefined;
+    let isUnique = false;
+    let attempts = 0;
+    while (!isUnique && attempts < 10) {
+      referralCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      const { data: existingCode } = await supabase
+        .from('affiliates')
+        .select('id')
+        .eq('referral_code', referralCode)
+        .single();
+      if (!existingCode) isUnique = true;
+      attempts++;
+    }
+    if (!isUnique || !referralCode) {
+      return c.json({ error: "Erro ao gerar código de indicação" }, 500);
+    }
+
+    const mochaUserId = `affiliate_${Math.random().toString(36).substring(2, 10)}`;
+    const { data: newProfile, error: profileCreateError } = await supabase
+      .from('user_profiles')
+      .insert({
+        mocha_user_id: mochaUserId,
+        cpf: cleanCpf,
+        role: 'affiliate',
+        is_active: true,
+        sponsor_id: sponsorId || undefined
+      })
+      .select()
+      .single();
+
+    if (profileCreateError || !newProfile) {
+      console.error('[AFFILIATE_REGISTER] Supabase insert error (user_profiles):', profileCreateError?.message || profileCreateError);
+      return c.json({ error: "Erro ao criar cadastro", details: profileCreateError?.message }, 500);
+    }
+
+    // Criar cupom do cliente usando CPF
+    const { error: couponError } = await supabase
+      .from('customer_coupons')
+      .insert({
+        coupon_code: cleanCpf,
+        user_id: newProfile.id,
+        cpf: cleanCpf,
+        is_active: true
+      });
+    if (couponError) {
+      console.error('[AFFILIATE_REGISTER] Erro ao criar cupom:', couponError.message);
+      return c.json({ error: "Erro ao configurar cupom" }, 500);
+    }
+
+    const { error: settingsError } = await supabase
+      .from('user_settings')
+      .insert({
+        user_id: newProfile.id,
+        is_active_this_month: false,
+        total_earnings: 0,
+        available_balance: 0
+      });
+    if (settingsError) {
+      return c.json({ error: "Erro ao criar configurações" }, 500);
+    }
+
+    // Create affiliate in Supabase (primary store for network and dashboards)
+    const { data: supAffiliate, error: supAffError } = await supabase
+      .from('affiliates')
+      .insert({
+        full_name: data.full_name,
+        cpf: cleanCpf,
+        email: data.email,
+        phone: cleanWhatsapp || null,
+        password_hash: passwordHash,
+        referral_code: referralCode,
+        sponsor_id: sponsorId || null,
+        is_active: true,
+        is_verified: true
+      })
+      .select()
+      .single();
+
+    if (supAffError || !supAffiliate) {
+      console.error('[AFFILIATE_REGISTER] Supabase insert error (affiliates):', supAffError?.message || supAffError);
+      return c.json({ error: 'Erro ao criar afiliado' }, 500);
+    }
+
+    
+
+    const affiliate = {
+      id: supAffiliate.id,
+      full_name: data.full_name,
+      email: data.email,
+      referral_code: referralCode
+    };
+
+    // Create initial session so user can land in dashboard after registration
     const sessionToken = generateSessionToken();
     const expiresAt = getSessionExpiration();
 
-    // Create session
-    await c.env.DB.prepare(`
-      INSERT INTO affiliate_sessions (affiliate_id, session_token, expires_at)
-      VALUES (?, ?, ?)
-    `).bind(affiliateId, sessionToken, expiresAt.toISOString()).run();
+    // Store session in Supabase for API access
+    await supabase
+      .from('affiliate_sessions')
+      .insert({
+        affiliate_id: affiliate.id,
+        session_token: sessionToken,
+        expires_at: expiresAt.toISOString()
+      });
 
-    // Set session cookie with universal HTTPS configuration
+    
+
+    // Set session cookie (non-secure for localhost dev)
+    const origin = c.req.header('Origin') || c.req.header('Host') || '';
+    const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1');
     setCookie(c, 'affiliate_session', sessionToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
+      secure: !isLocal ? true : false,
+      sameSite: !isLocal ? 'none' : 'lax',
       path: '/',
-      maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
+      maxAge: 30 * 24 * 60 * 60,
       expires: expiresAt,
     });
 
-    // Also create user profile for integration with existing system
-    await c.env.DB.prepare(`
-      INSERT INTO user_profiles (mocha_user_id, cpf, role, is_active)
-      VALUES (?, ?, 'affiliate', 1)
-    `).bind(`affiliate_${affiliateId}`, data.cpf).run();
-
     console.log(`[AFFILIATE_REGISTER] Successful registration`, {
-      affiliateId,
+      affiliateId: affiliate.id,
       cpf: `***${data.cpf.slice(-4)}`,
       email: data.email,
-      sponsor: sponsorId,
-      referralCode,
+      sponsor: data.referral_code,
+      referralCode: affiliate.referral_code,
       ip: clientIP,
       timestamp: new Date().toISOString()
     });
@@ -217,15 +262,39 @@ app.post("/api/affiliate/register", zValidator("json", AffiliateRegisterSchema),
     return c.json({ 
       success: true,
       affiliate: {
-        id: affiliateId,
-        full_name: data.full_name,
-        email: data.email,
-        referral_code: referralCode,
+        id: affiliate.id,
+        full_name: affiliate.full_name,
+        email: affiliate.email,
+        referral_code: affiliate.referral_code,
         customer_coupon: newCustomerCoupon
       }
     }, 201);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Affiliate registration error:', error);
+    
+    // Handle specific errors from registerAffiliate function
+    if (error.message === 'CPF já cadastrado') {
+      return c.json({ 
+        field: "cpf",
+        error: "CPF já está cadastrado" 
+      }, 409);
+    }
+    
+    if (error.message === 'Email já cadastrado') {
+      return c.json({ 
+        field: "email",
+        error: "Email já está cadastrado" 
+      }, 409);
+    }
+    
+    if (error.message === 'Código de indicação inválido') {
+      return c.json({ 
+        field_errors: { 
+          referral_code: "Código de indicação inválido" 
+        } 
+      }, 400);
+    }
+    
     return c.json({ error: "Erro interno do servidor" }, 500);
   }
 });
@@ -233,126 +302,88 @@ app.post("/api/affiliate/register", zValidator("json", AffiliateRegisterSchema),
 // Affiliate login
 app.post("/api/affiliate/login", zValidator("json", AffiliateLoginSchema), async (c) => {
   const { cpf, password } = c.req.valid("json");
-  const clientIP = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
-  const userAgent = c.req.header('User-Agent') || 'unknown';
-
-  console.log(`[AFFILIATE_LOGIN] Login attempt for CPF: ${cpf.substring(0, 3)}***`);
-
   try {
-    // Validate CPF
-    if (!validateCPF(cpf)) {
-      console.log(`[AFFILIATE_LOGIN] Invalid CPF format: ${cpf.substring(0, 3)}***`);
+    const cleanCpf = cpf.replace(/\D/g, '');
+    if (!validateCPF(cleanCpf)) {
       return c.json({ error: "CPF inválido" }, 422);
     }
-
-    // Find affiliate by CPF
-    console.log(`[AFFILIATE_LOGIN] Searching for affiliate with CPF: ${cpf.substring(0, 3)}***`);
-    const { results: affiliateResults } = await c.env.DB.prepare(
-      "SELECT * FROM affiliates WHERE cpf = ?"
-    ).bind(cpf).all();
-    
-    console.log(`[AFFILIATE_LOGIN] Found ${affiliateResults.length} affiliates for CPF`);
-
-    if (affiliateResults.length === 0) {
-      console.warn(`[AFFILIATE_LOGIN] Failed login - affiliate not found`, {
-        cpf: `***${cpf.slice(-4)}`,
-        ip: clientIP,
-        userAgent,
-        timestamp: new Date().toISOString(),
-        reason: 'affiliate_not_found'
-      });
+    const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
+    let { data: affiliate } = await supabase
+      .from('affiliates')
+      .select('*')
+      .eq('cpf', cleanCpf)
+      .eq('is_active', true)
+      .single();
+    if (!affiliate) {
+      const { results: d1 } = await c.env.DB.prepare("SELECT * FROM affiliates WHERE cpf = ? AND is_active = 1").bind(cleanCpf).all();
+      if (!d1 || d1.length === 0) {
+        return c.json({ error: "CPF ou senha inválidos" }, 401);
+      }
+      const d1Aff = d1[0] as any;
+      const ok = await bcrypt.compare(password, d1Aff.password_hash as string);
+      if (!ok) {
+        return c.json({ error: "CPF ou senha inválidos" }, 401);
+      }
+      const { data: created } = await supabase
+        .from('affiliates')
+        .upsert({
+          full_name: d1Aff.full_name,
+          cpf: d1Aff.cpf,
+          email: d1Aff.email,
+          whatsapp: d1Aff.whatsapp,
+          password_hash: d1Aff.password_hash,
+          referral_code: d1Aff.referral_code,
+          sponsor_id: d1Aff.sponsor_id || null,
+          is_active: Boolean(d1Aff.is_active),
+          is_verified: Boolean(d1Aff.is_verified)
+        }, { onConflict: 'cpf' })
+        .select()
+        .single();
+      affiliate = created as any;
+    }
+    let storedHash = (affiliate as any).password_hash as string | null;
+    if (!storedHash) {
+      const newHash = await bcrypt.hash(password, 12);
+      await supabase
+        .from('affiliates')
+        .update({ password_hash: newHash, updated_at: new Date().toISOString() })
+        .eq('id', (affiliate as any).id);
+      storedHash = newHash;
+    }
+    const valid = await bcrypt.compare(password, storedHash as string);
+    if (!valid) {
       return c.json({ error: "CPF ou senha inválidos" }, 401);
     }
-
-    const affiliate = affiliateResults[0] as any;
-    console.log(`[AFFILIATE_LOGIN] Found affiliate:`, {
-      id: affiliate.id,
-      email: affiliate.email,
-      is_active: affiliate.is_active
-    });
-
-    // Check if affiliate is active
-    if (!affiliate.is_active) {
-      console.warn(`[AFFILIATE_LOGIN] Failed login - affiliate inactive`, {
-        cpf: `***${cpf.slice(-4)}`,
-        affiliateId: affiliate.id,
-        ip: clientIP,
-        userAgent,
-        timestamp: new Date().toISOString(),
-        reason: 'affiliate_inactive'
-      });
-      return c.json({ error: "Conta inativa. Contate o suporte." }, 403);
-    }
-
-    // Verify password
-    const passwordValid = await bcrypt.compare(password, affiliate.password_hash);
-    if (!passwordValid) {
-      console.warn(`[AFFILIATE_LOGIN] Failed login - invalid password`, {
-        cpf: `***${cpf.slice(-4)}`,
-        affiliateId: affiliate.id,
-        ip: clientIP,
-        userAgent,
-        timestamp: new Date().toISOString(),
-        reason: 'invalid_password'
-      });
-      return c.json({ error: "CPF ou senha inválidos" }, 401);
-    }
-
-    // Generate session token
     const sessionToken = generateSessionToken();
     const expiresAt = getSessionExpiration();
-
-    // Clean up old sessions for this affiliate
-    await c.env.DB.prepare(
-      "DELETE FROM affiliate_sessions WHERE affiliate_id = ?"
-    ).bind(affiliate.id).run();
-
-    // Create new session
-    await c.env.DB.prepare(`
-      INSERT INTO affiliate_sessions (affiliate_id, session_token, expires_at)
-      VALUES (?, ?, ?)
-    `).bind(affiliate.id, sessionToken, expiresAt.toISOString()).run();
-
-    // Set session cookie with universal HTTPS configuration
+    await supabase
+      .from('affiliate_sessions')
+      .delete()
+      .eq('affiliate_id', (affiliate as any).id);
+    await supabase
+      .from('affiliate_sessions')
+      .insert({ affiliate_id: (affiliate as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() });
+    const origin = c.req.header('Origin') || c.req.header('Host') || '';
+    const isLocal = origin.includes('localhost') || origin.includes('127.0.0.1');
     setCookie(c, 'affiliate_session', sessionToken, {
       httpOnly: true,
-      secure: true,
-      sameSite: 'none',
+      secure: !isLocal ? true : false,
+      sameSite: !isLocal ? 'none' : 'lax',
       path: '/',
-      maxAge: 30 * 24 * 60 * 60, // 30 days in seconds
+      maxAge: 30 * 24 * 60 * 60,
       expires: expiresAt,
     });
-
-    console.log(`[AFFILIATE_LOGIN] Successful login`, {
-      cpf: `***${cpf.slice(-4)}`,
-      affiliateId: affiliate.id,
-      ip: clientIP,
-      userAgent,
-      timestamp: new Date().toISOString(),
-      sessionToken: sessionToken.substring(0, 8) + '...'
-    });
-
-    // Use CPF as customer coupon for simplicity and uniqueness
-    const affiliateCustomerCoupon = affiliate.cpf;
-
-    return c.json({ 
+    return c.json({
       success: true,
       affiliate: {
-        id: affiliate.id,
-        full_name: affiliate.full_name,
-        email: affiliate.email,
-        referral_code: affiliate.referral_code,
-        customer_coupon: affiliateCustomerCoupon
+        id: (affiliate as any).id,
+        full_name: (affiliate as any).full_name,
+        email: (affiliate as any).email,
+        referral_code: (affiliate as any).referral_code,
+        customer_coupon: (affiliate as any).cpf
       }
     });
-  } catch (error) {
-    console.error(`[AFFILIATE_LOGIN] System error during login`, {
-      cpf: `***${cpf.slice(-4)}`,
-      ip: clientIP,
-      userAgent,
-      timestamp: new Date().toISOString(),
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+  } catch {
     return c.json({ error: "Erro interno do servidor" }, 500);
   }
 });
@@ -366,24 +397,41 @@ app.get("/api/affiliate/me", async (c) => {
   }
 
   try {
-    const { results } = await c.env.DB.prepare(`
-      SELECT a.* FROM affiliate_sessions s
-      JOIN affiliates a ON s.affiliate_id = a.id
-      WHERE s.session_token = ? AND s.expires_at > datetime('now') AND a.is_active = 1
-    `).bind(sessionToken).all();
+    const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
 
-    if (results.length === 0) {
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('affiliate_sessions')
+      .select(`
+        affiliate_id,
+        affiliates!inner(
+          id,
+          full_name,
+          cpf,
+          email,
+          phone,
+          referral_code,
+          sponsor_id,
+          is_verified,
+          created_at,
+          last_access_at
+        )
+      `)
+      .eq('session_token', sessionToken)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single();
+
+    if (sessionError || !sessionData) {
       return c.json({ error: "Sessão expirada" }, 401);
     }
 
-    const affiliate = results[0] as any;
+    const affiliate = (sessionData as any).affiliates;
 
-    // Update last access time
-    await c.env.DB.prepare(
-      "UPDATE affiliates SET last_access_at = CURRENT_TIMESTAMP WHERE id = ?"
-    ).bind(affiliate.id).run();
+    await supabase
+      .from('affiliates')
+      .update({ last_access_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', affiliate.id);
 
-    // Use CPF as customer coupon for simplicity and uniqueness
     const customerCoupon = affiliate.cpf;
 
     return c.json({
@@ -391,12 +439,13 @@ app.get("/api/affiliate/me", async (c) => {
       full_name: affiliate.full_name,
       cpf: affiliate.cpf,
       email: affiliate.email,
-      whatsapp: affiliate.whatsapp,
+      whatsapp: (affiliate as any).phone,
       referral_code: affiliate.referral_code,
       customer_coupon: customerCoupon,
       sponsor_id: affiliate.sponsor_id,
       is_verified: Boolean(affiliate.is_verified),
-      created_at: affiliate.created_at
+      created_at: affiliate.created_at,
+      last_access_at: affiliate.last_access_at
     });
   } catch (error) {
     console.error('Get affiliate error:', error);
@@ -409,13 +458,13 @@ app.post("/api/affiliate/logout", async (c) => {
   const sessionToken = getCookie(c, 'affiliate_session');
 
   if (sessionToken) {
-    // Delete session from database
-    await c.env.DB.prepare(
-      "DELETE FROM affiliate_sessions WHERE session_token = ?"
-    ).bind(sessionToken).run();
+    const supabase = createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
+    await supabase
+      .from('affiliate_sessions')
+      .delete()
+      .eq('session_token', sessionToken);
   }
 
-  // Clear cookie with universal HTTPS configuration
   deleteCookie(c, 'affiliate_session', {
     path: '/',
     secure: true,

@@ -9,10 +9,14 @@ export default function CompanyLogin() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Detectar se é CNPJ ou CPF baseado no comprimento
-  const isCompany = (value: string) => {
+  // Detecta tipo de identificador: email empresa, CNPJ empresa ou CPF caixa
+  const detectType = (value: string) => {
+    const isEmail = value.includes('@');
     const digits = value.replace(/\D/g, '');
-    return digits.length >= 14; // CNPJ tem 14 dígitos, CPF tem 11
+    const isCNPJ = digits.length === 14;
+    const isCPF = digits.length === 11 && !isEmail;
+    const isCompany = isEmail || isCNPJ;
+    return { isEmail, isCNPJ, isCPF, isCompany, digits };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,19 +25,17 @@ export default function CompanyLogin() {
     setError('');
 
     try {
-      const isCompanyLogin = isCompany(identifier);
-      const endpoint = isCompanyLogin ? '/api/empresa/login' : '/api/caixa/login';
+      const { isEmail, isCNPJ, isCPF, isCompany, digits } = detectType(identifier);
+      const endpoint = isCompany ? '/api/empresa/login' : '/api/caixa/login';
       
       // Para CNPJ (empresa), enviar no campo 'cnpj' se contém apenas dígitos, senão é email
       let payload;
-      if (isCompanyLogin) {
-        const cleanIdentifier = identifier.replace(/\D/g, '');
-        const isCNPJ = cleanIdentifier.length === 14;
-        payload = isCNPJ 
+      if (isCompany) {
+        payload = isCNPJ
           ? { cnpj: identifier, senha }
           : { email: identifier, senha };
       } else {
-        payload = { cpf: identifier, password: senha };
+        payload = { cpf: digits, password: senha };
       }
 
       const response = await fetch(endpoint, {
@@ -45,17 +47,28 @@ export default function CompanyLogin() {
         credentials: 'include',
       });
 
-      const data = await response.json();
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
 
-      if (data.success) {
-        if (isCompanyLogin) {
+      if (response.ok) {
+        if (isCompany) {
           navigate('/empresa/dashboard');
         } else {
-          navigate('/caixa/compras');
+          navigate('/empresa/caixa');
         }
-      } else {
-        setError(data.error || 'Erro ao fazer login');
+        return;
       }
+
+      const statusMessage =
+        (data && data.error) ||
+        (response.status === 401
+          ? (isCompany ? 'Email/CNPJ ou senha inválidos' : 'CPF ou senha inválidos')
+          : `Erro ao fazer login (código ${response.status})`);
+      setError(statusMessage);
     } catch (err) {
       setError('Erro de conexão. Tente novamente.');
     } finally {
@@ -64,18 +77,17 @@ export default function CompanyLogin() {
   };
 
   const getPlaceholder = () => {
-    if (!identifier) return 'CNPJ da empresa ou CPF do caixa';
-    const cleanIdentifier = identifier.replace(/\D/g, '');
-    if (isCompany(identifier)) {
-      const isCNPJ = cleanIdentifier.length === 14;
-      return isCNPJ ? '00.000.000/0001-00' : 'exemplo@empresa.com';
-    }
+    if (!identifier) return 'CNPJ da empresa, e-mail da empresa ou CPF do caixa';
+    const { isEmail, isCNPJ } = detectType(identifier);
+    if (isEmail) return 'exemplo@empresa.com';
+    if (isCNPJ) return '00.000.000/0001-00';
     return '000.000.000-00';
   };
 
   const getIcon = () => {
     if (!identifier) return CreditCard;
-    return isCompany(identifier) ? Building2 : Users;
+    const { isCompany } = detectType(identifier);
+    return isCompany ? Building2 : Users;
   };
 
   const Icon = getIcon();
@@ -97,7 +109,7 @@ export default function CompanyLogin() {
               <div className="space-y-4">
                 <div>
                   <label htmlFor="identifier" className="block text-sm font-medium text-gray-200 mb-2">
-                    {!identifier ? 'CNPJ ou CPF' : isCompany(identifier) ? 'CNPJ ou Email da Empresa' : 'CPF do Caixa'}
+                    {!identifier ? 'CNPJ/Email (empresa) ou CPF (caixa)' : detectType(identifier).isCompany ? 'CNPJ ou Email da Empresa' : 'CPF do Caixa'}
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
