@@ -76,6 +76,7 @@ function App() {
           <Route path="/admin/companies" element={<CompaniesManagement />} />
           <Route path="/admin/reports" element={<Reports />} />
           <Route path="/admin/settings" element={<SystemSettings />} />
+          <Route path="*" element={<Home />} />
         </Routes>
       </div>
     </Router>
