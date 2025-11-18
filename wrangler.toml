@@ -1,0 +1,11 @@
+# wrangler.toml (VERSÃO CORRIGIDA E SEGURA)
+
+name = "cashmais-api"
+main = "src/worker/index.ts"
+compatibility_date = "2024-05-18" # Usando uma data estável recente
+
+[vars]
+# A URL do seu projeto Supabase
+SUPABASE_URL = "https://hffxmntvtsimwlsapfod.supabase.co"
+
+# A CHAVE SECRETA NÃO VAI AQUI! ELA SERÁ INJETADA PELO WRANGLER SECRETS.
