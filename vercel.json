@@ -1,9 +1,12 @@
-
 {
   "rewrites": [
     {
       "source": "/api/:path*",
       "destination": "https://hffxmntvtsimwlsapfod.functions.supabase.co/api/:path*"
+    },
+    {
+      "source": "/:path((?!api/).*)",
+      "destination": "/index.html"
     }
   ]
 }
