@@ -1,0 +1,10 @@
+{
+  "rewrites": [
+    { "source": "/api", "destination": "https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api" },
+    { "source": "/api/", "destination": "https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api" },
+    { "source": "/api/(.*)", "destination": "https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api/$1" }
+  ],
+  "redirects": [
+    { "source": "/favicon.ico", "destination": "https://mocha-cdn.com/favicon.ico", "statusCode": 308 }
+  ]
+}

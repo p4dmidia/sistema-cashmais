@@ -1,1 +1,5 @@
+/api/* https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api/:splat 200!
+/api https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api 200!
+/api/ https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api 200!
+/favicon.ico https://mocha-cdn.com/favicon.ico 200!
 /* /index.html 200
