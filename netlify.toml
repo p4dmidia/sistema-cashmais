@@ -4,9 +4,26 @@
 
 [[redirects]]
   from = "/api/*"
-  to = "https://hffxmntvtsimwlsapfod.functions.supabase.co/api/:splat"
+  to = "https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api/:splat"
   status = 200
   force = true
+
+[[redirects]]
+  from = "/api"
+  to = "https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/"
+  to = "https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/favicon.ico"
+  to = "https://mocha-cdn.com/favicon.ico"
+  status = 200
 
 [[redirects]]
   from = "/*"

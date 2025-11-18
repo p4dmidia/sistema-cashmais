@@ -15,21 +15,21 @@ function createSupabase() {
   return createClient(url, key)
 }
 
-app.use('/api/*', cors({
+app.use('*', cors({
   origin: (origin) => origin || '*',
   allowHeaders: ['Authorization', 'Content-Type', 'X-Client-Info', 'Cookie'],
   allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
   credentials: true,
 }))
 
-app.get('/api/health', (c) => c.json({ ok: true }))
+app.get('/health', (c) => c.json({ ok: true }))
 
 const AdminLoginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1)
 })
 
-app.post('/api/admin/login', async (c) => {
+app.post('/admin/login', async (c) => {
   try {
     const body = await c.req.json()
     const parsed = AdminLoginSchema.safeParse(body)
@@ -67,7 +67,7 @@ app.post('/api/admin/login', async (c) => {
   }
 })
 
-app.get('/api/admin/me', async (c) => {
+app.get('/admin/me', async (c) => {
   try {
     const token = getCookie(c, 'admin_session')
     if (!token) return c.json({ error: 'Não autenticado' }, 401)
@@ -85,7 +85,7 @@ app.get('/api/admin/me', async (c) => {
   }
 })
 
-app.post('/api/admin/logout', async (c) => {
+app.post('/admin/logout', async (c) => {
   try {
     const token = getCookie(c, 'admin_session')
     const supabase = createSupabase()
@@ -97,7 +97,7 @@ app.post('/api/admin/logout', async (c) => {
   }
 })
 
-app.get('/api/admin/dashboard/stats', async (c) => {
+app.get('/admin/dashboard/stats', async (c) => {
   try {
     const supabase = createSupabase()
     const { count: totalAffiliates } = await supabase.from('affiliates').select('*', { count: 'exact', head: true }).eq('is_active', true)
@@ -118,7 +118,7 @@ app.get('/api/admin/dashboard/stats', async (c) => {
   }
 })
 
-app.get('/api/admin/companies', async (c) => {
+app.get('/admin/companies', async (c) => {
   try {
     const page = parseInt(c.req.query('page') || '1')
     const limit = parseInt(c.req.query('limit') || '20')
@@ -144,7 +144,7 @@ app.get('/api/admin/companies', async (c) => {
   }
 })
 
-app.get('/api/admin/withdrawals', async (c) => {
+app.get('/admin/withdrawals', async (c) => {
   try {
     const status = c.req.query('status') || 'pending'
     const page = parseInt(c.req.query('page') || '1')
@@ -166,7 +166,7 @@ app.get('/api/admin/withdrawals', async (c) => {
 
 const UpdateWithdrawalSchema = z.object({ status: z.enum(['approved', 'rejected']), notes: z.string().optional() })
 
-app.patch('/api/admin/withdrawals/:id', async (c) => {
+app.patch('/admin/withdrawals/:id', async (c) => {
   try {
     const id = Number(c.req.param('id'))
     const body = await c.req.json()
@@ -184,7 +184,7 @@ app.patch('/api/admin/withdrawals/:id', async (c) => {
   }
 })
 
-app.get('/api/admin/reports/companies', async (c) => {
+app.get('/admin/reports/companies', async (c) => {
   try {
     const supabase = createSupabase()
     const { data } = await supabase.from('companies').select('id,nome_fantasia').order('nome_fantasia', { ascending: true })
@@ -194,7 +194,7 @@ app.get('/api/admin/reports/companies', async (c) => {
   }
 })
 
-app.get('/api/admin/reports/purchases', async (c) => {
+app.get('/admin/reports/purchases', async (c) => {
   try {
     const companyId = c.req.query('companyId')
     const range = c.req.query('range') || '7'
