@@ -1,13 +1,9 @@
+
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api", "destination": "https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api" },
-    { "source": "/api/", "destination": "https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api" },
-    { "source": "/api/(.*)", "destination": "https://hffxmntvtsimwlsapfod.functions.supabase.co/functions/v1/api/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "redirects": [
-    { "source": "/favicon.ico", "destination": "https://mocha-cdn.com/favicon.ico", "statusCode": 308 }
+    {
+      "source": "/api/:path*",
+      "destination": "https://hffxmntvtsimwlsapfod.functions.supabase.co/api/:path*"
+    }
   ]
 }
