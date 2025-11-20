@@ -17,7 +17,7 @@ function createSupabase() {
 app.use('*', cors({
   origin: (origin) => origin || '*',
   allowHeaders: ['Authorization', 'Content-Type', 'X-Client-Info', 'Cookie'],
-  allowMethods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
 }))
 
@@ -518,6 +518,59 @@ app.get('/api/admin/affiliates', async (c) => {
     return c.json({ affiliates: items, pagination: { page, limit, total: count || 0, totalPages: Math.ceil((count || 0) / limit) } })
   } catch (e) {
     return c.json({ affiliates: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } })
+  }
+})
+
+app.patch('/api/admin/affiliates/:id', async (c) => {
+  try {
+    const id = Number(c.req.param('id'))
+    const body = await c.req.json()
+    const supabase = createSupabase()
+    const update: any = {}
+    if ((body as any).full_name) update.full_name = (body as any).full_name
+    if ((body as any).email) update.email = (body as any).email
+    if ((body as any).whatsapp) update.phone = String((body as any).whatsapp).replace(/\D/g, '')
+    update.updated_at = new Date().toISOString()
+    const { data: exists } = await supabase.from('affiliates').select('id').eq('id', id).single()
+    if (!exists) return c.json({ error: 'Afiliado não encontrado' }, 404)
+    const { error } = await supabase.from('affiliates').update(update).eq('id', id)
+    if (error) return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.patch('/api/admin/affiliates/:id/toggle-status', async (c) => {
+  try {
+    const id = Number(c.req.param('id'))
+    const supabase = createSupabase()
+    const { data: a } = await supabase.from('affiliates').select('id,is_active').eq('id', id).single()
+    if (!a) return c.json({ error: 'Afiliado não encontrado' }, 404)
+    const newStatus = !(a as any).is_active
+    const { error } = await supabase.from('affiliates').update({ is_active: newStatus, updated_at: new Date().toISOString() }).eq('id', id)
+    if (error) return c.json({ error: 'Erro interno do servidor' }, 500)
+    if (!newStatus) await supabase.from('affiliate_sessions').delete().eq('affiliate_id', id)
+    return c.json({ success: true, newStatus })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.delete('/api/admin/affiliates/:id', async (c) => {
+  try {
+    const id = Number(c.req.param('id'))
+    const supabase = createSupabase()
+    const { data: a } = await supabase.from('affiliates').select('id,cpf').eq('id', id).single()
+    if (!a) return c.json({ error: 'Afiliado não encontrado' }, 404)
+    const { count } = await supabase.from('company_purchases').select('*', { count: 'exact', head: true }).eq('customer_coupon', (a as any).cpf)
+    if (count && count > 0) return c.json({ error: 'Não é possível excluir afiliado com compras registradas' }, 400)
+    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', id)
+    const { error } = await supabase.from('affiliates').delete().eq('id', id)
+    if (error) return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 })
 
