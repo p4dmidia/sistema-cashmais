@@ -1264,6 +1264,53 @@ app.get('/api/empresa/dados-mensais', async (c) => {
   }
 })
 
+const CompanyRegisterSchema = z.object({
+  razao_social: z.string().min(1),
+  nome_fantasia: z.string().min(1),
+  cnpj: z.string().min(14),
+  email: z.string().email(),
+  telefone: z.string().min(10),
+  responsavel: z.string().min(1),
+  senha: z.string().min(6),
+  endereco: z.string().optional(),
+  site_instagram: z.string().optional(),
+})
+
+app.post('/api/empresa/registrar', async (c) => {
+  try {
+    const data = CompanyRegisterSchema.parse(await c.req.json())
+    const supabase = createSupabase()
+    const { data: existingCompany } = await supabase.from('companies').select('id').eq('email', data.email).single()
+    if (existingCompany) return c.json({ error: 'Email já cadastrado' }, 409)
+    const cleanCnpj = String(data.cnpj).replace(/\D/g, '')
+    const passwordHash = await bcrypt.hash(data.senha, 10)
+    const { data: newCompany, error: companyError } = await supabase
+      .from('companies')
+      .insert({
+        razao_social: data.razao_social,
+        nome_fantasia: data.nome_fantasia,
+        cnpj: cleanCnpj,
+        email: data.email,
+        telefone: data.telefone,
+        responsavel: data.responsavel,
+        senha_hash: passwordHash,
+        endereco: data.endereco || '',
+        site_instagram: data.site_instagram || '',
+        is_active: true,
+      })
+      .select()
+      .single()
+    if (companyError || !newCompany) return c.json({ error: 'Erro interno do servidor' }, 500)
+    const { error: configError } = await supabase
+      .from('company_cashback_config')
+      .insert({ company_id: (newCompany as any).id, cashback_percentage: 5.0 })
+    if (configError) {}
+    return c.json({ success: true, message: 'Empresa cadastrada com sucesso!' })
+  } catch (error) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 app.get('/api/network/members', async (c) => {
   const token = getCookie(c, 'affiliate_session')
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
