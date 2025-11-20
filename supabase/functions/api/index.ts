@@ -394,6 +394,315 @@ app.post('/api/affiliate/logout', async (c) => {
   return c.json({ success: true })
 })
 
+app.get('/api/users/balance', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id, cpf)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const affiliate = (sessionData as any).affiliates
+    let totalCommissions = 0
+    const { data: purchaseTransactions } = await supabase
+      .from('company_purchases')
+      .select('cashback_generated')
+      .eq('customer_coupon', affiliate.cpf)
+    const purchaseCashback = (purchaseTransactions || []).reduce((s: number, tx: any) => s + (tx.cashback_generated * 0.07), 0)
+    totalCommissions = Math.round(purchaseCashback * 100) / 100
+    let { data: profileData } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('mocha_user_id', `affiliate_${affiliate.id}`)
+      .single()
+    if (!profileData) {
+      const { data: newProfile } = await supabase
+        .from('user_profiles')
+        .insert({ mocha_user_id: `affiliate_${affiliate.id}`, cpf: affiliate.cpf || '', role: 'affiliate', is_active: true })
+        .select()
+        .single()
+      profileData = newProfile
+    }
+    const profile = profileData
+    const { data: withdrawalData } = await supabase
+      .from('withdrawals')
+      .select('amount_requested')
+      .eq('user_id', (profile as any).id)
+      .eq('status', 'approved')
+    const totalWithdrawn = (withdrawalData || []).reduce((s: number, w: any) => s + (w.amount_requested || 0), 0)
+    const { data: frozenData } = await supabase
+      .from('withdrawals')
+      .select('amount_requested')
+      .eq('user_id', (profile as any).id)
+      .eq('status', 'pending')
+    const frozenBalance = (frozenData || []).reduce((s: number, w: any) => s + (w.amount_requested || 0), 0)
+    const availableBalance = Math.max(0, totalCommissions - totalWithdrawn - frozenBalance)
+    const isActiveThisMonth = totalCommissions > 0
+    let { data: settingsData } = await supabase
+      .from('user_settings')
+      .select('pix_key')
+      .eq('user_id', (profile as any).id)
+      .single()
+    let pixKey = (settingsData as any)?.pix_key || null
+    if (!settingsData) {
+      await supabase
+        .from('user_settings')
+        .insert({ user_id: (profile as any).id, is_active_this_month: isActiveThisMonth, available_balance: availableBalance, frozen_balance: frozenBalance, total_earnings: totalCommissions })
+    } else {
+      await supabase
+        .from('user_settings')
+        .update({ is_active_this_month: isActiveThisMonth, available_balance: availableBalance, frozen_balance: frozenBalance, total_earnings: totalCommissions, updated_at: new Date().toISOString() })
+        .eq('user_id', (profile as any).id)
+    }
+    return c.json({ available_balance: availableBalance, frozen_balance: frozenBalance, total_earnings: totalCommissions, company_earnings: 0, net_earnings: totalCommissions, is_active_this_month: isActiveThisMonth, pix_key: pixKey })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.get('/api/withdrawals', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const affiliateId = (sessionData as any).affiliates.id
+    let { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('mocha_user_id', `affiliate_${affiliateId}`)
+      .single()
+    if (!profile) {
+      const { data: newProfile } = await supabase
+        .from('user_profiles')
+        .insert({ mocha_user_id: `affiliate_${affiliateId}`, role: 'affiliate', is_active: true })
+        .select()
+        .single()
+      profile = newProfile
+    }
+    const { data: rows } = await supabase
+      .from('withdrawals')
+      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at')
+      .eq('user_id', (profile as any).id)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    return c.json(rows || [])
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.get('/api/affiliate/settings', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id, cpf, full_name, phone)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const affiliate = (sessionData as any).affiliates
+    let { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('mocha_user_id', `affiliate_${affiliate.id}`)
+      .single()
+    if (!profile) {
+      const { data: upsertedProfile } = await supabase
+        .from('user_profiles')
+        .upsert({ mocha_user_id: `affiliate_${affiliate.id}`, cpf: affiliate.cpf || '', role: 'affiliate', is_active: true }, { onConflict: 'mocha_user_id' })
+        .select()
+        .single()
+      profile = upsertedProfile
+    }
+    let { data: settings } = await supabase
+      .from('user_settings')
+      .select('*')
+      .eq('user_id', (profile as any).id)
+      .single()
+    if (!settings) {
+      const { data: newSettings } = await supabase
+        .from('user_settings')
+        .insert({ user_id: (profile as any).id, leg_preference: 'automatic' })
+        .select()
+        .single()
+      settings = newSettings
+    }
+    return c.json({ pix_key: (settings as any)?.pix_key, leg_preference: (settings as any)?.leg_preference || 'automatic', full_name: affiliate.full_name, phone: affiliate.phone })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.post('/api/affiliate/settings', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const body = await c.req.json()
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id, cpf)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const affiliate = (sessionData as any).affiliates
+    await supabase
+      .from('affiliates')
+      .update({ full_name: body.full_name, phone: body.phone, updated_at: new Date().toISOString() })
+      .eq('id', affiliate.id)
+    let { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('mocha_user_id', `affiliate_${affiliate.id}`)
+      .single()
+    if (!profile) {
+      const { data: upsertedProfile } = await supabase
+        .from('user_profiles')
+        .upsert({ mocha_user_id: `affiliate_${affiliate.id}`, cpf: affiliate.cpf || '', role: 'affiliate', is_active: true }, { onConflict: 'mocha_user_id' })
+        .select()
+        .single()
+      profile = upsertedProfile
+    }
+    const { error: upErr } = await supabase
+      .from('user_settings')
+      .upsert({ user_id: (profile as any).id, pix_key: body.pix_key, leg_preference: body.leg_preference, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+    if (upErr) return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.post('/api/empresa/login', async (c) => {
+  try {
+    const body = await c.req.json()
+    const supabase = createSupabase()
+    let email = ''
+    let senha = ''
+    if ((body as any).email) { email = (body as any).email; senha = (body as any).senha }
+    else if ((body as any).cnpj) {
+      const cleanCnpj = String((body as any).cnpj).replace(/\D/g, '')
+      let { data: companyByCnpj } = await supabase.from('companies').select('email').eq('cnpj', cleanCnpj).eq('is_active', true).single()
+      if (!companyByCnpj) {
+        const fallback = await supabase.from('companies').select('email').eq('cnpj', (body as any).cnpj).eq('is_active', true).single()
+        companyByCnpj = fallback.data as any
+      }
+      if (!companyByCnpj) return c.json({ error: 'CNPJ ou senha inválidos' }, 401)
+      email = (companyByCnpj as any).email; senha = (body as any).senha
+    } else { return c.json({ error: 'Email ou CNPJ é obrigatório' }, 400) }
+    const { data: company } = await supabase.from('companies').select('*').eq('email', email).eq('is_active', true).single()
+    if (!company) return c.json({ error: 'Email ou senha inválidos' }, 401)
+    const ok = await bcrypt.compare(senha, (company as any).senha_hash as string)
+    if (!ok) return c.json({ error: 'Email ou senha inválidos' }, 401)
+    const sessionToken = crypto.randomUUID().replace(/-/g, '')
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    await supabase.from('company_sessions').insert({ company_id: (company as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+    setCookie(c, 'company_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', maxAge: 24 * 60 * 60, path: '/' })
+    return c.json({ success: true, company: { id: (company as any).id, razao_social: (company as any).razao_social, nome_fantasia: (company as any).nome_fantasia, email: (company as any).email, role: 'company' } })
+  } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
+})
+
+app.get('/api/empresa/me', async (c) => {
+  const token = getCookie(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id, razao_social, nome_fantasia, email)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const comp = (session as any).companies
+    return c.json({ id: comp.id, razao_social: comp.razao_social, nome_fantasia: comp.nome_fantasia, email: comp.email, role: 'company' })
+  } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
+})
+
+app.post('/api/empresa/logout', async (c) => {
+  const token = getCookie(c, 'company_session')
+  try { if (token) { const supabase = createSupabase(); await supabase.from('company_sessions').delete().eq('session_token', token) } } catch {}
+  setCookie(c, 'company_session', '', { httpOnly: true, secure: true, sameSite: 'None', maxAge: 0, path: '/' })
+  return c.json({ success: true })
+})
+
+app.post('/api/caixa/login', async (c) => {
+  try {
+    const body = await c.req.json()
+    const supabase = createSupabase()
+    const cleanCpf = String((body as any).cpf || '').replace(/\D/g, '')
+    let { data: cashier } = await supabase
+      .from('company_cashiers')
+      .select('*, companies!inner(nome_fantasia)')
+      .eq('cpf', cleanCpf)
+      .eq('is_active', true)
+      .eq('companies.is_active', true)
+      .single()
+    if (!cashier && (body as any).cpf !== cleanCpf) {
+      const fallback = await supabase
+        .from('company_cashiers')
+        .select('*, companies!inner(nome_fantasia)')
+        .eq('cpf', (body as any).cpf)
+        .eq('is_active', true)
+        .eq('companies.is_active', true)
+        .single()
+      cashier = fallback.data as any
+    }
+    if (!cashier) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+    const ok = await bcrypt.compare((body as any).password, (cashier as any).password_hash as string)
+    if (!ok) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+    await supabase.from('company_cashiers').update({ last_access_at: new Date().toISOString() }).eq('id', (cashier as any).id)
+    const sessionToken = crypto.randomUUID().replace(/-/g, '')
+    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
+    await supabase.from('cashier_sessions').insert({ cashier_id: (cashier as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+    setCookie(c, 'cashier_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', maxAge: 8 * 60 * 60, path: '/' })
+    return c.json({ success: true, cashier: { id: (cashier as any).id, name: (cashier as any).name, cpf: (cashier as any).cpf, company_name: (cashier as any).companies.nome_fantasia, role: 'cashier' } })
+  } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
+})
+
+app.get('/api/caixa/me', async (c) => {
+  const token = getCookie(c, 'cashier_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('cashier_sessions')
+      .select('*, company_cashiers!inner(id, name, cpf, companies!inner(nome_fantasia, id))')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const cx = (session as any).company_cashiers
+    return c.json({ id: cx.id, name: cx.name, cpf: cx.cpf, company_name: (cx as any).companies.nome_fantasia, company_id: (cx as any).companies.id, user_id: (session as any).company_cashiers.user_id })
+  } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
+})
+
+app.post('/api/caixa/logout', async (c) => {
+  const token = getCookie(c, 'cashier_session')
+  try { if (token) { const supabase = createSupabase(); await supabase.from('cashier_sessions').delete().eq('session_token', token) } } catch {}
+  setCookie(c, 'cashier_session', '', { httpOnly: true, secure: true, sameSite: 'None', maxAge: 0, path: '/' })
+  return c.json({ success: true })
+})
+
 app.get('/api/network/members', async (c) => {
   const token = getCookie(c, 'affiliate_session')
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
