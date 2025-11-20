@@ -274,6 +274,81 @@ app.get('/api/admin/companies', async (c) => {
   }
 })
 
+app.get('/api/admin/companies/:id', async (c) => {
+  try {
+    const id = Number(c.req.param('id'))
+    const supabase = createSupabase()
+    const { data: company } = await supabase
+      .from('companies')
+      .select('id, nome_fantasia, razao_social, cnpj, email, telefone, responsavel, is_active, created_at')
+      .eq('id', id)
+      .single()
+    if (!company) return c.json({ error: 'Empresa não encontrada' }, 404)
+    const { data: cfg } = await supabase
+      .from('company_cashback_config')
+      .select('cashback_percentage')
+      .eq('company_id', (company as any).id)
+      .single()
+    const { count: totalPurchases } = await supabase
+      .from('company_purchases')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', (company as any).id)
+    const { data: sumRow } = await supabase
+      .from('company_purchases')
+      .select('sum(purchase_value), sum(cashback_generated)')
+      .eq('company_id', (company as any).id)
+      .single()
+    return c.json({
+      id: (company as any).id,
+      nome_fantasia: (company as any).nome_fantasia,
+      razao_social: (company as any).razao_social,
+      cnpj: (company as any).cnpj,
+      email: (company as any).email,
+      telefone: (company as any).telefone,
+      responsavel: (company as any).responsavel,
+      is_active: Boolean((company as any).is_active),
+      created_at: (company as any).created_at,
+      cashback_percentage: (cfg as any)?.cashback_percentage ?? 5.0,
+      total_purchases: totalPurchases || 0,
+      total_purchase_value: (sumRow as any)?.sum?.purchase_value || 0,
+      total_cashback_generated: (sumRow as any)?.sum?.cashback_generated || 0,
+    })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.patch('/api/admin/companies/:id/toggle-status', async (c) => {
+  try {
+    const id = Number(c.req.param('id'))
+    const supabase = createSupabase()
+    const { data: comp } = await supabase
+      .from('companies')
+      .select('id, is_active')
+      .eq('id', id)
+      .single()
+    if (!comp) return c.json({ error: 'Empresa não encontrada' }, 404)
+    const newStatus = !(comp as any).is_active
+    const { error } = await supabase
+      .from('companies')
+      .update({ is_active: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (error) return c.json({ error: 'Erro interno do servidor' }, 500)
+    if (!newStatus) {
+      const { data: cashiers } = await supabase
+        .from('company_cashiers')
+        .select('id')
+        .eq('company_id', id)
+      const cashierIds = (cashiers || []).map((cx: any) => cx.id)
+      if (cashierIds.length > 0) await supabase.from('cashier_sessions').delete().in('cashier_id', cashierIds)
+      await supabase.from('company_cashiers').update({ is_active: false }).eq('company_id', id)
+    }
+    return c.json({ success: true, newStatus })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 app.get('/admin/withdrawals', async (c) => {
   try {
     const status = c.req.query('status') || 'pending'
@@ -449,11 +524,42 @@ app.get('/api/admin/reports/purchases', async (c) => {
 app.get('/api/admin/commission-settings', async (c) => {
   try {
     const supabase = createSupabase()
-    const { data } = await supabase.from('global_commission_settings').select('*').limit(1)
-    if (data && data.length > 0) return c.json(data[0])
-    return c.json({ affiliate_cashback_pct: 7.0, company_cashback_pct: 5.0, updated_at: new Date().toISOString() })
+    const { data } = await supabase.from('global_commission_settings').select('level_settings').limit(1)
+    let settings: Array<{ level: number; percentage: number }> = []
+    if (data && data.length > 0) {
+      const raw = (data[0] as any)?.level_settings
+      if (Array.isArray(raw) && raw.length > 0) settings = raw
+    }
+    if (settings.length === 0) {
+      settings = Array.from({ length: 10 }).map((_, i) => ({ level: i + 1, percentage: 10.0 }))
+    }
+    return c.json({ settings })
   } catch (e) {
-    return c.json({ affiliate_cashback_pct: 7.0, company_cashback_pct: 5.0 })
+    const settings = Array.from({ length: 10 }).map((_, i) => ({ level: i + 1, percentage: 10.0 }))
+    return c.json({ settings })
+  }
+})
+
+app.put('/api/admin/commission-settings', async (c) => {
+  try {
+    const body = await c.req.json()
+    const settings = (body as any)?.settings as Array<{ level: number; percentage: number }>
+    if (!Array.isArray(settings) || settings.length !== 10) return c.json({ error: 'Configurações inválidas' }, 400)
+    const total = settings.reduce((s, it) => s + Number(it.percentage || 0), 0)
+    if (Math.abs(total - 100.0) > 0.01) return c.json({ error: 'Total deve ser 100%' }, 400)
+    const supabase = createSupabase()
+    const { data: existing } = await supabase.from('global_commission_settings').select('id').limit(1)
+    if (existing && existing.length > 0) {
+      const id = (existing[0] as any).id
+      const { error } = await supabase.from('global_commission_settings').update({ level_settings: settings, updated_at: new Date().toISOString() }).eq('id', id)
+      if (error) return c.json({ error: 'Erro interno do servidor' }, 500)
+    } else {
+      const { error } = await supabase.from('global_commission_settings').insert({ level_settings: settings, updated_at: new Date().toISOString() })
+      if (error) return c.json({ error: 'Erro interno do servidor' }, 500)
+    }
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 })
 
