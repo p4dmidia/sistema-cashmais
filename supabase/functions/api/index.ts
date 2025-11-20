@@ -1,5 +1,4 @@
 // supabase/functions/api/index.ts
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { Hono } from 'https://deno.land/x/hono@v3.7.4/mod.ts'
 import { cors } from 'https://deno.land/x/hono@v3.7.4/middleware.ts'
 import { getCookie, setCookie } from 'https://deno.land/x/hono@v3.7.4/helper/cookie/index.ts'
@@ -23,6 +22,7 @@ app.use('*', cors({
 }))
 
 app.get('/health', (c) => c.json({ ok: true }))
+app.get('/api/health', (c) => c.json({ ok: true }))
 
 const AdminLoginSchema = z.object({
   username: z.string().min(1),
@@ -294,7 +294,62 @@ app.post('/affiliate/login', async (c) => {
   }
 })
 
+app.post('/api/affiliate/login', async (c) => {
+  try {
+    const body = await c.req.json()
+    const parsed = AffiliateLoginSchema.safeParse(body)
+    if (!parsed.success) return c.json({ error: 'Dados inválidos' }, 400)
+    const cleanCpf = parsed.data.cpf.replace(/\D/g, '')
+    if (!validateCPF(cleanCpf)) return c.json({ error: 'CPF inválido' }, 422)
+    const supabase = createSupabase()
+    const { data: affiliate } = await supabase
+      .from('affiliates')
+      .select('*')
+      .eq('cpf', cleanCpf)
+      .eq('is_active', true)
+      .single()
+    if (!affiliate) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+    let storedHash = (affiliate as any).password_hash as string | null
+    if (!storedHash) {
+      const newHash = await bcrypt.hash(parsed.data.password, 12)
+      await supabase.from('affiliates').update({ password_hash: newHash, updated_at: new Date().toISOString() }).eq('id', (affiliate as any).id)
+      storedHash = newHash
+    }
+    const valid = await bcrypt.compare(parsed.data.password, storedHash as string)
+    if (!valid) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+    const sessionToken = crypto.randomUUID() + '-' + Date.now()
+    const expiresAt = getSessionExpiration()
+    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (affiliate as any).id)
+    await supabase.from('affiliate_sessions').insert({ affiliate_id: (affiliate as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+    setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 30 * 24 * 60 * 60 })
+    return c.json({ success: true, affiliate: { id: (affiliate as any).id, full_name: (affiliate as any).full_name, email: (affiliate as any).email, referral_code: (affiliate as any).referral_code, customer_coupon: (affiliate as any).cpf } })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 app.get('/affiliate/me', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id, full_name, cpf, email, phone, referral_code, sponsor_id, is_verified, created_at, last_access_at)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const affiliate = (sessionData as any).affiliates
+    await supabase.from('affiliates').update({ last_access_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', affiliate.id)
+    return c.json({ id: affiliate.id, full_name: affiliate.full_name, cpf: affiliate.cpf, email: affiliate.email, whatsapp: (affiliate as any).phone, referral_code: affiliate.referral_code, customer_coupon: affiliate.cpf, sponsor_id: affiliate.sponsor_id, is_verified: Boolean(affiliate.is_verified), created_at: affiliate.created_at, last_access_at: affiliate.last_access_at })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.get('/api/affiliate/me', async (c) => {
   const token = getCookie(c, 'affiliate_session')
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
@@ -327,4 +382,16 @@ app.post('/affiliate/logout', async (c) => {
   return c.json({ success: true })
 })
 
-serve(app.fetch)
+app.post('/api/affiliate/logout', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  try {
+    if (token) {
+      const supabase = createSupabase()
+      await supabase.from('affiliate_sessions').delete().eq('session_token', token)
+    }
+  } catch {}
+  setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 0 })
+  return c.json({ success: true })
+})
+
+Deno.serve(app.fetch)
