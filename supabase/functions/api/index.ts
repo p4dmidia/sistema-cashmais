@@ -1280,10 +1280,14 @@ app.post('/api/empresa/registrar', async (c) => {
   try {
     const data = CompanyRegisterSchema.parse(await c.req.json())
     const supabase = createSupabase()
-    const { data: existingCompany } = await supabase.from('companies').select('id').eq('email', data.email).single()
-    if (existingCompany) return c.json({ error: 'Email já cadastrado' }, 409)
     const cleanCnpj = String(data.cnpj).replace(/\D/g, '')
+    if (cleanCnpj.length !== 14 || /^([0-9])\1{13}$/.test(cleanCnpj)) return c.json({ error: 'CNPJ inválido' }, 400)
+    const { data: existingEmail } = await supabase.from('companies').select('id').eq('email', data.email).maybeSingle()
+    if (existingEmail) return c.json({ error: 'Email já cadastrado' }, 409)
+    const { data: existingCnpj } = await supabase.from('companies').select('id').eq('cnpj', cleanCnpj).maybeSingle()
+    if (existingCnpj) return c.json({ error: 'CNPJ já cadastrado' }, 409)
     const passwordHash = await bcrypt.hash(data.senha, 10)
+    const nowIso = new Date().toISOString()
     const { data: newCompany, error: companyError } = await supabase
       .from('companies')
       .insert({
@@ -1291,12 +1295,14 @@ app.post('/api/empresa/registrar', async (c) => {
         nome_fantasia: data.nome_fantasia,
         cnpj: cleanCnpj,
         email: data.email,
-        telefone: data.telefone,
+        telefone: String(data.telefone).replace(/\D/g, ''),
         responsavel: data.responsavel,
         senha_hash: passwordHash,
         endereco: data.endereco || '',
         site_instagram: data.site_instagram || '',
         is_active: true,
+        created_at: nowIso,
+        updated_at: nowIso,
       })
       .select()
       .single()
