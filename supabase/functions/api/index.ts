@@ -703,6 +703,148 @@ app.post('/api/caixa/logout', async (c) => {
   return c.json({ success: true })
 })
 
+app.get('/api/empresa/caixas', async (c) => {
+  const token = getCookie(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const { data: cashiers } = await supabase
+      .from('company_cashiers')
+      .select('id, name, cpf, is_active, last_access_at, created_at')
+      .eq('company_id', (session as any).companies.id)
+      .order('created_at', { ascending: false })
+    return c.json({ cashiers: cashiers || [] })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.get('/api/empresa/relatorio', async (c) => {
+  const token = getCookie(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const { data: purchases } = await supabase
+      .from('company_purchases')
+      .select('id, customer_coupon, cashier_cpf, purchase_value, cashback_generated, purchase_date, purchase_time, company_cashiers(name)')
+      .eq('company_id', (session as any).companies.id)
+      .order('created_at', { ascending: false })
+      .limit(100)
+    const formatted = (purchases || []).map((p: any) => ({
+      id: p.id,
+      cashier_name: p.company_cashiers?.name || '',
+      customer_coupon: p.customer_coupon,
+      cashier_cpf: p.cashier_cpf,
+      purchase_value: Number(p.purchase_value || 0),
+      cashback_generated: Number(p.cashback_generated || 0),
+      purchase_date: p.purchase_date,
+      purchase_time: p.purchase_time,
+    }))
+    return c.json({ purchases: formatted })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.get('/api/empresa/estatisticas', async (c) => {
+  const token = getCookie(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const { data: rows } = await supabase
+      .from('company_purchases')
+      .select('purchase_value, cashback_generated, purchase_date')
+      .eq('company_id', (session as any).companies.id)
+    const total = (rows || []).reduce((acc: any, r: any) => ({
+      sales_count: acc.sales_count + 1,
+      sales_value: acc.sales_value + Number(r.purchase_value || 0),
+      cashback_generated: acc.cashback_generated + Number(r.cashback_generated || 0),
+    }), { sales_count: 0, sales_value: 0, cashback_generated: 0 })
+    const now = new Date()
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth()+1, 1).toISOString().split('T')[0]
+    const monthly = (rows || []).reduce((acc: any, r: any) => {
+      const d = String(r.purchase_date || '')
+      if (d >= monthStart && d < nextMonthStart) {
+        acc.sales_count += 1
+        acc.sales_value += Number(r.purchase_value || 0)
+        acc.cashback_generated += Number(r.cashback_generated || 0)
+      }
+      return acc
+    }, { sales_count: 0, sales_value: 0, cashback_generated: 0 })
+    const { data: cfg } = await supabase
+      .from('company_cashback_config')
+      .select('cashback_percentage')
+      .eq('company_id', (session as any).companies.id)
+      .single()
+    return c.json({ total, monthly, cashback_percentage: (cfg as any)?.cashback_percentage ?? 5.0 })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.get('/api/empresa/dados-mensais', async (c) => {
+  const token = getCookie(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const startDate = new Date(); startDate.setMonth(startDate.getMonth() - 6)
+    const startStr = startDate.toISOString().split('T')[0]
+    const { data: rows } = await supabase
+      .from('company_purchases')
+      .select('purchase_date, purchase_value, cashback_generated')
+      .eq('company_id', (session as any).companies.id)
+      .gte('purchase_date', startStr)
+      .order('purchase_date', { ascending: true })
+    const agg = new Map<string, { sales_count: number; sales_value: number; cashback_generated: number }>()
+    for (const row of rows || []) {
+      const key = String((row as any).purchase_date).slice(0, 7)
+      const curr = agg.get(key) || { sales_count: 0, sales_value: 0, cashback_generated: 0 }
+      curr.sales_count += 1
+      curr.sales_value += Number((row as any).purchase_value || 0)
+      curr.cashback_generated += Number((row as any).cashback_generated || 0)
+      agg.set(key, curr)
+    }
+    const monthly_data = Array.from(agg.entries()).map(([month, v]) => ({
+      month: new Date(month + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
+      sales_count: v.sales_count,
+      sales_value: v.sales_value,
+      cashback_generated: v.cashback_generated,
+    }))
+    return c.json({ monthly_data })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 app.get('/api/network/members', async (c) => {
   const token = getCookie(c, 'affiliate_session')
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
