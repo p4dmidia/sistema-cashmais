@@ -592,6 +592,40 @@ app.post('/api/affiliate/settings', async (c) => {
   }
 })
 
+app.get('/api/transactions', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id, cpf)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const affiliate = (sessionData as any).affiliates
+    const { data: transactions } = await supabase
+      .from('company_purchases')
+      .select('id, companies!inner(nome_fantasia), purchase_value, cashback_generated, created_at')
+      .eq('customer_coupon', affiliate.cpf)
+      .order('created_at', { ascending: false })
+      .limit(50)
+    const formatted = (transactions || []).map((tx: any) => ({
+      id: tx.id,
+      company_name: tx.companies?.nome_fantasia || '',
+      purchase_value: Number(tx.purchase_value || 0),
+      cashback_value: Math.round(Number(tx.cashback_generated || 0) * 0.07 * 100) / 100,
+      level_earned: 1,
+      transaction_date: tx.created_at,
+    }))
+    return c.json(formatted)
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 app.post('/api/empresa/login', async (c) => {
   try {
     const body = await c.req.json()
