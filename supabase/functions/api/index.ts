@@ -701,8 +701,125 @@ app.get('/api/caixa/me', async (c) => {
       .single()
     if (!session) return c.json({ error: 'Não autorizado' }, 401)
     const cx = (session as any).company_cashiers
-    return c.json({ id: cx.id, name: cx.name, cpf: cx.cpf, company_name: (cx as any).companies.nome_fantasia, company_id: (cx as any).companies.id, user_id: (session as any).company_cashiers.user_id })
+    return c.json({ cashier: { id: cx.id, name: cx.name, cpf: cx.cpf, company_name: (cx as any).companies.nome_fantasia, role: 'cashier' } })
   } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
+})
+
+app.post('/api/caixa/compra', async (c) => {
+  const token = getCookie(c, 'cashier_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const { customer_coupon, purchase_value } = await c.req.json()
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('cashier_sessions')
+      .select('*, company_cashiers!inner(id, cpf, companies!inner(id))')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const cleanCpf = String(customer_coupon).replace(/[.-]/g, '')
+    const cleanCashierCpf = String((session as any).company_cashiers.cpf).replace(/[.-]/g, '')
+    if (cleanCpf === cleanCashierCpf) return c.json({ error: 'Você não pode usar seu próprio CPF' }, 400)
+    let { data: customer } = await supabase
+      .from('affiliates')
+      .select('id, cpf, full_name, is_active')
+      .eq('cpf', cleanCpf)
+      .eq('is_active', true)
+      .single()
+    let customerType = 'affiliate'
+    let customerData: any = customer
+    if (!customer) {
+      const { data: userData } = await supabase
+        .from('user_profiles')
+        .select('id, cpf, mocha_user_id, is_active')
+        .eq('cpf', cleanCpf)
+        .eq('is_active', true)
+        .single()
+      if (userData) {
+        customerType = 'user'
+        customerData = { id: userData.id, cpf: userData.cpf, full_name: userData.mocha_user_id, is_active: userData.is_active }
+      }
+    }
+    if (!customerData) return c.json({ error: 'CPF não encontrado ou cliente inativo' }, 400)
+    const { data: config } = await supabase
+      .from('company_cashback_config')
+      .select('cashback_percentage')
+      .eq('company_id', (session as any).company_cashiers.companies.id)
+      .single()
+    const cashbackPercentage = (config as any)?.cashback_percentage ?? 5.0
+    const cashbackGenerated = (Number(purchase_value) * cashbackPercentage) / 100
+    let { data: customerCouponData } = await supabase
+      .from('customer_coupons')
+      .select('*')
+      .eq('coupon_code', cleanCpf)
+      .single()
+    if (!customerCouponData) {
+      let userIdForCoupon = customerData.id
+      if (customerType === 'affiliate') {
+        const { data: userProfile } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('mocha_user_id', `affiliate_${customerData.id}`)
+          .single()
+        if (userProfile) userIdForCoupon = userProfile.id
+        else {
+          const { data: newProfile } = await supabase
+            .from('user_profiles')
+            .upsert({ mocha_user_id: `affiliate_${customerData.id}`, cpf: customerData.cpf, role: 'affiliate', is_active: true }, { onConflict: 'mocha_user_id' })
+            .select()
+            .single()
+          if (newProfile) userIdForCoupon = newProfile.id
+        }
+      }
+      const { data: newCoupon } = await supabase
+        .from('customer_coupons')
+        .insert({ coupon_code: cleanCpf, user_id: userIdForCoupon, cpf: cleanCpf, affiliate_id: customerType === 'affiliate' ? customerData.id : null, is_active: true })
+        .select()
+        .single()
+      customerCouponData = newCoupon
+    } else if (!(customerCouponData as any).is_active) {
+      const { data: activated } = await supabase
+        .from('customer_coupons')
+        .update({ is_active: true })
+        .eq('id', (customerCouponData as any).id)
+        .select()
+        .single()
+      customerCouponData = activated || customerCouponData
+    }
+    const { data: purchase, error: purchaseError } = await supabase
+      .from('company_purchases')
+      .insert({
+        company_id: (session as any).company_cashiers.companies.id,
+        cashier_id: (session as any).company_cashiers.id,
+        customer_coupon_id: (customerCouponData as any).id,
+        customer_coupon: cleanCpf,
+        cashier_cpf: (session as any).company_cashiers.cpf,
+        purchase_value: Number(purchase_value),
+        cashback_percentage: cashbackPercentage,
+        cashback_generated: cashbackGenerated,
+        purchase_date: new Date().toISOString().split('T')[0],
+        purchase_time: new Date().toTimeString().split(' ')[0]
+      })
+      .select()
+      .single()
+    if (purchaseError) return c.json({ error: 'Erro interno do servidor' }, 500)
+    const { error: couponError } = await supabase
+      .from('customer_coupons')
+      .update({ last_used_at: new Date().toISOString(), total_usage_count: ((customerCouponData as any).total_usage_count || 0) + 1 })
+      .eq('id', (customerCouponData as any).id)
+    if (couponError) {}
+    let customerCommissionMessage = ''
+    if (customerType === 'affiliate') {
+      const customerCommission = cashbackGenerated * 0.70 * 0.10
+      customerCommissionMessage = `Comissão de R$ ${customerCommission.toFixed(2)} será creditada para ${customerData.full_name} (cashback de R$ ${cashbackGenerated.toFixed(2)} gerado)`
+    } else {
+      customerCommissionMessage = `Cashback de R$ ${cashbackGenerated.toFixed(2)} creditado para ${customerData.full_name}`
+    }
+    return c.json({ success: true, message: `Compra registrada! ${customerCommissionMessage}`, cashback_generated: cashbackGenerated, customer_name: customerData.full_name })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
 })
 
 app.post('/api/caixa/logout', async (c) => {
