@@ -99,6 +99,25 @@ app.post('/api/admin/login', async (c) => {
   }
 })
 
+const AdminCreateSchema = z.object({ username: z.string().min(1), password: z.string().min(6), email: z.string().email().optional(), full_name: z.string().optional() })
+
+app.post('/api/admin/create', async (c) => {
+  try {
+    const body = await c.req.json()
+    const parsed = AdminCreateSchema.safeParse(body)
+    if (!parsed.success) return c.json({ error: 'Dados inválidos' }, 400)
+    const supabase = createSupabase()
+    const hash = await bcrypt.hash(parsed.data.password, 12)
+    const { error: upErr } = await supabase
+      .from('admin_users')
+      .upsert({ username: parsed.data.username, email: parsed.data.email || 'admin@cashmais.com', full_name: parsed.data.full_name || 'Administrador', password_hash: hash, is_active: true }, { onConflict: 'username' })
+    if (upErr) return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 app.get('/admin/me', async (c) => {
   try {
     const token = getCookie(c, 'admin_session')
@@ -189,13 +208,15 @@ app.get('/api/admin/dashboard/stats', async (c) => {
     const pendingAmount = (pendingWithdrawals || []).reduce((s: number, w: any) => s + Number(w.amount_requested || 0), 0)
     const pendingCount = pendingWithdrawals?.length || 0
     const now = new Date(), year = now.getFullYear(), month = String(now.getMonth() + 1).padStart(2, '0')
-    const { data: cbRows } = await supabase
+    const { data: pRows } = await supabase
       .from('company_purchases')
-      .select('cashback_generated')
+      .select('id, company_id, purchase_value, cashback_generated, purchase_date, customer_coupon, companies!inner(nome_fantasia)')
       .gte('purchase_date', `${year}-${month}-01`)
       .lt('purchase_date', new Date(year, now.getMonth() + 1, 1).toISOString().split('T')[0])
-    const cashbackThisMonth = (cbRows || []).reduce((s: number, r: any) => s + Number(r.cashback_generated || 0), 0)
-    return c.json({ stats: { totalAffiliates: totalAffiliates || 0, totalCompanies: totalCompanies || 0, pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount }, cashbackThisMonth } })
+      .order('purchase_date', { ascending: false })
+    const cashbackThisMonth = (pRows || []).reduce((s: number, r: any) => s + Number(r.cashback_generated || 0), 0)
+    const recentPurchases = (pRows || []).slice(0, 10).map((r: any) => ({ id: r.id, company_name: r.companies?.nome_fantasia || '', customer_cpf: r.customer_coupon || '', purchase_value: Number(r.purchase_value || 0), cashback_generated: Number(r.cashback_generated || 0), purchase_date: r.purchase_date }))
+    return c.json({ stats: { totalAffiliates: totalAffiliates || 0, totalCompanies: totalCompanies || 0, pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount }, cashbackThisMonth }, recentPurchases })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
@@ -420,6 +441,124 @@ app.get('/api/admin/reports/purchases', async (c) => {
     if (toDate) sumQuery = sumQuery.lte('purchase_date', toDate)
     const { data: sumRow } = await sumQuery.single()
     return c.json({ purchases: rows || [], totals: { total_purchase_value: (sumRow as any)?.sum?.purchase_value || 0, total_cashback_generated: (sumRow as any)?.sum?.cashback_generated || 0 }, pagination: { page, limit, total: count || 0, totalPages: Math.ceil((count || 0) / limit) } })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.get('/api/admin/commission-settings', async (c) => {
+  try {
+    const supabase = createSupabase()
+    const { data } = await supabase.from('global_commission_settings').select('*').limit(1)
+    if (data && data.length > 0) return c.json(data[0])
+    return c.json({ affiliate_cashback_pct: 7.0, company_cashback_pct: 5.0, updated_at: new Date().toISOString() })
+  } catch (e) {
+    return c.json({ affiliate_cashback_pct: 7.0, company_cashback_pct: 5.0 })
+  }
+})
+
+app.get('/api/admin/affiliates/stats', async (c) => {
+  try {
+    const supabase = createSupabase()
+    const { count: active } = await supabase.from('affiliates').select('*', { count: 'exact', head: true }).eq('is_active', true)
+    const { count: inactive } = await supabase.from('affiliates').select('*', { count: 'exact', head: true }).eq('is_active', false)
+    const { data: cbRows } = await supabase.from('company_purchases').select('cashback_generated')
+    const totalCashbackGenerated = (cbRows || []).reduce((s: number, r: any) => s + Number(r.cashback_generated || 0), 0)
+    const { data: pending } = await supabase.from('withdrawals').select('amount_requested').eq('status', 'pending')
+    const totalCommissionsPending = (pending || []).reduce((s: number, r: any) => s + Number(r.amount_requested || 0), 0)
+    const now = new Date(), start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const next = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
+    const { count: newAff } = await supabase.from('affiliates').select('*', { count: 'exact', head: true }).gte('created_at', start).lt('created_at', next)
+    return c.json({ totalActive: active || 0, totalInactive: inactive || 0, totalCashbackGenerated, totalCommissionsPending, newAffiliatesThisMonth: newAff || 0 })
+  } catch (e) {
+    return c.json({ totalActive: 0, totalInactive: 0, totalCashbackGenerated: 0, totalCommissionsPending: 0, newAffiliatesThisMonth: 0 })
+  }
+})
+
+app.get('/api/admin/affiliates', async (c) => {
+  try {
+    const page = parseInt(c.req.query('page') || '1')
+    const limit = parseInt(c.req.query('limit') || '20')
+    const search = c.req.query('search') || ''
+    const offset = (page - 1) * limit
+    const supabase = createSupabase()
+    let q = supabase
+      .from('affiliates')
+      .select('id, full_name, email, cpf, phone, is_active, is_verified, referral_code, sponsor_id, created_at, last_access_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+    if (search) q = q.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,cpf.ilike.%${search}%`)
+    const { data: rows, count } = await q.range(offset, offset + limit - 1)
+    const items = [] as any[]
+    for (const a of rows || []) {
+      const { count: directs } = await supabase.from('affiliates').select('id', { count: 'exact', head: true }).eq('sponsor_id', (a as any).id)
+      const { data: sumRow } = await supabase.from('company_purchases').select('sum(cashback_generated)').eq('customer_coupon', (a as any).cpf).single()
+      let pending = 0
+      const { data: profile } = await supabase.from('user_profiles').select('id').eq('mocha_user_id', `affiliate_${(a as any).id}`).single()
+      if (profile) {
+        const { data: pendRows } = await supabase.from('withdrawals').select('amount_requested').eq('user_id', (profile as any).id).eq('status', 'pending')
+        pending = (pendRows || []).reduce((s: number, r: any) => s + Number(r.amount_requested || 0), 0)
+      }
+      items.push({
+        id: (a as any).id,
+        full_name: (a as any).full_name,
+        email: (a as any).email,
+        cpf: (a as any).cpf,
+        whatsapp: (a as any).phone || null,
+        is_active: Boolean((a as any).is_active),
+        is_verified: Boolean((a as any).is_verified),
+        referral_code: (a as any).referral_code || '',
+        sponsor_id: (a as any).sponsor_id || null,
+        direct_referrals: directs || 0,
+        total_cashback: (sumRow as any)?.sum?.cashback_generated || 0,
+        pending_commissions: pending,
+        created_at: (a as any).created_at,
+        last_access_at: (a as any).last_access_at || null,
+      })
+    }
+    return c.json({ affiliates: items, pagination: { page, limit, total: count || 0, totalPages: Math.ceil((count || 0) / limit) } })
+  } catch (e) {
+    return c.json({ affiliates: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } })
+  }
+})
+
+app.get('/api/admin/dashboard/charts', async (c) => {
+  try {
+    const supabase = createSupabase()
+    const now = new Date()
+    const monthlyStats: any[] = []
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 1).toISOString().split('T')[0]
+      const { data: pRows } = await supabase.from('company_purchases').select('cashback_generated,purchase_value').gte('purchase_date', start).lt('purchase_date', end)
+      const { count: companies } = await supabase.from('companies').select('*', { count: 'exact', head: true }).gte('created_at', start).lt('created_at', end)
+      const { count: affiliates } = await supabase.from('affiliates').select('*', { count: 'exact', head: true }).gte('created_at', start).lt('created_at', end)
+      const purchases = (pRows || []).length
+      const cashback = (pRows || []).reduce((s: number, r: any) => s + Number(r.cashback_generated || 0), 0)
+      monthlyStats.push({ month: d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }), purchases, cashback, companies: companies || 0, affiliates: affiliates || 0 })
+    }
+    const { count: affActive } = await supabase.from('affiliates').select('*', { count: 'exact', head: true }).eq('is_active', true)
+    const { count: affInactive } = await supabase.from('affiliates').select('*', { count: 'exact', head: true }).eq('is_active', false)
+    const { count: compActive } = await supabase.from('companies').select('*', { count: 'exact', head: true }).eq('is_active', true)
+    const { count: compInactive } = await supabase.from('companies').select('*', { count: 'exact', head: true }).eq('is_active', false)
+    const statusDistribution = [
+      { name: 'Afiliados Ativos', value: affActive || 0, color: '#10b981' },
+      { name: 'Afiliados Inativos', value: affInactive || 0, color: '#ef4444' },
+      { name: 'Empresas Ativas', value: compActive || 0, color: '#3b82f6' },
+      { name: 'Empresas Inativas', value: compInactive || 0, color: '#f59e0b' }
+    ]
+    const weeklyGrowth: any[] = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now)
+      d.setDate(now.getDate() - i)
+      const start = d.toISOString().split('T')[0]
+      const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).toISOString().split('T')[0]
+      const { count: newAffiliates } = await supabase.from('affiliates').select('*', { count: 'exact', head: true }).gte('created_at', start).lt('created_at', end)
+      const { count: newCompanies } = await supabase.from('companies').select('*', { count: 'exact', head: true }).gte('created_at', start).lt('created_at', end)
+      const { data: pRows } = await supabase.from('company_purchases').select('id').gte('purchase_date', start).lt('purchase_date', end)
+      weeklyGrowth.push({ day: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), newAffiliates: newAffiliates || 0, newCompanies: newCompanies || 0, totalPurchases: (pRows || []).length })
+    }
+    return c.json({ monthlyStats, statusDistribution, weeklyGrowth })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
