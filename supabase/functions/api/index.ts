@@ -295,23 +295,42 @@ app.get('/api/admin/companies/:id', async (c) => {
       .eq('company_id', (company as any).id)
     const { data: sumRow } = await supabase
       .from('company_purchases')
+      .select('id, purchase_value, cashback_generated, purchase_date, customer_coupon')
+      .eq('company_id', (company as any).id)
+      .order('purchase_date', { ascending: false })
+
+    const recentPurchases = (sumRow || []).slice(0, 10).map((r: any) => ({
+      id: r.id,
+      purchase_date: r.purchase_date,
+      purchase_value: Number(r.purchase_value || 0),
+      cashback_generated: Number(r.cashback_generated || 0),
+      customer_coupon: r.customer_coupon || ''
+    }))
+
+    const { data: totalsRow } = await supabase
+      .from('company_purchases')
       .select('sum(purchase_value), sum(cashback_generated)')
       .eq('company_id', (company as any).id)
       .single()
+
     return c.json({
-      id: (company as any).id,
-      nome_fantasia: (company as any).nome_fantasia,
-      razao_social: (company as any).razao_social,
-      cnpj: (company as any).cnpj,
-      email: (company as any).email,
-      telefone: (company as any).telefone,
-      responsavel: (company as any).responsavel,
-      is_active: Boolean((company as any).is_active),
-      created_at: (company as any).created_at,
-      cashback_percentage: (cfg as any)?.cashback_percentage ?? 5.0,
-      total_purchases: totalPurchases || 0,
-      total_purchase_value: (sumRow as any)?.sum?.purchase_value || 0,
-      total_cashback_generated: (sumRow as any)?.sum?.cashback_generated || 0,
+      company: {
+        id: (company as any).id,
+        nome_fantasia: (company as any).nome_fantasia,
+        razao_social: (company as any).razao_social,
+        cnpj: (company as any).cnpj,
+        email: (company as any).email,
+        telefone: (company as any).telefone,
+        responsavel: (company as any).responsavel,
+        is_active: Boolean((company as any).is_active),
+        created_at: (company as any).created_at,
+      },
+      metrics: {
+        cashback_percentage: (cfg as any)?.cashback_percentage ?? 5.0,
+        total_purchases: totalPurchases || 0,
+        total_cashback_generated: (totalsRow as any)?.sum?.cashback_generated || 0,
+      },
+      recentPurchases,
     })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
