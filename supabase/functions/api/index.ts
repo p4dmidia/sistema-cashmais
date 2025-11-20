@@ -703,6 +703,191 @@ app.post('/api/caixa/logout', async (c) => {
   return c.json({ success: true })
 })
 
+app.post('/api/empresa/caixas', async (c) => {
+  const token = getCookie(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const body = await c.req.json()
+    const parsed = z.object({ name: z.string().min(1), cpf: z.string().min(11), password: z.string().min(6) }).safeParse(body)
+    if (!parsed.success) return c.json({ error: 'Dados inválidos' }, 400)
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const cleanCpf = parsed.data.cpf.replace(/\D/g, '')
+    const { data: existingCashier } = await supabase
+      .from('company_cashiers')
+      .select('id')
+      .eq('company_id', (session as any).companies.id)
+      .eq('cpf', cleanCpf)
+      .single()
+    if (existingCashier) return c.json({ error: 'CPF já cadastrado para esta empresa' }, 400)
+    const { data: globalExisting } = await supabase
+      .from('company_cashiers')
+      .select('id, company_id')
+      .eq('cpf', cleanCpf)
+      .single()
+    if (globalExisting && (globalExisting as any).company_id !== (session as any).companies.id) return c.json({ error: 'CPF já vinculado a outra empresa' }, 409)
+    const passwordHash = await bcrypt.hash(parsed.data.password, 10)
+    let { data: userProfile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('cpf', cleanCpf)
+      .single()
+    if (!userProfile) {
+      const { data: createdProfile, error: profileError } = await supabase
+        .from('user_profiles')
+        .insert({ mocha_user_id: `cashier_${cleanCpf}_${Date.now()}`, cpf: cleanCpf, role: 'cashier', is_active: true })
+        .select()
+        .single()
+      if (profileError || !createdProfile) return c.json({ error: 'Erro interno do servidor' }, 500)
+      userProfile = createdProfile
+    }
+    const { error: cashierError } = await supabase
+      .from('company_cashiers')
+      .insert({ company_id: (session as any).companies.id, user_id: (userProfile as any).id, name: parsed.data.name, cpf: cleanCpf, password_hash: passwordHash, is_active: true })
+    if (cashierError) return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.put('/api/empresa/caixas/:id', async (c) => {
+  const token = getCookie(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const id = parseInt(c.req.param('id'))
+    const body = await c.req.json()
+    const updateData: any = { updated_at: new Date().toISOString() }
+    if ((body as any).password && String((body as any).password).length >= 6) {
+      updateData.password_hash = await bcrypt.hash(String((body as any).password), 10)
+      if ((body as any).name) updateData.name = (body as any).name
+    } else if ((body as any).name) {
+      updateData.name = (body as any).name
+    }
+    const { data: cashier } = await supabase
+      .from('company_cashiers')
+      .select('id')
+      .eq('id', id)
+      .eq('company_id', (session as any).companies.id)
+      .single()
+    if (!cashier) return c.json({ error: 'Caixa não encontrado' }, 404)
+    const { error } = await supabase.from('company_cashiers').update(updateData).eq('id', id)
+    if (error) return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.patch('/api/empresa/caixas/:id/toggle', async (c) => {
+  const token = getCookie(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const id = parseInt(c.req.param('id'))
+    const { data: cashier } = await supabase
+      .from('company_cashiers')
+      .select('id, is_active')
+      .eq('id', id)
+      .eq('company_id', (session as any).companies.id)
+      .single()
+    if (!cashier) return c.json({ error: 'Caixa não encontrado' }, 404)
+    const newStatus = !(cashier as any).is_active
+    const { error: updErr } = await supabase
+      .from('company_cashiers')
+      .update({ is_active: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', id)
+    if (updErr) return c.json({ error: 'Erro interno do servidor' }, 500)
+    if (!newStatus) {
+      await supabase.from('cashier_sessions').delete().eq('cashier_id', id)
+    }
+    return c.json({ success: true, is_active: newStatus })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.delete('/api/empresa/caixas/:id', async (c) => {
+  const token = getCookie(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const id = parseInt(c.req.param('id'))
+    const { data: cashier } = await supabase
+      .from('company_cashiers')
+      .select('id')
+      .eq('id', id)
+      .eq('company_id', (session as any).companies.id)
+      .single()
+    if (!cashier) return c.json({ error: 'Caixa não encontrado' }, 404)
+    const { count } = await supabase
+      .from('company_purchases')
+      .select('*', { count: 'exact', head: true })
+      .eq('cashier_id', id)
+    if (count && count > 0) return c.json({ error: 'Não é possível excluir caixa com vendas registradas. Bloqueie ao invés de excluir.' }, 400)
+    await supabase.from('cashier_sessions').delete().eq('cashier_id', id)
+    const { error: delErr } = await supabase.from('company_cashiers').delete().eq('id', id)
+    if (delErr) return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.put('/api/empresa/cashback', async (c) => {
+  const token = getCookie(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    const body = await c.req.json()
+    const percentage = Number((body as any).cashback_percentage)
+    if (!percentage || percentage < 1 || percentage > 20) return c.json({ error: 'Percentual deve estar entre 1% e 20%' }, 400)
+    const { error } = await supabase
+      .from('company_cashback_config')
+      .update({ cashback_percentage: percentage, updated_at: new Date().toISOString() })
+      .eq('company_id', (session as any).companies.id)
+    if (error) return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 app.get('/api/empresa/caixas', async (c) => {
   const token = getCookie(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
