@@ -328,6 +328,78 @@ app.post('/api/affiliate/login', async (c) => {
   }
 })
 
+app.post('/api/affiliate/register', async (c) => {
+  try {
+    const body = await c.req.json()
+    const parsed = z.object({
+      full_name: z.string().min(1),
+      cpf: z.string().min(11),
+      email: z.string().email(),
+      whatsapp: z.string().nullable().optional(),
+      password: z.string().min(6),
+      referral_code: z.string().nullable().optional(),
+    }).safeParse(body)
+    if (!parsed.success) return c.json({ error: 'Dados inválidos', field_errors: parsed.error.flatten().fieldErrors }, 400)
+    const cleanCpf = parsed.data.cpf.replace(/\D/g, '')
+    if (!validateCPF(cleanCpf)) return c.json({ error: 'CPF inválido', field: 'cpf' }, 400)
+    const supabase = createSupabase()
+    const { data: existingCpf } = await supabase.from('affiliates').select('id').eq('cpf', cleanCpf).single()
+    if (existingCpf) return c.json({ error: 'CPF já está cadastrado', field: 'cpf' }, 409)
+    const { data: existingEmail } = await supabase.from('affiliates').select('id').eq('email', parsed.data.email).single()
+    if (existingEmail) return c.json({ error: 'E-mail já está cadastrado', field: 'email' }, 409)
+    let sponsorId: number | null = null
+    if (parsed.data.referral_code && parsed.data.referral_code.trim().length > 0) {
+      const { data: sponsor } = await supabase
+        .from('affiliates')
+        .select('id')
+        .eq('referral_code', parsed.data.referral_code.trim())
+        .eq('is_active', true)
+        .single()
+      sponsorId = (sponsor as any)?.id ?? null
+    }
+    const passwordHash = await bcrypt.hash(parsed.data.password, 12)
+    const nowIso = new Date().toISOString()
+    const insertPayload: any = {
+      full_name: parsed.data.full_name.trim(),
+      cpf: cleanCpf,
+      email: parsed.data.email.trim(),
+      phone: parsed.data.whatsapp ? String(parsed.data.whatsapp).replace(/\D/g, '') : null,
+      password_hash: passwordHash,
+      sponsor_id: sponsorId,
+      is_active: true,
+      created_at: nowIso,
+      updated_at: nowIso,
+    }
+    const { data: newAffiliate, error: insErr } = await supabase
+      .from('affiliates')
+      .insert(insertPayload)
+      .select('*')
+      .single()
+    if (insErr || !newAffiliate) return c.json({ error: 'Erro interno do servidor' }, 500)
+    let code = ''
+    for (let i = 0; i < 3; i++) {
+      code = ('CM' + crypto.randomUUID().replace(/-/g, '').slice(0, 8)).toUpperCase()
+      const { data: exists } = await supabase.from('affiliates').select('id').eq('referral_code', code).single()
+      if (!exists) break
+    }
+    await supabase.from('affiliates').update({ referral_code: code, updated_at: new Date().toISOString() }).eq('id', (newAffiliate as any).id)
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .insert({ mocha_user_id: `affiliate_${(newAffiliate as any).id}`, cpf: cleanCpf, role: 'affiliate', is_active: true })
+      .select('id')
+      .single()
+    const sessionToken = crypto.randomUUID() + '-' + Date.now()
+    const expiresAt = getSessionExpiration()
+    await supabase
+      .from('affiliate_sessions')
+      .insert({ affiliate_id: (newAffiliate as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+    setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 30 * 24 * 60 * 60 })
+    return c.json({ success: true, affiliate: { id: (newAffiliate as any).id, full_name: (newAffiliate as any).full_name, email: (newAffiliate as any).email, referral_code: code, customer_coupon: cleanCpf } })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 app.get('/affiliate/me', async (c) => {
   const token = getCookie(c, 'affiliate_session')
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
