@@ -349,16 +349,24 @@ app.post('/api/affiliate/register', async (c) => {
     if (existingEmail) return c.json({ error: 'E-mail já está cadastrado', field: 'email' }, 409)
     let sponsorId: number | null = null
     if (parsed.data.referral_code && parsed.data.referral_code.trim().length > 0) {
+      const refCode = parsed.data.referral_code.trim().toUpperCase()
       const { data: sponsor } = await supabase
         .from('affiliates')
         .select('id')
-        .eq('referral_code', parsed.data.referral_code.trim())
+        .eq('referral_code', refCode)
         .eq('is_active', true)
         .single()
       sponsorId = (sponsor as any)?.id ?? null
     }
     const passwordHash = await bcrypt.hash(parsed.data.password, 12)
     const nowIso = new Date().toISOString()
+    // Generate unique referral_code before insert to satisfy NOT NULL/UNIQUE constraints
+    let referralCode = ''
+    for (let i = 0; i < 5; i++) {
+      referralCode = ('CM' + crypto.randomUUID().replace(/-/g, '').slice(0, 8)).toUpperCase()
+      const { data: exists } = await supabase.from('affiliates').select('id').eq('referral_code', referralCode).maybeSingle()
+      if (!exists) break
+    }
     const insertPayload: any = {
       full_name: parsed.data.full_name.trim(),
       cpf: cleanCpf,
@@ -367,6 +375,7 @@ app.post('/api/affiliate/register', async (c) => {
       password_hash: passwordHash,
       sponsor_id: sponsorId,
       is_active: true,
+      referral_code: referralCode,
       created_at: nowIso,
       updated_at: nowIso,
     }
@@ -376,13 +385,6 @@ app.post('/api/affiliate/register', async (c) => {
       .select('*')
       .single()
     if (insErr || !newAffiliate) return c.json({ error: 'Erro interno do servidor' }, 500)
-    let code = ''
-    for (let i = 0; i < 3; i++) {
-      code = ('CM' + crypto.randomUUID().replace(/-/g, '').slice(0, 8)).toUpperCase()
-      const { data: exists } = await supabase.from('affiliates').select('id').eq('referral_code', code).single()
-      if (!exists) break
-    }
-    await supabase.from('affiliates').update({ referral_code: code, updated_at: new Date().toISOString() }).eq('id', (newAffiliate as any).id)
     const { data: profile } = await supabase
       .from('user_profiles')
       .insert({ mocha_user_id: `affiliate_${(newAffiliate as any).id}`, cpf: cleanCpf, role: 'affiliate', is_active: true })
@@ -394,7 +396,7 @@ app.post('/api/affiliate/register', async (c) => {
       .from('affiliate_sessions')
       .insert({ affiliate_id: (newAffiliate as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 30 * 24 * 60 * 60 })
-    return c.json({ success: true, affiliate: { id: (newAffiliate as any).id, full_name: (newAffiliate as any).full_name, email: (newAffiliate as any).email, referral_code: code, customer_coupon: cleanCpf } })
+    return c.json({ success: true, affiliate: { id: (newAffiliate as any).id, full_name: (newAffiliate as any).full_name, email: (newAffiliate as any).email, referral_code: referralCode, customer_coupon: cleanCpf } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
