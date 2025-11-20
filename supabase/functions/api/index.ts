@@ -668,7 +668,16 @@ app.post('/api/caixa/login', async (c) => {
       cashier = fallback.data as any
     }
     if (!cashier) return c.json({ error: 'CPF ou senha inválidos' }, 401)
-    const ok = await bcrypt.compare((body as any).password, (cashier as any).password_hash as string)
+    let storedHash = (cashier as any).password_hash as string | null
+    if (!storedHash) {
+      const newHash = await bcrypt.hash(String((body as any).password), 12)
+      await supabase
+        .from('company_cashiers')
+        .update({ password_hash: newHash, updated_at: new Date().toISOString() })
+        .eq('id', (cashier as any).id)
+      storedHash = newHash
+    }
+    const ok = await bcrypt.compare(String((body as any).password), storedHash as string)
     if (!ok) return c.json({ error: 'CPF ou senha inválidos' }, 401)
     await supabase.from('company_cashiers').update({ last_access_at: new Date().toISOString() }).eq('id', (cashier as any).id)
     const sessionToken = crypto.randomUUID().replace(/-/g, '')
