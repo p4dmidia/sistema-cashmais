@@ -394,4 +394,274 @@ app.post('/api/affiliate/logout', async (c) => {
   return c.json({ success: true })
 })
 
+app.get('/api/network/members', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id, cpf)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const rootId = (sessionData as any).affiliates.id as number
+    async function getLevel(sponsorId: number, level: number, maxLevel: number): Promise<any[]> {
+      if (level > maxLevel) return []
+      const { data: direct } = await supabase
+        .from('affiliates')
+        .select('id,email,cpf,created_at,last_access_at')
+        .eq('sponsor_id', sponsorId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+      const rows = [] as any[]
+      for (const m of direct || []) {
+        const isActive = (m as any).last_access_at ? new Date((m as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
+        const { count: purchases } = await supabase
+          .from('company_purchases')
+          .select('id', { count: 'exact', head: true })
+          .eq('customer_coupon', (m as any).cpf || '')
+        rows.push({ id: (m as any).id, email: (m as any).email, cpf: (m as any).cpf || 'N/A', level, is_active_this_month: isActive, last_purchase_date: (m as any).last_access_at || (m as any).created_at, total_purchases: purchases || 0, created_at: (m as any).created_at })
+        const subs = await getLevel((m as any).id, level + 1, maxLevel)
+        rows.push(...subs)
+      }
+      return rows
+    }
+    const members = await getLevel(rootId, 1, 10)
+    return c.json(members)
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.get('/api/network/stats', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const rootId = (sessionData as any).affiliates.id as number
+    async function countLevels(sponsorId: number, level: number, maxLevel: number, acc: Record<number, number>) {
+      if (level > maxLevel) return
+      const { data: direct } = await supabase
+        .from('affiliates')
+        .select('id,last_access_at')
+        .eq('sponsor_id', sponsorId)
+        .eq('is_active', true)
+      acc[level] = (acc[level] || 0) + (direct?.length || 0)
+      for (const m of direct || []) {
+        await countLevels((m as any).id, level + 1, maxLevel, acc)
+      }
+    }
+    async function countActive(sponsorId: number, level: number, maxLevel: number): Promise<number> {
+      if (level > maxLevel) return 0
+      const { data: direct } = await supabase
+        .from('affiliates')
+        .select('id,last_access_at')
+        .eq('sponsor_id', sponsorId)
+        .eq('is_active', true)
+      let active = 0
+      for (const m of direct || []) {
+        const isActive = (m as any).last_access_at ? new Date((m as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
+        if (isActive) active++
+        active += await countActive((m as any).id, level + 1, maxLevel)
+      }
+      return active
+    }
+    const levelCounts: Record<number, number> = {}
+    await countLevels(rootId, 1, 10, levelCounts)
+    const totalActive = await countActive(rootId, 1, 10)
+    const totalMembers = Object.values(levelCounts).reduce((s, n) => s + n, 0)
+    return c.json({
+      level1: levelCounts[1] || 0,
+      level2: levelCounts[2] || 0,
+      level3: levelCounts[3] || 0,
+      level4: levelCounts[4] || 0,
+      level5: levelCounts[5] || 0,
+      level6: levelCounts[6] || 0,
+      level7: levelCounts[7] || 0,
+      level8: levelCounts[8] || 0,
+      level9: levelCounts[9] || 0,
+      level10: levelCounts[10] || 0,
+      total_active: totalActive,
+      total_inactive: totalMembers - totalActive,
+    })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.get('/api/affiliate/network/preference', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ preference: 'auto' })
+  try {
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ preference: 'auto' })
+    const affiliateId = (sessionData as any).affiliates.id
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('mocha_user_id', `affiliate_${affiliateId}`)
+      .single()
+    if (!profile) return c.json({ preference: 'auto' })
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('leg_preference')
+      .eq('user_id', (profile as any).id)
+      .single()
+    const pref = (settings as any)?.leg_preference || 'automatic'
+    const apiPref = pref === 'automatic' ? 'auto' : pref
+    return c.json({ preference: apiPref })
+  } catch (e) {
+    return c.json({ preference: 'auto' })
+  }
+})
+
+app.put('/api/affiliate/network/preference', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const body = await c.req.json()
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const affiliateId = (sessionData as any).affiliates.id
+    const pref = (body.preference === 'auto' ? 'automatic' : body.preference) as string
+    let { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('mocha_user_id', `affiliate_${affiliateId}`)
+      .single()
+    if (!profile) {
+      const { data: newProfile } = await supabase
+        .from('user_profiles')
+        .insert({ mocha_user_id: `affiliate_${affiliateId}`, role: 'affiliate', is_active: true })
+        .select()
+        .single()
+      profile = newProfile
+    }
+    const { error: upErr } = await supabase
+      .from('user_settings')
+      .upsert({ user_id: (profile as any).id, leg_preference: pref, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+    if (upErr) return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
+app.get('/api/affiliate/network/tree', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const depthParam = c.req.query('max_depth')
+    const maxDepth = Math.max(1, Math.min(10, parseInt(depthParam || '3')))
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id, full_name, cpf, created_at, last_access_at)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const root = (sessionData as any).affiliates
+    async function buildNode(affiliateId: number, level: number): Promise<any> {
+      const isActive = root.last_access_at ? new Date(root.last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
+      const { count: directCount } = await supabase
+        .from('affiliates')
+        .select('id', { count: 'exact', head: true })
+        .eq('sponsor_id', affiliateId)
+        .eq('is_active', true)
+      const node: any = {
+        id: affiliateId.toString(),
+        name: root.full_name || 'Você',
+        coupon: root.cpf || '',
+        active: isActive,
+        level,
+        cpf: root.cpf || '',
+        direct_referrals: directCount || 0,
+        signup_date: root.created_at,
+        children: [] as any[],
+      }
+      if (level >= maxDepth) return node
+      const { data: direct } = await supabase
+        .from('affiliates')
+        .select('id, full_name, cpf, created_at, last_access_at')
+        .eq('sponsor_id', affiliateId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+      for (const m of direct || []) {
+        const isActiveM = (m as any).last_access_at ? new Date((m as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
+        const { count: directCountM } = await supabase
+          .from('affiliates')
+          .select('id', { count: 'exact', head: true })
+          .eq('sponsor_id', (m as any).id)
+          .eq('is_active', true)
+        const child = {
+          id: ((m as any).id).toString(),
+          name: (m as any).full_name || 'Afiliado',
+          coupon: (m as any).cpf || '',
+          active: isActiveM,
+          level: level + 1,
+          cpf: (m as any).cpf || '',
+          direct_referrals: directCountM || 0,
+          signup_date: (m as any).created_at,
+          children: [] as any[],
+        }
+        if (level + 1 < maxDepth) {
+          const subChildren = await supabase
+            .from('affiliates')
+            .select('id, full_name, cpf, created_at, last_access_at')
+            .eq('sponsor_id', (m as any).id)
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+          for (const s of subChildren.data || []) {
+            const isActiveS = (s as any).last_access_at ? new Date((s as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
+            child.children.push({
+              id: ((s as any).id).toString(),
+              name: (s as any).full_name || 'Afiliado',
+              coupon: (s as any).cpf || '',
+              active: isActiveS,
+              level: level + 2,
+              cpf: (s as any).cpf || '',
+              direct_referrals: 0,
+              signup_date: (s as any).created_at,
+              children: [] as any[],
+            })
+          }
+        }
+        node.children.push(child)
+      }
+      return node
+    }
+    const tree = await buildNode(root.id, 0)
+    return c.json(tree)
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 Deno.serve(app.fetch)
