@@ -231,7 +231,7 @@ app.get('/admin/reports/purchases', async (c) => {
   }
 })
 
-serve(app.fetch)
+// moved to end of file
 const AffiliateLoginSchema = z.object({
   cpf: z.string().min(11),
   password: z.string().min(1)
@@ -326,3 +326,5 @@ app.post('/affiliate/logout', async (c) => {
   setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 0 })
   return c.json({ success: true })
 })
+
+serve(app.fetch)

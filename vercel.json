@@ -1,8 +1,16 @@
 {
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://hffxmntvtsimwlsapfod.functions.supabase.co/api/:path*"
+      "source": "/api",
+      "destination": "https://hffxmntvtsimwlsapfod.supabase.co/functions/v1/api"
+    },
+    {
+      "source": "/api/",
+      "destination": "https://hffxmntvtsimwlsapfod.supabase.co/functions/v1/api"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "https://hffxmntvtsimwlsapfod.supabase.co/functions/v1/api/$1"
     },
     {
       "source": "/:path((?!api/).*)",
