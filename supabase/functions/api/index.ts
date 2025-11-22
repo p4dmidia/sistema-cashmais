@@ -1455,27 +1455,28 @@ app.post('/api/caixa/compra', async (c) => {
     const cashbackGenerated = (purchaseValue * cashbackPercentage) / 100
     let { data: customerCouponData } = await supabase
       .from('customer_coupons')
-      .select('id, is_active, total_usage_count')
+      .select('id, user_id, is_active, total_usage_count')
       .eq('coupon_code', cleanCpf)
       .maybeSingle()
-    if (!customerCouponData) {
-      let userIdForCoupon = customerData.id
-      if (customerType === 'affiliate') {
-        const { data: userProfile } = await supabase
+    // Resolve user_id for coupon (create profile for affiliate if missing)
+    let userIdForCoupon: number | null = customerType === 'user' ? (customerData as any).id : null
+    if (customerType === 'affiliate') {
+      const { data: userProfile } = await supabase
+        .from('user_profiles')
+        .select('id')
+        .eq('mocha_user_id', `affiliate_${customerData.id}`)
+        .single()
+      if (userProfile) userIdForCoupon = (userProfile as any).id
+      else {
+        const { data: newProfile } = await supabase
           .from('user_profiles')
-          .select('id')
-          .eq('mocha_user_id', `affiliate_${customerData.id}`)
+          .upsert({ mocha_user_id: `affiliate_${customerData.id}`, cpf: customerData.cpf, role: 'affiliate', is_active: true }, { onConflict: 'mocha_user_id' })
+          .select()
           .single()
-        if (userProfile) userIdForCoupon = userProfile.id
-        else {
-          const { data: newProfile } = await supabase
-            .from('user_profiles')
-            .upsert({ mocha_user_id: `affiliate_${customerData.id}`, cpf: customerData.cpf, role: 'affiliate', is_active: true }, { onConflict: 'mocha_user_id' })
-            .select()
-            .single()
-          if (newProfile) userIdForCoupon = newProfile.id
-        }
+        userIdForCoupon = (newProfile as any)?.id || null
       }
+    }
+    if (!customerCouponData) {
       const { data: upserted } = await supabase
         .from('customer_coupons')
         .upsert({ coupon_code: cleanCpf, user_id: userIdForCoupon, cpf: cleanCpf, affiliate_id: customerType === 'affiliate' ? customerData.id : null, is_active: true }, { onConflict: 'coupon_code' })
@@ -1491,6 +1492,16 @@ app.post('/api/caixa/compra', async (c) => {
         .single()
       customerCouponData = activated || customerCouponData
     }
+    // Ensure coupon has user_id set
+    if (customerCouponData && !(customerCouponData as any).user_id && userIdForCoupon) {
+      const { data: fixedCoupon } = await supabase
+        .from('customer_coupons')
+        .update({ user_id: userIdForCoupon })
+        .eq('id', (customerCouponData as any).id)
+        .select()
+        .single()
+      customerCouponData = fixedCoupon || customerCouponData
+    }
     const { data: purchase, error: purchaseError } = await supabase
       .from('company_purchases')
       .insert({
@@ -1498,7 +1509,7 @@ app.post('/api/caixa/compra', async (c) => {
         cashier_id: (session as any).company_cashiers.id,
         customer_coupon_id: (customerCouponData as any).id,
         customer_coupon: cleanCpf,
-        cashier_cpf: (session as any).company_cashiers.cpf,
+        cashier_cpf: cleanCashierCpf,
         purchase_value: purchaseValue,
         cashback_percentage: cashbackPercentage,
         cashback_generated: cashbackGenerated,
