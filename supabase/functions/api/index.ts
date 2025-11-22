@@ -771,6 +771,61 @@ function getSessionExpiration(days = 30): Date {
   return d
 }
 
+async function getSponsorPreference(supabase: any, sponsorId: number): Promise<'automatic' | 'left' | 'center' | 'right'> {
+  const { data: profile } = await supabase
+    .from('user_profiles')
+    .select('id')
+    .eq('mocha_user_id', `affiliate_${sponsorId}`)
+    .single()
+  if (!profile) return 'automatic'
+  const { data: settings } = await supabase
+    .from('user_settings')
+    .select('leg_preference')
+    .eq('user_id', (profile as any).id)
+    .single()
+  const pref = ((settings as any)?.leg_preference || 'automatic') as string
+  if (pref === 'left' || pref === 'center' || pref === 'right') return pref as any
+  return 'automatic'
+}
+
+async function getChildren(supabase: any, parentId: number): Promise<number[]> {
+  const { data } = await supabase
+    .from('affiliates')
+    .select('id')
+    .eq('sponsor_id', parentId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: true })
+  return (data || []).map((r: any) => r.id as number)
+}
+
+async function findPlacementTarget(supabase: any, rootSponsorId: number, preference: 'automatic' | 'left' | 'center' | 'right', maxDepth = 10): Promise<number> {
+  const rootChildren = await getChildren(supabase, rootSponsorId)
+  if (rootChildren.length < 3) return rootSponsorId
+  if (preference === 'automatic') {
+    const queue: number[] = [rootSponsorId]
+    let depth = 0
+    while (queue.length && depth <= maxDepth) {
+      const current = queue.shift() as number
+      const children = await getChildren(supabase, current)
+      if (children.length < 3) return current
+      for (const c of children) queue.push(c)
+      depth++
+    }
+    return rootSponsorId
+  }
+  let current = rootSponsorId
+  let depth = 0
+  while (depth <= maxDepth) {
+    const children = await getChildren(supabase, current)
+    if (children.length < 3) return current
+    if (preference === 'left') current = children[0]
+    else if (preference === 'center') current = children[1] || children[0]
+    else current = children[children.length - 1]
+    depth++
+  }
+  return rootSponsorId
+}
+
 app.post('/affiliate/login', async (c) => {
   try {
     const body = await c.req.json()
@@ -878,13 +933,18 @@ app.post('/api/affiliate/register', async (c) => {
       const { data: exists } = await supabase.from('affiliates').select('id').eq('referral_code', referralCode).maybeSingle()
       if (!exists) break
     }
+    let finalSponsorId: number | null = sponsorId
+    if (sponsorId) {
+      const pref = await getSponsorPreference(supabase, sponsorId)
+      finalSponsorId = await findPlacementTarget(supabase, sponsorId, pref)
+    }
     const insertPayload: any = {
       full_name: parsed.data.full_name.trim(),
       cpf: cleanCpf,
       email: parsed.data.email.trim(),
       phone: parsed.data.whatsapp ? String(parsed.data.whatsapp).replace(/\D/g, '') : null,
       password_hash: passwordHash,
-      sponsor_id: sponsorId,
+      sponsor_id: finalSponsorId,
       is_active: true,
       referral_code: referralCode,
       created_at: nowIso,
@@ -1361,18 +1421,29 @@ app.post('/api/caixa/compra', async (c) => {
       }
     }
     if (!customerData) return c.json({ error: 'CPF não encontrado ou cliente inativo' }, 400)
-    const { data: config } = await supabase
+    let { data: config } = await supabase
       .from('company_cashback_config')
       .select('cashback_percentage')
       .eq('company_id', (session as any).company_cashiers.companies.id)
       .single()
+    if (!config) {
+      await supabase
+        .from('company_cashback_config')
+        .upsert({ company_id: (session as any).company_cashiers.companies.id, cashback_percentage: 5.0 }, { onConflict: 'company_id' })
+      const cfgRes = await supabase
+        .from('company_cashback_config')
+        .select('cashback_percentage')
+        .eq('company_id', (session as any).company_cashiers.companies.id)
+        .single()
+      config = cfgRes.data as any
+    }
     const cashbackPercentage = (config as any)?.cashback_percentage ?? 5.0
     const cashbackGenerated = (Number(purchase_value) * cashbackPercentage) / 100
     let { data: customerCouponData } = await supabase
       .from('customer_coupons')
-      .select('*')
+      .select('id, is_active, total_usage_count')
       .eq('coupon_code', cleanCpf)
-      .single()
+      .maybeSingle()
     if (!customerCouponData) {
       let userIdForCoupon = customerData.id
       if (customerType === 'affiliate') {
@@ -1391,12 +1462,12 @@ app.post('/api/caixa/compra', async (c) => {
           if (newProfile) userIdForCoupon = newProfile.id
         }
       }
-      const { data: newCoupon } = await supabase
+      const { data: upserted } = await supabase
         .from('customer_coupons')
-        .insert({ coupon_code: cleanCpf, user_id: userIdForCoupon, cpf: cleanCpf, affiliate_id: customerType === 'affiliate' ? customerData.id : null, is_active: true })
+        .upsert({ coupon_code: cleanCpf, user_id: userIdForCoupon, cpf: cleanCpf, affiliate_id: customerType === 'affiliate' ? customerData.id : null, is_active: true }, { onConflict: 'coupon_code' })
         .select()
         .single()
-      customerCouponData = newCoupon
+      customerCouponData = upserted
     } else if (!(customerCouponData as any).is_active) {
       const { data: activated } = await supabase
         .from('customer_coupons')
