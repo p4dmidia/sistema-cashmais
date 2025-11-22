@@ -1388,7 +1388,21 @@ app.post('/api/caixa/compra', async (c) => {
   const token = getCookie(c, 'cashier_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
-    const { customer_coupon, purchase_value } = await c.req.json()
+    const body = await c.req.json()
+    const rawCoupon = String((body as any)?.customer_coupon || '').trim()
+    let rawValue = (body as any)?.purchase_value
+    const parseMoney = (v: any): number => {
+      if (typeof v === 'number') return v
+      const s = String(v || '').trim()
+      if (!s) return NaN
+      const br = s.replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(/,/g, '.')
+      const n = parseFloat(br)
+      return isNaN(n) ? NaN : n
+    }
+    const purchaseValue = parseMoney(rawValue)
+    if (!rawCoupon || isNaN(purchaseValue) || purchaseValue <= 0) {
+      return c.json({ error: 'Dados da compra inválidos' }, 400)
+    }
     const supabase = createSupabase()
     const { data: session } = await supabase
       .from('cashier_sessions')
@@ -1397,7 +1411,7 @@ app.post('/api/caixa/compra', async (c) => {
       .gt('expires_at', new Date().toISOString())
       .single()
     if (!session) return c.json({ error: 'Não autorizado' }, 401)
-    const cleanCpf = String(customer_coupon).replace(/[.-]/g, '')
+    const cleanCpf = rawCoupon.replace(/\D/g, '')
     const cleanCashierCpf = String((session as any).company_cashiers.cpf).replace(/[.-]/g, '')
     if (cleanCpf === cleanCashierCpf) return c.json({ error: 'Você não pode usar seu próprio CPF' }, 400)
     let { data: customer } = await supabase
@@ -1438,7 +1452,7 @@ app.post('/api/caixa/compra', async (c) => {
       config = cfgRes.data as any
     }
     const cashbackPercentage = (config as any)?.cashback_percentage ?? 5.0
-    const cashbackGenerated = (Number(purchase_value) * cashbackPercentage) / 100
+    const cashbackGenerated = (purchaseValue * cashbackPercentage) / 100
     let { data: customerCouponData } = await supabase
       .from('customer_coupons')
       .select('id, is_active, total_usage_count')
@@ -1485,7 +1499,7 @@ app.post('/api/caixa/compra', async (c) => {
         customer_coupon_id: (customerCouponData as any).id,
         customer_coupon: cleanCpf,
         cashier_cpf: (session as any).company_cashiers.cpf,
-        purchase_value: Number(purchase_value),
+        purchase_value: purchaseValue,
         cashback_percentage: cashbackPercentage,
         cashback_generated: cashbackGenerated,
         purchase_date: new Date().toISOString().split('T')[0],
