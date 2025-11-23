@@ -1019,29 +1019,30 @@ app.post('/api/affiliate/register', async (c) => {
       if (!existingCoupon) {
         const { data: inserted } = await supabase
           .from('customer_coupons')
-          .insert({ coupon_code: cleanCpf, user_id: profileId, is_active: true })
+          .insert({ coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
           .select('id')
           .single()
-        if (inserted) {
+        if (!inserted) {
           await supabase
             .from('customer_coupons')
-            .update({ cpf: cleanCpf, affiliate_id: (newAffiliate as any).id })
-            .eq('id', (inserted as any).id)
-        } else {
-          await supabase
-            .from('customer_coupons')
-            .update({ user_id: profileId, is_active: true })
+            .update({ user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
             .eq('coupon_code', cleanCpf)
         }
       } else {
         await supabase
           .from('customer_coupons')
-          .update({ user_id: profileId, is_active: true })
+          .update({ user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
           .eq('coupon_code', cleanCpf)
+      }
+      const { data: verifyCoupon } = await supabase
+        .from('customer_coupons')
+        .select('id')
+        .eq('coupon_code', cleanCpf)
+        .maybeSingle()
+      if (!verifyCoupon) {
         await supabase
           .from('customer_coupons')
-          .update({ cpf: cleanCpf, affiliate_id: (newAffiliate as any).id })
-          .eq('coupon_code', cleanCpf)
+          .insert({ coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
       }
     }
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
