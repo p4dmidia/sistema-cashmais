@@ -1634,6 +1634,53 @@ app.get('/api/caixa/debug/diagnose', async (c) => {
   }
 })
 
+app.post('/api/caixa/debug/repair-coupon', async (c) => {
+  const token = getCookie(c, 'cashier_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('cashier_sessions')
+      .select('id')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Sessão expirada' }, 401)
+    const body = await c.req.json().catch(() => ({}))
+    const cpfParam = String((body as any)?.cpf || '').replace(/\D/g, '')
+    if (!cpfParam) return c.json({ error: 'CPF inválido' }, 400)
+    const { data: aff } = await supabase
+      .from('affiliates')
+      .select('id, cpf, full_name, is_active')
+      .eq('cpf', cpfParam)
+      .maybeSingle()
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id, cpf, mocha_user_id, is_active')
+      .eq('cpf', cpfParam)
+      .maybeSingle()
+    let profileId: number | null = (profile as any)?.id || null
+    if (!profileId && aff) {
+      const { data: created } = await supabase
+        .from('user_profiles')
+        .upsert({ mocha_user_id: `affiliate_${(aff as any).id}`, cpf: cpfParam, role: 'affiliate', is_active: true }, { onConflict: 'mocha_user_id' })
+        .select('id')
+        .single()
+      profileId = (created as any)?.id || null
+    }
+    if (!profileId) return c.json({ error: 'Perfil não encontrado', details: { cpf: cpfParam } }, 400)
+    const { data: upserted } = await supabase
+      .from('customer_coupons')
+      .upsert({ coupon_code: cpfParam, user_id: profileId, cpf: cpfParam, affiliate_id: (aff as any)?.id || null, is_active: true }, { onConflict: 'coupon_code' })
+      .select('*')
+      .single()
+    if (!upserted) return c.json({ error: 'Falha ao criar cupom' }, 500)
+    return c.json({ success: true, coupon: upserted })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 app.post('/api/empresa/caixas', async (c) => {
   const token = getCookie(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
