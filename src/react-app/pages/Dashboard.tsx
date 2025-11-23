@@ -47,8 +47,12 @@ function Dashboard() {
 
   const fetchBalance = async () => {
     try {
+      const headers: Record<string, string> = {};
+      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers['Authorization'] = `Bearer ${anon}`;
       const response = await fetch('/api/users/balance', {
         credentials: 'include',
+        headers,
       });
       if (response.ok) {
         const data = await response.json();
@@ -61,8 +65,12 @@ function Dashboard() {
 
   const fetchNetworkStats = async () => {
     try {
+      const headers: Record<string, string> = {};
+      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers['Authorization'] = `Bearer ${anon}`;
       const response = await fetch('/api/network/stats', {
         credentials: 'include',
+        headers,
       });
       if (response.ok) {
         const data = await response.json();

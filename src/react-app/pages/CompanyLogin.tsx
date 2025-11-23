@@ -38,11 +38,12 @@ export default function CompanyLogin() {
         payload = { cpf: digits, password: senha };
       }
 
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers['Authorization'] = `Bearer ${anon}`;
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify(payload),
         credentials: 'include',
       });

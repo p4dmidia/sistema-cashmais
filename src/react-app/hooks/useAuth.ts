@@ -56,8 +56,12 @@ export function useCompanyAuth() {
       if (hasCompanyCookie) {
         try {
           console.log('[COMPANY_AUTH] Attempting company auth...');
+          const headers: Record<string, string> = {};
+          const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+          if (anon) headers['Authorization'] = `Bearer ${anon}`;
           const response = await fetch('/api/empresa/me', {
             credentials: 'include',
+            headers,
           });
 
           console.log('[COMPANY_AUTH] Company auth response status:', response.status);
@@ -84,8 +88,12 @@ export function useCompanyAuth() {
       if (hasCashierCookie) {
         try {
           console.log('[COMPANY_AUTH] Attempting cashier auth...');
+          const headers2: Record<string, string> = {};
+          const anon2 = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+          if (anon2) headers2['Authorization'] = `Bearer ${anon2}`;
           const cashierResponse = await fetch('/api/caixa/me', {
             credentials: 'include',
+            headers: headers2,
           });
 
           console.log('[COMPANY_AUTH] Cashier auth response status:', cashierResponse.status);
@@ -157,8 +165,12 @@ export function useAffiliateAuth() {
   const checkAuth = async () => {
     try {
       console.log('[AFFILIATE_AUTH] Checking authentication...');
+      const headers: Record<string, string> = {};
+      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers['Authorization'] = `Bearer ${anon}`;
       const response = await fetch('/api/affiliate/me', {
         credentials: 'include',
+        headers,
       });
 
       if (response.ok) {

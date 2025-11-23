@@ -15,11 +15,12 @@ export default function CashierLogin() {
     setError('');
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers['Authorization'] = `Bearer ${anon}`;
       const response = await fetch('/api/caixa/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ cpf: cpf.replace(/\D/g, ''), password }),
         credentials: 'include',
       });

@@ -89,11 +89,12 @@ function Login() {
       const cpfDigits = formData.cpf.replace(/\D/g, '');
       console.log('Tentando login do afiliado com CPF:', cpfDigits.substring(0, 3) + '***');
       
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers['Authorization'] = `Bearer ${anon}`;
       const response = await fetch('/api/affiliate/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         credentials: 'include',
         body: JSON.stringify({
           cpf: cpfDigits,

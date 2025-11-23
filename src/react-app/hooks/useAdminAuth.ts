@@ -34,11 +34,12 @@ export function useAdminAuth() {
       console.log('[ADMIN_AUTH] Checking authentication...');
       console.log('[ADMIN_AUTH] Current cookies:', document.cookie);
       
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers['Authorization'] = `Bearer ${anon}`;
       const response = await fetch('/api/admin/me', {
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        }
+        headers,
       });
 
       console.log('[ADMIN_AUTH] Auth response status:', response.status);
@@ -73,11 +74,12 @@ export function useAdminAuth() {
 
   const login = async (username: string, password: string) => {
     try {
+      const headers2: Record<string, string> = { 'Content-Type': 'application/json' };
+      const anon2 = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon2) headers2['Authorization'] = `Bearer ${anon2}`;
       const response = await fetch('/api/admin/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: headers2,
         credentials: 'include',
         body: JSON.stringify({ username, password }),
       });
