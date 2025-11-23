@@ -1386,7 +1386,7 @@ app.get('/api/caixa/me', async (c) => {
 
 app.post('/api/caixa/compra', async (c) => {
   const token = getCookie(c, 'cashier_session')
-  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  if (!token) return c.json({ error: 'Não autorizado', error_code: 'NO_SESSION' }, 401)
   try {
     const body = await c.req.json()
     const rawCoupon = String((body as any)?.customer_coupon || '').trim()
@@ -1401,7 +1401,7 @@ app.post('/api/caixa/compra', async (c) => {
     }
     const purchaseValue = parseMoney(rawValue)
     if (!rawCoupon || isNaN(purchaseValue) || purchaseValue <= 0) {
-      return c.json({ error: 'Dados da compra inválidos' }, 400)
+      return c.json({ error: 'Dados da compra inválidos', error_code: 'INVALID_INPUT', details: { customer_coupon: rawCoupon, purchase_value: rawValue } }, 400)
     }
     const supabase = createSupabase()
     const { data: session } = await supabase
@@ -1410,10 +1410,10 @@ app.post('/api/caixa/compra', async (c) => {
       .eq('session_token', token)
       .gt('expires_at', new Date().toISOString())
       .single()
-    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    if (!session) return c.json({ error: 'Não autorizado', error_code: 'SESSION_EXPIRED' }, 401)
     const cleanCpf = rawCoupon.replace(/\D/g, '')
     const cleanCashierCpf = String((session as any).company_cashiers.cpf).replace(/[.-]/g, '')
-    if (cleanCpf === cleanCashierCpf) return c.json({ error: 'Você não pode usar seu próprio CPF' }, 400)
+    if (cleanCpf === cleanCashierCpf) return c.json({ error: 'Você não pode usar seu próprio CPF', error_code: 'OWN_CPF_BLOCKED' }, 400)
     let { data: customer } = await supabase
       .from('affiliates')
       .select('id, cpf, full_name, is_active')
@@ -1434,7 +1434,7 @@ app.post('/api/caixa/compra', async (c) => {
         customerData = { id: userData.id, cpf: userData.cpf, full_name: userData.mocha_user_id, is_active: userData.is_active }
       }
     }
-    if (!customerData) return c.json({ error: 'CPF não encontrado ou cliente inativo' }, 400)
+    if (!customerData) return c.json({ error: 'CPF não encontrado ou cliente inativo', error_code: 'CUSTOMER_NOT_FOUND', details: { cpf: cleanCpf } }, 404)
     let { data: config } = await supabase
       .from('company_cashback_config')
       .select('cashback_percentage')
@@ -1518,7 +1518,7 @@ app.post('/api/caixa/compra', async (c) => {
       })
       .select()
       .single()
-    if (purchaseError) return c.json({ error: 'Erro interno do servidor' }, 500)
+    if (purchaseError) return c.json({ error: 'Erro ao registrar compra', error_code: 'PURCHASE_INSERT_FAILED' }, 500)
     const { error: couponError } = await supabase
       .from('customer_coupons')
       .update({ last_used_at: new Date().toISOString(), total_usage_count: ((customerCouponData as any).total_usage_count || 0) + 1 })
@@ -1533,7 +1533,7 @@ app.post('/api/caixa/compra', async (c) => {
     }
     return c.json({ success: true, message: `Compra registrada! ${customerCommissionMessage}`, cashback_generated: cashbackGenerated, customer_name: customerData.full_name })
   } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ error: 'Erro interno do servidor', error_code: 'UNEXPECTED_SERVER_ERROR' }, 500)
   }
 })
 
