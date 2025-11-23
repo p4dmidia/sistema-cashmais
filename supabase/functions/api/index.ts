@@ -1011,9 +1011,27 @@ app.post('/api/affiliate/register', async (c) => {
       .single()
     const profileId = (profile as any)?.id
     if (profileId) {
-      await supabase
+      const { data: existingCoupon } = await supabase
         .from('customer_coupons')
-        .upsert({ coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true }, { onConflict: 'coupon_code' })
+        .select('id, user_id, is_active')
+        .eq('coupon_code', cleanCpf)
+        .maybeSingle()
+      if (!existingCoupon) {
+        const { error: insErr } = await supabase
+          .from('customer_coupons')
+          .insert({ coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
+        if (insErr) {
+          await supabase
+            .from('customer_coupons')
+            .update({ user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
+            .eq('coupon_code', cleanCpf)
+        }
+      } else {
+        await supabase
+          .from('customer_coupons')
+          .update({ user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
+          .eq('coupon_code', cleanCpf)
+      }
     }
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
@@ -1675,13 +1693,29 @@ app.post('/api/caixa/debug/repair-coupon', async (c) => {
       profileId = (created as any)?.id || null
     }
     if (!profileId) return c.json({ error: 'Perfil não encontrado', details: { cpf: cpfParam } }, 400)
-    const { data: upserted } = await supabase
+    const { data: existing } = await supabase
       .from('customer_coupons')
-      .upsert({ coupon_code: cpfParam, user_id: profileId, cpf: cpfParam, affiliate_id: (aff as any)?.id || null, is_active: true }, { onConflict: 'coupon_code' })
-      .select('*')
-      .single()
-    if (!upserted) return c.json({ error: 'Falha ao criar cupom' }, 500)
-    return c.json({ success: true, coupon: upserted })
+      .select('id')
+      .eq('coupon_code', cpfParam)
+      .maybeSingle()
+    if (!existing) {
+      const { data: inserted, error: insErr } = await supabase
+        .from('customer_coupons')
+        .insert({ coupon_code: cpfParam, user_id: profileId, cpf: cpfParam, affiliate_id: (aff as any)?.id || null, is_active: true })
+        .select('*')
+        .single()
+      if (insErr || !inserted) return c.json({ error: 'Falha ao criar cupom', details: insErr || null }, 500)
+      return c.json({ success: true, coupon: inserted })
+    } else {
+      const { data: updated, error: updErr } = await supabase
+        .from('customer_coupons')
+        .update({ user_id: profileId, cpf: cpfParam, affiliate_id: (aff as any)?.id || null, is_active: true })
+        .eq('coupon_code', cpfParam)
+        .select('*')
+        .single()
+      if (updErr || !updated) return c.json({ error: 'Falha ao atualizar cupom', details: updErr || null }, 500)
+      return c.json({ success: true, coupon: updated })
+    }
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
