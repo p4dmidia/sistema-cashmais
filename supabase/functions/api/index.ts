@@ -820,11 +820,19 @@ function getSessionExpiration(days = 30): Date {
 }
 
 async function getSponsorPreference(supabase: any, sponsorId: number): Promise<'automatic' | 'left' | 'center' | 'right'> {
-  const { data: profile } = await supabase
+  let { data: profile } = await supabase
     .from('user_profiles')
     .select('id')
     .eq('mocha_user_id', `affiliate_${sponsorId}`)
     .single()
+  if (!profile) {
+    const { data: newProfile } = await supabase
+      .from('user_profiles')
+      .insert({ mocha_user_id: `affiliate_${sponsorId}`, role: 'affiliate', is_active: true })
+      .select('id')
+      .single()
+    profile = newProfile
+  }
   if (!profile) return 'automatic'
   const { data: settings } = await supabase
     .from('user_settings')
