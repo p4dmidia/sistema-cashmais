@@ -189,11 +189,12 @@ function Register() {
       const cpfDigits = formData.cpf.replace(/\D/g, '');
       const whatsappDigits = formData.whatsapp.replace(/\D/g, '');
       
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers['Authorization'] = `Bearer ${anon}`;
       const response = await fetch('/api/affiliate/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           full_name: formData.full_name.trim(),
           cpf: cpfDigits,
