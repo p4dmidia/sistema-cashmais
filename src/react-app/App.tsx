@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router';
 import { Suspense, lazy } from 'react';
 import Home from '@/react-app/pages/Home';
+import { setupAuthInterceptor } from '@/react-app/hooks/useAuth';
 import Login from '@/react-app/pages/Login';
 import Register from '@/react-app/pages/Register';
 import AuthCallback from '@/react-app/pages/AuthCallback';
@@ -31,6 +32,7 @@ import SystemSettings from '@/react-app/pages/admin/SystemSettings';
 import Reports from '@/react-app/pages/admin/Reports';
 
 function App() {
+  setupAuthInterceptor();
   return (
     <Router>
       <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011]">

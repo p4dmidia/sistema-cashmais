@@ -25,7 +25,10 @@ export default function CashierPage() {
 
   const checkAuth = async () => {
     try {
-      const response = await fetch('/api/caixa/me', { credentials: 'include' });
+      const headers: Record<string, string> = {};
+      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers['Authorization'] = `Bearer ${anon}`;
+      const response = await fetch('/api/caixa/me', { credentials: 'include', headers });
       if (response.ok) {
         const data = await response.json();
         setCashier(data.cashier);
@@ -44,11 +47,12 @@ export default function CashierPage() {
     setMessage('');
 
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (anon) headers['Authorization'] = `Bearer ${anon}`;
       const response = await fetch('/api/caixa/compra', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           customer_coupon: customerCoupon.trim(),
           purchase_value: parseFloat(purchaseValue)
@@ -73,7 +77,10 @@ export default function CashierPage() {
   };
 
   const handleLogout = async () => {
-    await fetch('/api/caixa/logout', { method: 'POST', credentials: 'include' });
+    const headers: Record<string, string> = {};
+    const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (anon) headers['Authorization'] = `Bearer ${anon}`;
+    await fetch('/api/caixa/logout', { method: 'POST', credentials: 'include', headers });
     navigate('/empresa/login');
   };
 

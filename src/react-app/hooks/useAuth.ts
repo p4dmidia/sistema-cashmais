@@ -208,11 +208,16 @@ export function useAffiliateAuth() {
 
 // Global response interceptor for 401/403 handling
 export function setupAuthInterceptor() {
-  // Override fetch to intercept 401 and 403 responses
   const originalFetch = window.fetch;
   
-  window.fetch = async (...args) => {
-    const response = await originalFetch(...args);
+  window.fetch = async (input: RequestInfo, init?: RequestInit) => {
+    let url = typeof input === 'string' ? input : (input as Request).url;
+    const headers = new Headers(init?.headers || {});
+    const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
+    if (url.startsWith('/api') && anon && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${anon}`);
+    }
+    const response = await originalFetch(input, { ...(init || {}), headers });
     
     if (response.status === 401) {
       // Determine which login page to redirect to based on current path

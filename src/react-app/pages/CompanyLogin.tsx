@@ -136,15 +136,16 @@ export default function CompanyLogin() {
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <Lock className="h-5 w-5 text-gray-400" />
                     </div>
-                    <input
-                      id="senha"
-                      type="password"
-                      required
-                      value={senha}
-                      onChange={(e) => setSenha(e.target.value)}
-                      className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
-                      placeholder="Sua senha"
-                    />
+                  <input
+                    id="senha"
+                    type="password"
+                    required
+                    value={senha}
+                    onChange={(e) => setSenha(e.target.value)}
+                    autoComplete="current-password"
+                    className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                    placeholder="Sua senha"
+                  />
                   </div>
                 </div>
               </div>

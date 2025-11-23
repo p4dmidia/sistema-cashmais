@@ -205,6 +205,7 @@ function Login() {
                     id="password"
                     value={formData.password}
                     onChange={handlePasswordChange}
+                    autoComplete="current-password"
                     placeholder="Digite sua senha"
                     className={`w-full px-4 py-3 pr-12 bg-white/10 border rounded-xl text-white placeholder-slate-400 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-[#70ff00] ${
                       errors.password || errors.general ? 'border-red-400' : 'border-white/20'
