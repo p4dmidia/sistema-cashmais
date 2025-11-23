@@ -2315,7 +2315,12 @@ app.get('/api/affiliate/network/tree', async (c) => {
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
     const root = (sessionData as any).affiliates
     async function buildNode(affiliateId: number, level: number): Promise<any> {
-      const isActive = root.last_access_at ? new Date(root.last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
+      const { data: aff } = await supabase
+        .from('affiliates')
+        .select('id, full_name, cpf, created_at, last_access_at')
+        .eq('id', affiliateId)
+        .single()
+      const isActive = (aff as any)?.last_access_at ? new Date((aff as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
       const { count: directCount } = await supabase
         .from('affiliates')
         .select('id', { count: 'exact', head: true })
@@ -2323,63 +2328,25 @@ app.get('/api/affiliate/network/tree', async (c) => {
         .eq('is_active', true)
       const node: any = {
         id: affiliateId.toString(),
-        name: root.full_name || 'Você',
-        coupon: root.cpf || '',
+        name: (aff as any)?.full_name || 'Afiliado',
+        coupon: (aff as any)?.cpf || '',
         active: isActive,
         level,
-        cpf: root.cpf || '',
+        cpf: (aff as any)?.cpf || '',
         direct_referrals: directCount || 0,
-        signup_date: root.created_at,
+        signup_date: (aff as any)?.created_at,
         children: [] as any[],
       }
       if (level >= maxDepth) return node
       const { data: direct } = await supabase
         .from('affiliates')
-        .select('id, full_name, cpf, created_at, last_access_at')
+        .select('id')
         .eq('sponsor_id', affiliateId)
         .eq('is_active', true)
-        .order('created_at', { ascending: false })
+        .order('created_at', { ascending: true })
       for (const m of direct || []) {
-        const isActiveM = (m as any).last_access_at ? new Date((m as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
-        const { count: directCountM } = await supabase
-          .from('affiliates')
-          .select('id', { count: 'exact', head: true })
-          .eq('sponsor_id', (m as any).id)
-          .eq('is_active', true)
-        const child = {
-          id: ((m as any).id).toString(),
-          name: (m as any).full_name || 'Afiliado',
-          coupon: (m as any).cpf || '',
-          active: isActiveM,
-          level: level + 1,
-          cpf: (m as any).cpf || '',
-          direct_referrals: directCountM || 0,
-          signup_date: (m as any).created_at,
-          children: [] as any[],
-        }
-        if (level + 1 < maxDepth) {
-          const subChildren = await supabase
-            .from('affiliates')
-            .select('id, full_name, cpf, created_at, last_access_at')
-            .eq('sponsor_id', (m as any).id)
-            .eq('is_active', true)
-            .order('created_at', { ascending: false })
-          for (const s of subChildren.data || []) {
-            const isActiveS = (s as any).last_access_at ? new Date((s as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
-            child.children.push({
-              id: ((s as any).id).toString(),
-              name: (s as any).full_name || 'Afiliado',
-              coupon: (s as any).cpf || '',
-              active: isActiveS,
-              level: level + 2,
-              cpf: (s as any).cpf || '',
-              direct_referrals: 0,
-              signup_date: (s as any).created_at,
-              children: [] as any[],
-            })
-          }
-        }
-        node.children.push(child)
+        const childNode = await buildNode((m as any).id, level + 1)
+        node.children.push(childNode)
       }
       return node
     }

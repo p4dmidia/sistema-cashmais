@@ -32,6 +32,14 @@ async function main() {
   console.log('Me status:', meRes.status)
   const meJson = await meRes.json().catch(() => ({}))
   console.log('Me response:', meJson)
+
+  const treeRes = await fetch(`${base}/api/affiliate/network/tree?max_depth=5`, {
+    method: 'GET',
+    headers: { 'Authorization': `Bearer ${anon}`, 'Cookie': cookieHeader },
+  })
+  console.log('Tree status:', treeRes.status)
+  const treeJson = await treeRes.json().catch(() => ({}))
+  console.log('Tree root:', { id: treeJson.id, childrenCount: Array.isArray(treeJson.children) ? treeJson.children.length : 0 })
 }
 
 main().catch((e) => {

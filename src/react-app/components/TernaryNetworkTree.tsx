@@ -203,7 +203,7 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
 
   const fetchNetworkTree = async () => {
     try {
-      const response = await fetch('/api/affiliate/network/tree?max_depth=3', {
+      const response = await fetch('/api/affiliate/network/tree?max_depth=5', {
         credentials: 'include',
       });
 
@@ -227,7 +227,6 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
     const converted: NetworkNode = {
       id: data.id || 'root',
       name: data.name || 'Você',
-      email: 'usuario@cashmais.com', // Mock data
       active: data.active !== false,
       level: data.level || 0,
       signup_date: data.signup_date || new Date().toISOString(),
@@ -235,102 +234,16 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
       children: {}
     };
 
-    if (data.children && data.children.length > 0) {
-      // Distribute children across left, center, right positions
-      const children = data.children.slice(0, 3); // Max 3 children for ternary tree
-      
-      if (children[0]) {
-        converted.children!.left = {
-          id: children[0].id,
-          name: children[0].name,
-          email: 'afiliado@email.com', // Mock data
-          active: children[0].active,
-          level: children[0].level,
-          signup_date: children[0].signup_date,
-          total_referrals: children[0].direct_referrals || 0,
-          position: 'left',
-          children: children[0].children ? convertChildrenToTernary(children[0].children) : {}
-        };
-      }
-      
-      if (children[1]) {
-        converted.children!.center = {
-          id: children[1].id,
-          name: children[1].name,
-          email: 'afiliado2@email.com', // Mock data
-          active: children[1].active,
-          level: children[1].level,
-          signup_date: children[1].signup_date,
-          total_referrals: children[1].direct_referrals || 0,
-          position: 'center',
-          children: children[1].children ? convertChildrenToTernary(children[1].children) : {}
-        };
-      }
-      
-      if (children[2]) {
-        converted.children!.right = {
-          id: children[2].id,
-          name: children[2].name,
-          email: 'afiliado3@email.com', // Mock data
-          active: children[2].active,
-          level: children[2].level,
-          signup_date: children[2].signup_date,
-          total_referrals: children[2].direct_referrals || 0,
-          position: 'right',
-          children: children[2].children ? convertChildrenToTernary(children[2].children) : {}
-        };
-      }
+    if (Array.isArray(data.children) && data.children.length) {
+      const left = data.children[0];
+      const center = data.children[1];
+      const right = data.children[2];
+      if (left) converted.children!.left = { ...convertToTernaryStructure(left), position: 'left' };
+      if (center) converted.children!.center = { ...convertToTernaryStructure(center), position: 'center' };
+      if (right) converted.children!.right = { ...convertToTernaryStructure(right), position: 'right' };
     }
 
     return converted;
-  };
-
-  const convertChildrenToTernary = (children: any[]): NetworkNode['children'] => {
-    const result: NetworkNode['children'] = {};
-    
-    if (children[0]) {
-      result.left = {
-        id: children[0].id,
-        name: children[0].name,
-        email: 'sub@email.com',
-        active: children[0].active,
-        level: children[0].level,
-        signup_date: children[0].signup_date,
-        total_referrals: children[0].direct_referrals || 0,
-        position: 'left',
-        children: {}
-      };
-    }
-    
-    if (children[1]) {
-      result.center = {
-        id: children[1].id,
-        name: children[1].name,
-        email: 'sub2@email.com',
-        active: children[1].active,
-        level: children[1].level,
-        signup_date: children[1].signup_date,
-        total_referrals: children[1].direct_referrals || 0,
-        position: 'center',
-        children: {}
-      };
-    }
-    
-    if (children[2]) {
-      result.right = {
-        id: children[2].id,
-        name: children[2].name,
-        email: 'sub3@email.com',
-        active: children[2].active,
-        level: children[2].level,
-        signup_date: children[2].signup_date,
-        total_referrals: children[2].direct_referrals || 0,
-        position: 'right',
-        children: {}
-      };
-    }
-    
-    return result;
   };
 
   const handleNodeClick = (node: NetworkNode) => {
