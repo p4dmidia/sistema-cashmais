@@ -1592,6 +1592,48 @@ app.post('/api/caixa/logout', async (c) => {
   return c.json({ success: true })
 })
 
+app.get('/api/caixa/debug/diagnose', async (c) => {
+  const token = getCookie(c, 'cashier_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('cashier_sessions')
+      .select('id')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Sessão expirada' }, 401)
+    const cpfParam = String(c.req.query('cpf') || '').replace(/\D/g, '')
+    if (!cpfParam) return c.json({ error: 'CPF inválido' }, 400)
+    const { data: aff } = await supabase
+      .from('affiliates')
+      .select('id, full_name, cpf, is_active, created_at')
+      .eq('cpf', cpfParam)
+      .maybeSingle()
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id, cpf, mocha_user_id, is_active')
+      .eq('cpf', cpfParam)
+      .maybeSingle()
+    const { data: coupon } = await supabase
+      .from('customer_coupons')
+      .select('id, coupon_code, user_id, affiliate_id, is_active, total_usage_count, last_used_at')
+      .eq('coupon_code', cpfParam)
+      .maybeSingle()
+    const issues: string[] = []
+    if (!aff && !profile) issues.push('NO_CUSTOMER_FOUND')
+    if (aff && !(aff as any).is_active) issues.push('AFFILIATE_INACTIVE')
+    if (!profile) issues.push('PROFILE_MISSING')
+    if (!coupon) issues.push('COUPON_MISSING')
+    if (coupon && !(coupon as any).is_active) issues.push('COUPON_INACTIVE')
+    if (coupon && !(coupon as any).user_id) issues.push('COUPON_USER_ID_MISSING')
+    return c.json({ cpf: cpfParam, affiliate: aff || null, profile: profile || null, coupon: coupon || null, issues })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+
 app.post('/api/empresa/caixas', async (c) => {
   const token = getCookie(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
