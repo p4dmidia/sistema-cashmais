@@ -1004,11 +1004,12 @@ app.post('/api/affiliate/register', async (c) => {
       .select('*')
       .single()
     if (insErr || !newAffiliate) return c.json({ error: 'Erro interno do servidor' }, 500)
-    const { data: profile } = await supabase
+    const { data: profile, error: profErr } = await supabase
       .from('user_profiles')
       .insert({ mocha_user_id: `affiliate_${(newAffiliate as any).id}`, cpf: cleanCpf, role: 'affiliate', is_active: true })
       .select('id')
       .single()
+    if (profErr || !profile) return c.json({ error: 'Erro interno do servidor' }, 500)
     const profileId = (profile as any)?.id
     if (profileId) {
       const { data: existingCoupon } = await supabase
@@ -1016,51 +1017,26 @@ app.post('/api/affiliate/register', async (c) => {
         .select('id')
         .eq('coupon_code', cleanCpf)
         .maybeSingle()
-      if (!existingCoupon) {
-        const { data: inserted, error: insErr1 } = await supabase
+      const payload: any = { coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, is_active: true, affiliate_id: (newAffiliate as any).id }
+      const tryUpsert = async (useAffiliateId: boolean) => {
+        const upPayload = { ...payload }
+        if (!useAffiliateId) delete upPayload.affiliate_id
+        const { error: upErr } = await supabase
           .from('customer_coupons')
-          .insert({ coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
-          .select('id')
-          .single()
-        if (!inserted) {
-          if (insErr1 && String(insErr1.message || insErr1).toLowerCase().includes('affiliate_id')) {
-            await supabase
-              .from('customer_coupons')
-              .insert({ coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, is_active: true })
-          } else {
-            await supabase
-              .from('customer_coupons')
-              .update({ user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
-              .eq('coupon_code', cleanCpf)
-          }
-        }
-      } else {
-        const { error: updErr1 } = await supabase
-          .from('customer_coupons')
-          .update({ user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
-          .eq('coupon_code', cleanCpf)
-        if (updErr1 && String(updErr1.message || updErr1).toLowerCase().includes('affiliate_id')) {
-          await supabase
-            .from('customer_coupons')
-            .update({ user_id: profileId, cpf: cleanCpf, is_active: true })
-            .eq('coupon_code', cleanCpf)
-        }
+          .upsert(upPayload, { onConflict: 'coupon_code' })
+        return upErr
       }
+      let upErr = await tryUpsert(true)
+      if (upErr && String(upErr.message || upErr).toLowerCase().includes('affiliate_id')) {
+        upErr = await tryUpsert(false)
+      }
+      if (upErr) return c.json({ error: 'Erro interno do servidor' }, 500)
       const { data: verifyCoupon } = await supabase
         .from('customer_coupons')
         .select('id')
         .eq('coupon_code', cleanCpf)
         .maybeSingle()
-      if (!verifyCoupon) {
-        const { error: insErr2 } = await supabase
-          .from('customer_coupons')
-          .insert({ coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true })
-        if (insErr2 && String(insErr2.message || insErr2).toLowerCase().includes('affiliate_id')) {
-          await supabase
-            .from('customer_coupons')
-            .insert({ coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, is_active: true })
-        }
-      }
+      if (!verifyCoupon) return c.json({ error: 'Erro interno do servidor' }, 500)
     }
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
