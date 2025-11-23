@@ -1009,6 +1009,12 @@ app.post('/api/affiliate/register', async (c) => {
       .insert({ mocha_user_id: `affiliate_${(newAffiliate as any).id}`, cpf: cleanCpf, role: 'affiliate', is_active: true })
       .select('id')
       .single()
+    const profileId = (profile as any)?.id
+    if (profileId) {
+      await supabase
+        .from('customer_coupons')
+        .upsert({ coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, affiliate_id: (newAffiliate as any).id, is_active: true }, { onConflict: 'coupon_code' })
+    }
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
     await supabase
