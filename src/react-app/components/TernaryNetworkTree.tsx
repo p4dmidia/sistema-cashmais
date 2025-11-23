@@ -235,12 +235,12 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
     };
 
     if (Array.isArray(data.children) && data.children.length) {
-      const left = data.children[0];
-      const center = data.children[1];
-      const right = data.children[2];
-      if (left) converted.children!.left = { ...convertToTernaryStructure(left), position: 'left' };
-      if (center) converted.children!.center = { ...convertToTernaryStructure(center), position: 'center' };
-      if (right) converted.children!.right = { ...convertToTernaryStructure(right), position: 'right' };
+      const a = data.children[0];
+      const b = data.children[1];
+      const c = data.children[2];
+      if (a) converted.children!.right = { ...convertToTernaryStructure(a), position: 'right' };
+      if (b) converted.children!.center = { ...convertToTernaryStructure(b), position: 'center' };
+      if (c) converted.children!.left = { ...convertToTernaryStructure(c), position: 'left' };
     }
 
     return converted;
