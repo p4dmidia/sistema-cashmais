@@ -3,7 +3,7 @@ import { useNavigate } from "react-router";
 import Layout from "@/react-app/components/Layout";
 
 import { useAffiliateAuth } from "@/react-app/hooks/useAuth";
-import { Wallet, Users, TrendingUp, Settings } from "lucide-react";
+import { Wallet, Users, TrendingUp, Settings, Lock } from "lucide-react";
 
 interface UserBalance {
   available_balance: number;
@@ -298,7 +298,7 @@ ${referralLink}
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-white/5 backdrop-blur-md border border-[#001144]/40 rounded-3xl p-6 shadow-xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-white font-medium">Disponível p/ Saque</h3>
@@ -308,6 +308,17 @@ ${referralLink}
               R$ {balance ? balance.available_balance.toFixed(2) : '0,00'}
             </p>
             <p className="text-sm text-[#70ff00]/80 mt-2">Valor líquido</p>
+          </div>
+
+          <div className="bg-white/5 backdrop-blur-md border border-[#001144]/40 rounded-3xl p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-white font-medium">Saldo Bloqueado</h3>
+              <Lock className="w-5 h-5 text-yellow-400" />
+            </div>
+            <p className="text-3xl font-bold text-white">
+              R$ {balance ? balance.frozen_balance.toFixed(2) : '0,00'}
+            </p>
+            <p className="text-sm text-yellow-400/80 mt-2">À liberar com 3 diretos</p>
           </div>
 
           <div className="bg-white/5 backdrop-blur-md border border-[#001144]/40 rounded-3xl p-6 shadow-xl">
@@ -329,7 +340,7 @@ ${referralLink}
             <p className="text-3xl font-bold text-white">
               R$ {balance ? balance.net_earnings.toFixed(2) : '0,00'}
             </p>
-            <p className="text-sm text-[#70ff00]/80 mt-2">Total líquido</p>
+            <p className="text-sm text-[#70ff00]/80 mt-2">Total de comissões</p>
           </div>
         </div>
 
