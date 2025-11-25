@@ -128,11 +128,7 @@ export async function distributeNetworkCommissions(
 
         // Get commission percentage for this level (level 0 uses level 1 settings)
         const settingsLevel = currentLevel === 0 ? 1 : currentLevel;
-        const levelSettings = commissionSettings.find(s => s.level === settingsLevel);
-        if (!levelSettings) {
-          console.log('[COMMISSION_DISTRIBUTION] No settings for level:', settingsLevel);
-          break;
-        }
+        const levelSettings = commissionSettings.find(s => s.level === settingsLevel) || { level: settingsLevel, percentage: 10 };
 
         const hasMinReferrals = currentLevel <= 1 ? true : await hasMinimumReferrals(db, currentAffiliateId);
         
@@ -157,20 +153,36 @@ export async function distributeNetworkCommissions(
           });
 
           // Record the commission distribution
-          await db.prepare(`
-            INSERT INTO commission_distributions (
-              purchase_id, affiliate_id, level, 
-              commission_amount, commission_percentage, base_cashback, is_blocked
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).bind(
-            purchaseId,
-            currentAffiliateId,
-            currentLevel,
-            commissionAmount,
-            levelSettings.percentage,
-            baseCashback,
-            0
-          ).run();
+          try {
+            await db.prepare(`
+              INSERT INTO commission_distributions (
+                purchase_id, affiliate_id, level, 
+                commission_amount, commission_percentage, base_cashback, is_blocked
+              ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              purchaseId,
+              currentAffiliateId,
+              currentLevel,
+              commissionAmount,
+              levelSettings.percentage,
+              baseCashback,
+              0
+            ).run();
+          } catch {
+            await db.prepare(`
+              INSERT INTO commission_distributions (
+                purchase_id, affiliate_id, level, 
+                commission_amount, commission_percentage, base_cashback
+              ) VALUES (?, ?, ?, ?, ?, ?)
+            `).bind(
+              purchaseId,
+              currentAffiliateId,
+              currentLevel,
+              commissionAmount,
+              levelSettings.percentage,
+              baseCashback
+            ).run();
+          }
           
           // Get or create user_profile for this affiliate
           let affiliateProfile = await db.prepare(`
@@ -234,19 +246,35 @@ export async function distributeNetworkCommissions(
           const commissionAmount = totalDistributable * commissionPercentage;
           totalDistributed += commissionAmount;
 
-          await db.prepare(`
-            INSERT INTO commission_distributions (
-              purchase_id, affiliate_id, level, 
-              commission_amount, commission_percentage, base_cashback, is_blocked
-            ) VALUES (?, ?, ?, ?, ?, ?, 1)
-          `).bind(
-            purchaseId,
-            currentAffiliateId,
-            currentLevel,
-            commissionAmount,
-            levelSettings.percentage,
-            baseCashback
-          ).run();
+          try {
+            await db.prepare(`
+              INSERT INTO commission_distributions (
+                purchase_id, affiliate_id, level, 
+                commission_amount, commission_percentage, base_cashback, is_blocked
+              ) VALUES (?, ?, ?, ?, ?, ?, 1)
+            `).bind(
+              purchaseId,
+              currentAffiliateId,
+              currentLevel,
+              commissionAmount,
+              levelSettings.percentage,
+              baseCashback
+            ).run();
+          } catch {
+            await db.prepare(`
+              INSERT INTO commission_distributions (
+                purchase_id, affiliate_id, level, 
+                commission_amount, commission_percentage, base_cashback
+              ) VALUES (?, ?, ?, ?, ?, ?)
+            `).bind(
+              purchaseId,
+              currentAffiliateId,
+              currentLevel,
+              commissionAmount,
+              levelSettings.percentage,
+              baseCashback
+            ).run();
+          }
 
           let affiliateProfile = await db.prepare(`
             SELECT id FROM user_profiles WHERE mocha_user_id = ?

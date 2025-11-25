@@ -36,12 +36,22 @@ async function releaseBlockedIfQualified(client: any, affiliateId: number) {
     profileId = (created as any)?.id
   }
   if (!profileId) return
-  const { data: blockedRows } = await client
-    .from('commission_distributions')
-    .select('commission_amount')
-    .eq('affiliate_id', affiliateId)
-    .eq('is_blocked', true)
-  const sumBlocked = (blockedRows || []).reduce((s: number, r: any) => s + Number(r.commission_amount || 0), 0)
+  let sumBlocked = 0
+  try {
+    const { data: blockedRows } = await client
+      .from('commission_distributions')
+      .select('commission_amount, is_blocked')
+      .eq('affiliate_id', affiliateId)
+      .eq('is_blocked', true)
+    sumBlocked = (blockedRows || []).reduce((s: number, r: any) => s + Number(r.commission_amount || 0), 0)
+  } catch {
+    const { data: settingsRow2 } = await client
+      .from('user_settings')
+      .select('frozen_balance')
+      .eq('user_id', profileId)
+      .single()
+    sumBlocked = Number((settingsRow2 as any)?.frozen_balance || 0)
+  }
   if (sumBlocked <= 0) return
   const { data: settingsRow } = await client
     .from('user_settings')
@@ -62,11 +72,108 @@ async function releaseBlockedIfQualified(client: any, affiliateId: number) {
       .from('user_settings')
       .insert({ user_id: profileId, total_earnings: sumBlocked, available_balance: newAvail, frozen_balance: newFrozen, is_active_this_month: true, updated_at: new Date().toISOString() })
   }
-  await client
-    .from('commission_distributions')
-    .update({ is_blocked: false, released_at: new Date().toISOString() })
-    .eq('affiliate_id', affiliateId)
-    .eq('is_blocked', true)
+  try {
+    await client
+      .from('commission_distributions')
+      .update({ is_blocked: false, released_at: new Date().toISOString() })
+      .eq('affiliate_id', affiliateId)
+      .eq('is_blocked', true)
+  } catch {}
+}
+
+async function getCommissionSettingsSupabase(client: any) {
+  const { data } = await client
+    .from('system_commission_settings')
+    .select('level, percentage')
+    .eq('is_active', true)
+    .order('level', { ascending: true })
+  if (Array.isArray(data) && data.length) return data.map((s: any) => ({ level: s.level as number, percentage: s.percentage as number }))
+  return Array.from({ length: 10 }, (_, i) => ({ level: i + 1, percentage: 10 }))
+}
+
+async function hasMinimumReferralsSupabase(client: any, affiliateId: number) {
+  const { count } = await client
+    .from('affiliates')
+    .select('id', { count: 'exact', head: true })
+    .eq('sponsor_id', affiliateId)
+    .eq('is_active', true)
+  return (count || 0) >= 3
+}
+
+async function getAffiliateSponsorSupabase(client: any, affiliateId: number) {
+  const { data } = await client
+    .from('affiliates')
+    .select('sponsor_id')
+    .eq('id', affiliateId)
+    .single()
+  return (data as any)?.sponsor_id || null
+}
+
+async function getOrCreateAffiliateProfileSupabase(client: any, affiliateId: number) {
+  const mochaUserId = `affiliate_${affiliateId}`
+  const { data: profile } = await client
+    .from('user_profiles')
+    .select('id')
+    .eq('mocha_user_id', mochaUserId)
+    .maybeSingle()
+  if (profile?.id) return profile
+  const { data: newProfile } = await client
+    .from('user_profiles')
+    .upsert({ mocha_user_id: mochaUserId, role: 'affiliate', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'mocha_user_id' })
+    .select('id')
+    .single()
+  return newProfile || null
+}
+
+async function recordCommissionSupabase(client: any, purchaseId: number, affiliateId: number, level: number, commissionAmount: number, commissionPercentage: number, baseCashback: number, isBlocked: boolean) {
+  const payload: any = { purchase_id: purchaseId, affiliate_id: affiliateId, level, commission_amount: commissionAmount, commission_percentage: commissionPercentage, base_cashback: baseCashback, created_at: new Date().toISOString() }
+  if (typeof isBlocked === 'boolean') payload.is_blocked = isBlocked
+  const { error } = await client.from('commission_distributions').insert(payload)
+  if (error && String(error.message || '').toLowerCase().includes('is_blocked')) {
+    const { error: fb } = await client.from('commission_distributions').insert({ purchase_id: purchaseId, affiliate_id: affiliateId, level, commission_amount: commissionAmount, commission_percentage: commissionPercentage, base_cashback: baseCashback, created_at: new Date().toISOString() })
+    if (fb) return false
+    return true
+  }
+  return !error
+}
+
+async function updateEarningsSupabase(client: any, userId: number, commissionAmount: number, isBlocked: boolean) {
+  const { error } = await client
+    .from('user_settings')
+    .upsert({ user_id: userId, total_earnings: commissionAmount, available_balance: isBlocked ? 0 : commissionAmount, frozen_balance: isBlocked ? commissionAmount : 0, is_active_this_month: true, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+  return !error
+}
+
+async function distributeNetworkCommissionsSupabase(client: any, purchaseId: number, customerType: 'affiliate' | 'user', customerId: number, baseCashback: number) {
+  if (customerType !== 'affiliate') return
+  const { data: customer } = await client
+    .from('affiliates')
+    .select('id, sponsor_id')
+    .eq('id', customerId)
+    .eq('is_active', true)
+    .single()
+  if (!customer) return
+  const settings = await getCommissionSettingsSupabase(client)
+  const totalDistributable = baseCashback * 0.70
+  let totalDistributed = 0
+  let currentAffiliateId: number | null = customerId
+  let currentLevel = 0
+  while (currentAffiliateId && currentLevel < 10) {
+    const settingsLevel = currentLevel === 0 ? 1 : currentLevel
+    const lvl = settings.find((s: any) => s.level === settingsLevel) || { level: settingsLevel, percentage: 10 }
+    const qualifies = currentLevel <= 1 ? true : await hasMinimumReferralsSupabase(client, currentAffiliateId)
+    const amount = totalDistributable * ((lvl.percentage as number) / 100)
+    totalDistributed += amount
+    await recordCommissionSupabase(client, purchaseId, currentAffiliateId, currentLevel, amount, lvl.percentage as number, baseCashback, !qualifies)
+    const profile = await getOrCreateAffiliateProfileSupabase(client, currentAffiliateId)
+    if (profile?.id) await updateEarningsSupabase(client, profile.id, amount, !qualifies)
+    currentAffiliateId = currentLevel === 0 ? (customer as any).sponsor_id : await getAffiliateSponsorSupabase(client, currentAffiliateId)
+    currentLevel++
+    if (!currentAffiliateId) break
+  }
+  const undistributed = totalDistributable - totalDistributed
+  const finalCashmaisShare = baseCashback * 0.30 + undistributed
+  await client.from('commission_distributions').insert({ purchase_id: purchaseId, affiliate_id: 0, level: 999, commission_amount: finalCashmaisShare, commission_percentage: 0, base_cashback: baseCashback, created_at: new Date().toISOString() })
 }
 
 app.use('*', cors({
@@ -1680,6 +1787,9 @@ app.post('/api/caixa/compra', async (c) => {
     } else {
       customerCommissionMessage = `Cashback de R$ ${cashbackGenerated.toFixed(2)} creditado para ${customerData.full_name}`
     }
+    try {
+      await distributeNetworkCommissionsSupabase(supabase, (purchase as any).id, customerType, customerData.id, cashbackGenerated)
+    } catch {}
     return c.json({ success: true, message: `Compra registrada! ${customerCommissionMessage}`, cashback_generated: cashbackGenerated, customer_name: customerData.full_name })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor', error_code: 'UNEXPECTED_SERVER_ERROR' }, 500)

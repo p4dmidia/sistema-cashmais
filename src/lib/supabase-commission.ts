@@ -157,24 +157,37 @@ export async function recordCommissionDistribution(
   isBlocked: boolean = false
 ) {
   try {
-    const { data, error } = await supabase
-      .from('commission_distributions')
-      .insert({
+    const insertPayload: any = {
+      purchase_id: purchaseId,
+      affiliate_id: affiliateId,
+      level,
+      commission_amount: commissionAmount,
+      commission_percentage: commissionPercentage,
+      base_cashback: baseCashback,
+      created_at: new Date().toISOString()
+    };
+    if (typeof isBlocked === 'boolean') insertPayload.is_blocked = isBlocked;
+    let { error } = await supabase.from('commission_distributions').insert(insertPayload);
+    if (error && String(error.message || '').toLowerCase().includes('is_blocked')) {
+      const { error: fallbackErr } = await supabase.from('commission_distributions').insert({
         purchase_id: purchaseId,
         affiliate_id: affiliateId,
         level,
         commission_amount: commissionAmount,
         commission_percentage: commissionPercentage,
         base_cashback: baseCashback,
-        is_blocked: isBlocked,
         created_at: new Date().toISOString()
       });
-
+      if (fallbackErr) {
+        console.error('[COMMISSION_UTILS] Error recording commission distribution (fallback):', fallbackErr);
+        return false;
+      }
+      return true;
+    }
     if (error) {
       console.error('[COMMISSION_UTILS] Error recording commission distribution:', error);
       return false;
     }
-
     return true;
   } catch (error) {
     console.error('[COMMISSION_UTILS] Error recording commission distribution:', error);
@@ -292,11 +305,7 @@ export async function distributeNetworkCommissions(
 
         // Get commission percentage for this level (level 0 uses level 1 settings)
         const settingsLevel = currentLevel === 0 ? 1 : currentLevel;
-        const levelSettings = commissionSettings.find(s => s.level === settingsLevel);
-        if (!levelSettings) {
-          console.log('[COMMISSION_DISTRIBUTION] No settings for level:', settingsLevel);
-          break;
-        }
+        const levelSettings = commissionSettings.find(s => s.level === settingsLevel) || { level: settingsLevel, percentage: 10 };
 
         // Check if this affiliate has minimum 3 direct referrals to earn commission
         // EXCEPTION: Level 0 (the customer who made the purchase) ALWAYS receives commission
