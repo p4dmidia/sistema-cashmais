@@ -134,9 +134,7 @@ export async function distributeNetworkCommissions(
           break;
         }
 
-        // Check if this affiliate has minimum 3 direct referrals to earn commission
-        // EXCEPTION: Level 0 (the customer who made the purchase) ALWAYS receives commission
-        const hasMinReferrals = currentLevel === 0 ? true : await hasMinimumReferrals(db, currentAffiliateId);
+        const hasMinReferrals = currentLevel <= 1 ? true : await hasMinimumReferrals(db, currentAffiliateId);
         
         console.log('[COMMISSION_DISTRIBUTION] Affiliate referral check:', {
           affiliateId: currentAffiliateId,
@@ -162,15 +160,16 @@ export async function distributeNetworkCommissions(
           await db.prepare(`
             INSERT INTO commission_distributions (
               purchase_id, affiliate_id, level, 
-              commission_amount, commission_percentage, base_cashback
-            ) VALUES (?, ?, ?, ?, ?, ?)
+              commission_amount, commission_percentage, base_cashback, is_blocked
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
           `).bind(
             purchaseId,
             currentAffiliateId,
             currentLevel,
             commissionAmount,
             levelSettings.percentage,
-            baseCashback
+            baseCashback,
+            0
           ).run();
           
           // Get or create user_profile for this affiliate
@@ -189,17 +188,19 @@ export async function distributeNetworkCommissions(
           
           // Update affiliate's earnings - add to both total_earnings and available_balance
           await db.prepare(`
-            INSERT INTO user_settings (user_id, total_earnings, available_balance, is_active_this_month)
-            VALUES (?, ?, ?, 1)
+            INSERT INTO user_settings (user_id, total_earnings, available_balance, frozen_balance, is_active_this_month)
+            VALUES (?, ?, ?, ?, 1)
             ON CONFLICT(user_id) DO UPDATE SET
               total_earnings = total_earnings + excluded.total_earnings,
               available_balance = available_balance + excluded.available_balance,
+              frozen_balance = frozen_balance + excluded.frozen_balance,
               is_active_this_month = 1,
               updated_at = datetime('now')
           `).bind(
             (affiliateProfile as any).id,
             commissionAmount,
-            commissionAmount
+            commissionAmount,
+            0
           ).run();
 
           console.log('[COMMISSION_DISTRIBUTION] Updated affiliate earnings:', {
@@ -208,11 +209,68 @@ export async function distributeNetworkCommissions(
             amount: commissionAmount,
             level: currentLevel
           });
+
+          const blockedRow = await db.prepare(`
+            SELECT COALESCE(SUM(commission_amount), 0) as sum_blocked
+            FROM commission_distributions
+            WHERE affiliate_id = ? AND is_blocked = 1
+          `).bind(currentAffiliateId).first();
+          const sumBlocked = blockedRow ? Number((blockedRow as any).sum_blocked || 0) : 0;
+          if (sumBlocked > 0) {
+            await db.prepare(`
+              UPDATE user_settings
+              SET available_balance = available_balance + ?,
+                  frozen_balance = frozen_balance - ?
+              WHERE user_id = ?
+            `).bind(sumBlocked, sumBlocked, (affiliateProfile as any).id).run();
+            await db.prepare(`
+              UPDATE commission_distributions
+              SET is_blocked = 0, released_at = datetime('now')
+              WHERE affiliate_id = ? AND is_blocked = 1
+            `).bind(currentAffiliateId).run();
+          }
         } else {
-          console.log('[COMMISSION_DISTRIBUTION] Affiliate does not meet minimum referral requirement:', {
-            affiliateId: currentAffiliateId,
-            level: currentLevel
-          });
+          const commissionPercentage = levelSettings.percentage / 100;
+          const commissionAmount = totalDistributable * commissionPercentage;
+          totalDistributed += commissionAmount;
+
+          await db.prepare(`
+            INSERT INTO commission_distributions (
+              purchase_id, affiliate_id, level, 
+              commission_amount, commission_percentage, base_cashback, is_blocked
+            ) VALUES (?, ?, ?, ?, ?, ?, 1)
+          `).bind(
+            purchaseId,
+            currentAffiliateId,
+            currentLevel,
+            commissionAmount,
+            levelSettings.percentage,
+            baseCashback
+          ).run();
+
+          let affiliateProfile = await db.prepare(`
+            SELECT id FROM user_profiles WHERE mocha_user_id = ?
+          `).bind(`affiliate_${currentAffiliateId}`).first();
+          if (!affiliateProfile) {
+            const result = await db.prepare(`
+              INSERT INTO user_profiles (mocha_user_id, role, is_active)
+              VALUES (?, 'affiliate', 1)
+            `).bind(`affiliate_${currentAffiliateId}`).run();
+            affiliateProfile = { id: result.meta.last_row_id };
+          }
+          await db.prepare(`
+            INSERT INTO user_settings (user_id, total_earnings, available_balance, frozen_balance, is_active_this_month)
+            VALUES (?, ?, 0, ?, 1)
+            ON CONFLICT(user_id) DO UPDATE SET
+              total_earnings = total_earnings + excluded.total_earnings,
+              frozen_balance = frozen_balance + excluded.frozen_balance,
+              is_active_this_month = 1,
+              updated_at = datetime('now')
+          `).bind(
+            (affiliateProfile as any).id,
+            commissionAmount,
+            commissionAmount
+          ).run();
         }
         
         // Move to next level - get current affiliate's sponsor
@@ -257,6 +315,28 @@ export async function distributeNetworkCommissions(
       finalCashmaisShare,
       cashmaisPercentage: (finalCashmaisShare / baseCashback) * 100
     });
+
+    try {
+      await db.prepare(`
+        INSERT INTO commission_distributions (
+          purchase_id, affiliate_id, level,
+          commission_amount, commission_percentage, base_cashback
+        ) VALUES (?, ?, ?, ?, ?, ?)
+      `).bind(
+        purchaseId,
+        0,
+        999,
+        finalCashmaisShare,
+        0,
+        baseCashback
+      ).run();
+      console.log('[COMMISSION_DISTRIBUTION] Recorded CashMais receivable:', {
+        purchaseId,
+        amount: finalCashmaisShare
+      });
+    } catch (recErr) {
+      console.error('[COMMISSION_DISTRIBUTION] Failed to record CashMais receivable:', recErr);
+    }
 
     console.log('[COMMISSION_DISTRIBUTION] Distribution completed successfully');
     

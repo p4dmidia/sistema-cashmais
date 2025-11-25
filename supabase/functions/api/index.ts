@@ -14,6 +14,61 @@ function createSupabase() {
   return createClient(url, key)
 }
 
+async function releaseBlockedIfQualified(client: any, affiliateId: number) {
+  const { count } = await client
+    .from('affiliates')
+    .select('id', { count: 'exact', head: true })
+    .eq('sponsor_id', affiliateId)
+    .eq('is_active', true)
+  if (!count || count < 3) return
+  const { data: profile } = await client
+    .from('user_profiles')
+    .select('id')
+    .eq('mocha_user_id', `affiliate_${affiliateId}`)
+    .single()
+  let profileId = (profile as any)?.id
+  if (!profileId) {
+    const { data: created } = await client
+      .from('user_profiles')
+      .insert({ mocha_user_id: `affiliate_${affiliateId}`, role: 'affiliate', is_active: true })
+      .select('id')
+      .single()
+    profileId = (created as any)?.id
+  }
+  if (!profileId) return
+  const { data: blockedRows } = await client
+    .from('commission_distributions')
+    .select('commission_amount')
+    .eq('affiliate_id', affiliateId)
+    .eq('is_blocked', true)
+  const sumBlocked = (blockedRows || []).reduce((s: number, r: any) => s + Number(r.commission_amount || 0), 0)
+  if (sumBlocked <= 0) return
+  const { data: settingsRow } = await client
+    .from('user_settings')
+    .select('id, available_balance, frozen_balance')
+    .eq('user_id', profileId)
+    .single()
+  const currentAvail = Number((settingsRow as any)?.available_balance || 0)
+  const currentFrozen = Number((settingsRow as any)?.frozen_balance || 0)
+  const newAvail = currentAvail + sumBlocked
+  const newFrozen = Math.max(0, currentFrozen - sumBlocked)
+  if (settingsRow) {
+    await client
+      .from('user_settings')
+      .update({ available_balance: newAvail, frozen_balance: newFrozen, is_active_this_month: true, updated_at: new Date().toISOString() })
+      .eq('id', (settingsRow as any).id)
+  } else {
+    await client
+      .from('user_settings')
+      .insert({ user_id: profileId, total_earnings: sumBlocked, available_balance: newAvail, frozen_balance: newFrozen, is_active_this_month: true, updated_at: new Date().toISOString() })
+  }
+  await client
+    .from('commission_distributions')
+    .update({ is_blocked: false, released_at: new Date().toISOString() })
+    .eq('affiliate_id', affiliateId)
+    .eq('is_blocked', true)
+}
+
 app.use('*', cors({
   origin: (origin) => origin || '*',
   allowHeaders: ['Authorization', 'Content-Type', 'X-Client-Info', 'Cookie'],
@@ -1045,6 +1100,9 @@ app.post('/api/affiliate/register', async (c) => {
         .eq('coupon_code', cleanCpf)
         .maybeSingle()
       if (!verifyCoupon) return c.json({ error: 'Erro interno do servidor' }, 500)
+    }
+    if (finalSponsorId) {
+      await releaseBlockedIfQualified(supabase, finalSponsorId as number)
     }
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()

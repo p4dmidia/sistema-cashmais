@@ -153,7 +153,8 @@ export async function recordCommissionDistribution(
   level: number,
   commissionAmount: number,
   commissionPercentage: number,
-  baseCashback: number
+  baseCashback: number,
+  isBlocked: boolean = false
 ) {
   try {
     const { data, error } = await supabase
@@ -165,6 +166,7 @@ export async function recordCommissionDistribution(
         commission_amount: commissionAmount,
         commission_percentage: commissionPercentage,
         base_cashback: baseCashback,
+        is_blocked: isBlocked,
         created_at: new Date().toISOString()
       });
 
@@ -183,14 +185,15 @@ export async function recordCommissionDistribution(
 /**
  * Update affiliate earnings
  */
-export async function updateAffiliateEarnings(userId: number, commissionAmount: number) {
+export async function updateAffiliateEarnings(userId: number, commissionAmount: number, isBlocked: boolean) {
   try {
     const { data, error } = await supabase
       .from('user_settings')
       .upsert({
         user_id: userId,
         total_earnings: commissionAmount,
-        available_balance: commissionAmount,
+        available_balance: isBlocked ? 0 : commissionAmount,
+        frozen_balance: isBlocked ? commissionAmount : 0,
         is_active_this_month: true,
         updated_at: new Date().toISOString()
       }, {
@@ -297,7 +300,7 @@ export async function distributeNetworkCommissions(
 
         // Check if this affiliate has minimum 3 direct referrals to earn commission
         // EXCEPTION: Level 0 (the customer who made the purchase) ALWAYS receives commission
-        const hasMinReferrals = currentLevel === 0 ? true : await hasMinimumReferrals(currentAffiliateId);
+        const hasMinReferrals = currentLevel <= 1 ? true : await hasMinimumReferrals(currentAffiliateId);
         
         console.log('[COMMISSION_DISTRIBUTION] Affiliate referral check:', {
           affiliateId: currentAffiliateId,
@@ -326,7 +329,8 @@ export async function distributeNetworkCommissions(
             currentLevel,
             commissionAmount,
             levelSettings.percentage,
-            baseCashback
+            baseCashback,
+            false
           );
 
           if (recorded) {
@@ -335,7 +339,7 @@ export async function distributeNetworkCommissions(
             
             if (affiliateProfile) {
               // Update affiliate's earnings
-              const updated = await updateAffiliateEarnings(affiliateProfile.id, commissionAmount);
+              const updated = await updateAffiliateEarnings(affiliateProfile.id, commissionAmount, false);
               
               if (updated) {
                 console.log('[COMMISSION_DISTRIBUTION] Updated affiliate earnings:', {
@@ -348,10 +352,25 @@ export async function distributeNetworkCommissions(
             }
           }
         } else {
-          console.log('[COMMISSION_DISTRIBUTION] Affiliate does not meet minimum referral requirement:', {
-            affiliateId: currentAffiliateId,
-            level: currentLevel
-          });
+          const commissionPercentage = levelSettings.percentage / 100;
+          const commissionAmount = totalDistributable * commissionPercentage;
+          totalDistributed += commissionAmount;
+
+          const recorded = await recordCommissionDistribution(
+            purchaseId,
+            currentAffiliateId,
+            currentLevel,
+            commissionAmount,
+            levelSettings.percentage,
+            baseCashback,
+            true
+          );
+          if (recorded) {
+            const affiliateProfile = await getOrCreateUserProfile(currentAffiliateId);
+            if (affiliateProfile) {
+              await updateAffiliateEarnings(affiliateProfile.id, commissionAmount, true);
+            }
+          }
         }
         
         // Move to next level - get current affiliate's sponsor
@@ -392,6 +411,21 @@ export async function distributeNetworkCommissions(
       finalCashmaisShare,
       cashmaisPercentage: (finalCashmaisShare / baseCashback) * 100
     });
+
+    try {
+      await supabase.from('commission_distributions').insert({
+        purchase_id: purchaseId,
+        affiliate_id: 0,
+        level: 999,
+        commission_amount: finalCashmaisShare,
+        commission_percentage: 0,
+        base_cashback: baseCashback,
+        created_at: new Date().toISOString()
+      });
+      console.log('[COMMISSION_DISTRIBUTION] Recorded CashMais receivable:', { purchaseId, amount: finalCashmaisShare });
+    } catch (recErr) {
+      console.error('[COMMISSION_DISTRIBUTION] Failed to record CashMais receivable:', recErr);
+    }
 
     console.log('[COMMISSION_DISTRIBUTION] Distribution completed successfully');
     
