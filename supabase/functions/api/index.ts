@@ -1303,13 +1303,32 @@ app.get('/api/users/balance', async (c) => {
       .single()
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
     const affiliate = (sessionData as any).affiliates
-    let totalCommissions = 0
-    const { data: purchaseTransactions } = await supabase
-      .from('company_purchases')
-      .select('cashback_generated')
-      .eq('customer_coupon', affiliate.cpf)
-    const purchaseCashback = (purchaseTransactions || []).reduce((s: number, tx: any) => s + (tx.cashback_generated * 0.07), 0)
-    totalCommissions = Math.round(purchaseCashback * 100) / 100
+    let baseAvailable = 0
+    let baseFrozen = 0
+    let usedCommissionTable = false
+    try {
+      const { data: dist } = await supabase
+        .from('commission_distributions')
+        .select('commission_amount, is_blocked')
+        .eq('affiliate_id', affiliate.id)
+      if (Array.isArray(dist)) {
+        for (const r of dist) {
+          const amt = Number((r as any).commission_amount || 0)
+          if ((r as any).is_blocked) baseFrozen += amt
+          else baseAvailable += amt
+        }
+        usedCommissionTable = true
+      }
+    } catch {}
+    if (!usedCommissionTable) {
+      const { data: purchaseTransactions } = await supabase
+        .from('company_purchases')
+        .select('cashback_generated')
+        .eq('customer_coupon', affiliate.cpf)
+      const purchaseCashback = (purchaseTransactions || []).reduce((s: number, tx: any) => s + (Number((tx as any).cashback_generated || 0) * 0.07), 0)
+      baseAvailable = Math.round(purchaseCashback * 100) / 100
+      baseFrozen = 0
+    }
     let { data: profileData } = await supabase
       .from('user_profiles')
       .select('id')
@@ -1329,14 +1348,16 @@ app.get('/api/users/balance', async (c) => {
       .select('amount_requested')
       .eq('user_id', (profile as any).id)
       .eq('status', 'approved')
-    const totalWithdrawn = (withdrawalData || []).reduce((s: number, w: any) => s + (w.amount_requested || 0), 0)
+    const totalWithdrawn = (withdrawalData || []).reduce((s: number, w: any) => s + Number((w as any).amount_requested || 0), 0)
     const { data: frozenData } = await supabase
       .from('withdrawals')
       .select('amount_requested')
       .eq('user_id', (profile as any).id)
       .eq('status', 'pending')
-    const frozenBalance = (frozenData || []).reduce((s: number, w: any) => s + (w.amount_requested || 0), 0)
-    const availableBalance = Math.max(0, totalCommissions - totalWithdrawn - frozenBalance)
+    const pendingWithdrawals = (frozenData || []).reduce((s: number, w: any) => s + Number((w as any).amount_requested || 0), 0)
+    const availableBalance = Math.max(0, baseAvailable - totalWithdrawn - pendingWithdrawals)
+    const frozenBalance = Math.max(0, baseFrozen + pendingWithdrawals)
+    const totalCommissions = Math.round((baseAvailable + baseFrozen) * 100) / 100
     const isActiveThisMonth = totalCommissions > 0
     let { data: settingsData } = await supabase
       .from('user_settings')
@@ -1501,20 +1522,66 @@ app.get('/api/transactions', async (c) => {
       .single()
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
     const affiliate = (sessionData as any).affiliates
-    const { data: transactions } = await supabase
-      .from('company_purchases')
-      .select('id, companies!inner(nome_fantasia), purchase_value, cashback_generated, created_at')
-      .eq('customer_coupon', affiliate.cpf)
-      .order('created_at', { ascending: false })
-      .limit(50)
-    const formatted = (transactions || []).map((tx: any) => ({
-      id: tx.id,
-      company_name: tx.companies?.nome_fantasia || '',
-      purchase_value: Number(tx.purchase_value || 0),
-      cashback_value: Math.round(Number(tx.cashback_generated || 0) * 0.07 * 100) / 100,
-      level_earned: 1,
-      transaction_date: tx.created_at,
-    }))
+    let formatted: any[] = []
+    let usedCommissionTable = false
+    try {
+      const { data: dist } = await supabase
+        .from('commission_distributions')
+        .select('purchase_id, level, commission_amount, created_at')
+        .eq('affiliate_id', affiliate.id)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      if (Array.isArray(dist) && dist.length) {
+        const pids = Array.from(new Set(dist.map((d: any) => (d as any).purchase_id).filter(Boolean)))
+        let purchasesMap = new Map<number, any>()
+        let companiesMap = new Map<number, any>()
+        if (pids.length) {
+          const { data: purchases } = await supabase
+            .from('company_purchases')
+            .select('id, company_id, purchase_value, cashback_generated, created_at')
+            .in('id', pids)
+          for (const p of purchases || []) purchasesMap.set(Number((p as any).id), p)
+          const cids = Array.from(new Set((purchases || []).map((p: any) => Number((p as any).company_id)).filter(Boolean)))
+          if (cids.length) {
+            const { data: companies } = await supabase
+              .from('companies')
+              .select('id, nome_fantasia')
+              .in('id', cids)
+            for (const c of companies || []) companiesMap.set(Number((c as any).id), c)
+          }
+        }
+        formatted = dist.map((d: any) => {
+          const pid = Number((d as any).purchase_id)
+          const p = purchasesMap.get(pid)
+          const comp = p ? companiesMap.get(Number((p as any).company_id)) : null
+          return {
+            id: pid,
+            company_name: comp?.nome_fantasia || '',
+            purchase_value: Number(p?.purchase_value || 0),
+            cashback_value: Math.round(Number((d as any).commission_amount || 0) * 100) / 100,
+            level_earned: Number((d as any).level || 0),
+            transaction_date: (p?.created_at || (d as any).created_at),
+          }
+        })
+        usedCommissionTable = true
+      }
+    } catch {}
+    if (!usedCommissionTable) {
+      const { data: transactions } = await supabase
+        .from('company_purchases')
+        .select('id, companies!inner(nome_fantasia), purchase_value, cashback_generated, created_at')
+        .eq('customer_coupon', affiliate.cpf)
+        .order('created_at', { ascending: false })
+        .limit(50)
+      formatted = (transactions || []).map((tx: any) => ({
+        id: tx.id,
+        company_name: tx.companies?.nome_fantasia || '',
+        purchase_value: Number(tx.purchase_value || 0),
+        cashback_value: Math.round(Number(tx.cashback_generated || 0) * 0.07 * 100) / 100,
+        level_earned: 1,
+        transaction_date: tx.created_at,
+      }))
+    }
     return c.json(formatted)
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
