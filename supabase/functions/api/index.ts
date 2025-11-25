@@ -370,15 +370,33 @@ app.get('/api/admin/dashboard/stats', async (c) => {
     const pendingAmount = (pendingWithdrawals || []).reduce((s: number, w: any) => s + Number(w.amount_requested || 0), 0)
     const pendingCount = pendingWithdrawals?.length || 0
     const now = new Date(), year = now.getFullYear(), month = String(now.getMonth() + 1).padStart(2, '0')
+    const startMonth = `${year}-${month}-01`
+    const nextMonth = new Date(year, now.getMonth() + 1, 1).toISOString().split('T')[0]
     const { data: pRows } = await supabase
       .from('company_purchases')
       .select('id, company_id, purchase_value, cashback_generated, purchase_date, customer_coupon, companies!inner(nome_fantasia)')
-      .gte('purchase_date', `${year}-${month}-01`)
-      .lt('purchase_date', new Date(year, now.getMonth() + 1, 1).toISOString().split('T')[0])
+      .gte('purchase_date', startMonth)
+      .lt('purchase_date', nextMonth)
       .order('purchase_date', { ascending: false })
     const cashbackThisMonth = (pRows || []).reduce((s: number, r: any) => s + Number(r.cashback_generated || 0), 0)
     const recentPurchases = (pRows || []).slice(0, 10).map((r: any) => ({ id: r.id, company_name: r.companies?.nome_fantasia || '', customer_cpf: r.customer_coupon || '', purchase_value: Number(r.purchase_value || 0), cashback_generated: Number(r.cashback_generated || 0), purchase_date: r.purchase_date }))
-    return c.json({ stats: { totalAffiliates: totalAffiliates || 0, totalCompanies: totalCompanies || 0, pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount }, cashbackThisMonth }, recentPurchases })
+    let affiliatesCommissionsMonth = 0
+    let companyReceivableMonth = 0
+    try {
+      const { data: distRows } = await supabase
+        .from('commission_distributions')
+        .select('commission_amount, level, affiliate_id, created_at')
+        .gte('created_at', startMonth)
+        .lt('created_at', nextMonth)
+      for (const r of distRows || []) {
+        const amt = Number((r as any).commission_amount || 0)
+        const lvl = Number((r as any).level || 0)
+        const aid = Number((r as any).affiliate_id || 0)
+        if (lvl === 999 || aid === 0) companyReceivableMonth += amt
+        else affiliatesCommissionsMonth += amt
+      }
+    } catch {}
+    return c.json({ stats: { totalAffiliates: totalAffiliates || 0, totalCompanies: totalCompanies || 0, pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount }, cashbackThisMonth, affiliatesCommissionsMonth, companyReceivableMonth }, recentPurchases })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
@@ -1322,13 +1340,16 @@ app.get('/api/users/balance', async (c) => {
         .eq('affiliate_id', affiliate.id)
       if (Array.isArray(dist)) {
         const qualifies = directCount >= 3
+        if (qualifies) {
+          try { await releaseBlockedIfQualified(supabase, affiliate.id) } catch {}
+        }
         for (const r of dist) {
           const amt = Number((r as any).commission_amount || 0)
           const lvl = Number((r as any).level || 0)
-          if (lvl <= 1) {
+          if (lvl === 0) {
             baseAvailable += amt
           } else {
-            if (qualifies && !((r as any).is_blocked === true)) baseAvailable += amt
+            if (qualifies) baseAvailable += amt
             else baseFrozen += amt
           }
         }

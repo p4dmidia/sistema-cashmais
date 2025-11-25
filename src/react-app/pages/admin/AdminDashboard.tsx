@@ -41,6 +41,8 @@ interface Stats {
     totalAmount: number;
   };
   cashbackThisMonth: number;
+  affiliatesCommissionsMonth?: number;
+  companyReceivableMonth?: number;
 }
 
 interface Purchase {
@@ -157,6 +159,18 @@ function AdminDashboard() {
       value: formatMoney(stats?.cashbackThisMonth || 0),
       icon: DollarSign,
       gradient: 'from-emerald-500 to-teal-500'
+    },
+    {
+      title: 'Repasse aos Afiliados (Mês)',
+      value: formatMoney(stats?.affiliatesCommissionsMonth || 0),
+      icon: TrendingUp,
+      gradient: 'from-indigo-500 to-purple-500'
+    },
+    {
+      title: 'Recebível da Empresa (Mês)',
+      value: formatMoney(stats?.companyReceivableMonth || 0),
+      icon: BarChart3,
+      gradient: 'from-yellow-500 to-amber-500'
     }
   ];
 
