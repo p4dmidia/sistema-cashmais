@@ -1306,16 +1306,31 @@ app.get('/api/users/balance', async (c) => {
     let baseAvailable = 0
     let baseFrozen = 0
     let usedCommissionTable = false
+    let directCount = 0
+    try {
+      const { count } = await supabase
+        .from('affiliates')
+        .select('*', { count: 'exact', head: true })
+        .eq('sponsor_id', affiliate.id)
+        .eq('is_active', true)
+      directCount = Number(count || 0)
+    } catch {}
     try {
       const { data: dist } = await supabase
         .from('commission_distributions')
-        .select('commission_amount, is_blocked')
+        .select('commission_amount, is_blocked, level')
         .eq('affiliate_id', affiliate.id)
       if (Array.isArray(dist)) {
+        const qualifies = directCount >= 3
         for (const r of dist) {
           const amt = Number((r as any).commission_amount || 0)
-          if ((r as any).is_blocked) baseFrozen += amt
-          else baseAvailable += amt
+          const lvl = Number((r as any).level || 0)
+          if (lvl <= 1) {
+            baseAvailable += amt
+          } else {
+            if (qualifies && !((r as any).is_blocked === true)) baseAvailable += amt
+            else baseFrozen += amt
+          }
         }
         usedCommissionTable = true
       }
