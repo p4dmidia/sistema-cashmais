@@ -1035,9 +1035,9 @@ async function getChildren(supabase: any, parentId: number): Promise<number[]> {
 }
 
 async function findPlacementTarget(supabase: any, rootSponsorId: number, preference: 'automatic' | 'left' | 'center' | 'right', maxDepth = 10): Promise<number> {
-  const rootChildren = await getChildren(supabase, rootSponsorId)
-  if (rootChildren.length < 3) return rootSponsorId
   if (preference === 'automatic') {
+    const rootChildren = await getChildren(supabase, rootSponsorId)
+    if (rootChildren.length < 3) return rootSponsorId
     const queue: number[] = [rootSponsorId]
     let depth = 0
     while (queue.length && depth <= maxDepth) {
@@ -1053,10 +1053,14 @@ async function findPlacementTarget(supabase: any, rootSponsorId: number, prefere
   let depth = 0
   while (depth <= maxDepth) {
     const children = await getChildren(supabase, current)
-    if (children.length < 3) return current
-    if (preference === 'left') current = children[0]
-    else if (preference === 'center') current = children[1] || children[0]
-    else current = children[children.length - 1]
+    let idx = 0
+    if (preference === 'left') idx = 0
+    else if (preference === 'center') idx = 1
+    else idx = 2
+    if (children[idx] === undefined) {
+      return current
+    }
+    current = children[idx]
     depth++
   }
   return rootSponsorId

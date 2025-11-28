@@ -491,12 +491,9 @@ export default function CompanyDashboard() {
         {/* Logo e Nome do Sistema */}
         <div className="p-6 border-b border-white/10">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-[#70ff00] rounded-lg flex items-center justify-center">
-              <span className="text-[#001144] font-bold text-lg">C</span>
-            </div>
+            <img src="/cashmais-logo.png" alt="CashMais" className="h-10 w-auto" />
             <div>
-              <h1 className="text-xl font-bold text-white">CashMais</h1>
-              <p className="text-sm text-gray-400">Empresas</p>
+              <h1 className="text-xl font-bold text-white">Empresas</h1>
             </div>
           </div>
         </div>

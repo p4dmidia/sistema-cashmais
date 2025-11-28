@@ -98,9 +98,7 @@ export default function CompanyLogin() {
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="max-w-md w-full space-y-8">
           <div className="text-center">
-            <div className="mx-auto h-16 w-16 bg-[#70ff00] rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-2xl">C</span>
-            </div>
+            <img src="/cashmais-logo.png" alt="CashMais" className="mx-auto h-16 w-auto" />
             <h2 className="mt-6 text-3xl font-bold text-white">Acesso Empresarial</h2>
             <p className="mt-2 text-gray-300">Entre com CNPJ (empresa) ou CPF (caixa)</p>
           </div>

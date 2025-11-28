@@ -160,12 +160,7 @@ function Login() {
           <div className="relative z-10">
             {/* Header */}
             <div className="text-center mb-8">
-              <div className="w-16 h-16 bg-gradient-to-br from-[#70ff00] to-[#50cc00] rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-                <span className="text-[#001144] font-bold text-2xl">C</span>
-              </div>
-              <h1 className="text-2xl font-bold text-white mb-2">
-                CashMais
-              </h1>
+              <img src="/cashmais-logo.png" alt="CashMais" className="h-16 w-auto mx-auto mb-2" />
               <p className="text-slate-300 text-sm">
                 Acesso do Afiliado
               </p>

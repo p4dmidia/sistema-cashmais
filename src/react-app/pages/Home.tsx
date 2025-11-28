@@ -75,7 +75,7 @@ export default function Home() {
 
               <div className="grid grid-cols-3 gap-6 pt-8">
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-[#70ff00]">5%</div>
+                  <div className="text-2xl font-bold text-[#70ff00]">1%</div>
                   <div className="text-sm text-gray-400">Cashback Base</div>
                 </div>
                 <div className="text-center">
@@ -83,7 +83,7 @@ export default function Home() {
                   <div className="text-sm text-gray-400">Níveis MLM</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold text-[#70ff00]">R$ 30</div>
+                  <div className="text-2xl font-bold text-[#70ff00]">R$ 10</div>
                   <div className="text-sm text-gray-400">Saque Mínimo</div>
                 </div>
               </div>
@@ -152,7 +152,7 @@ export default function Home() {
               <h3 className="text-xl font-bold text-white mb-4">Compre Normalmente</h3>
               <p className="text-gray-300 leading-relaxed">
                 Faça suas compras em lojas parceiras e informe seu cupom de cliente. 
-                Receba 5% de cashback em cada transação.
+                Receba cashback em cada transação.
               </p>
             </div>
 
@@ -195,7 +195,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-white mb-4">Saque Rápido</h3>
               <p className="text-gray-300 leading-relaxed">
-                Solicite saques via PIX a partir de R$ 30. 
+                Solicite saques via PIX a partir de R$10. 
                 Taxa de apenas 30% para manter o sistema funcionando.
               </p>
             </div>
@@ -228,13 +228,24 @@ export default function Home() {
 
           <div className="grid lg:grid-cols-2 gap-12 items-center mb-20">
             <div className="space-y-8">
+              <div className="p-4 bg-[#70ff00]/10 border border-[#70ff00]/30 rounded-xl">
+                <div className="flex items-start space-x-4">
+                  <div className="w-8 h-8 bg-[#70ff00] rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                    <span className="text-white font-bold text-sm">✓</span>
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-white mb-2">Sem Investimento Inicial</h3>
+                    <p className="text-gray-300">Cadastro 100% gratuito, sem taxas de adesão ou mensalidades. Comece a ganhar a partir da primeira compra ou indicação.</p>
+                  </div>
+                </div>
+              </div>
               <div className="flex items-start space-x-4">
                 <div className="w-8 h-8 bg-[#70ff00] rounded-full flex items-center justify-center flex-shrink-0 mt-1">
                   <span className="text-white font-bold text-sm">✓</span>
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-white mb-2">Cashback Garantido em Toda Compra</h3>
-                  <p className="text-gray-300">Diferente de outros programas que limitam categorias, você recebe 5% de cashback em todas as compras nas lojas parceiras, sem exceção.</p>
+                  <p className="text-gray-300">Diferente de outros programas que limitam categorias, você recebe cashback em todas as compras nas lojas parceiras, sem exceção.</p>
                 </div>
               </div>
 
@@ -255,16 +266,6 @@ export default function Home() {
                 <div>
                   <h3 className="text-xl font-bold text-white mb-2">Transparência Total</h3>
                   <p className="text-gray-300">Acompanhe em tempo real todos os ganhos, comissões e movimentações da sua rede através do dashboard completo e detalhado.</p>
-                </div>
-              </div>
-
-              <div className="flex items-start space-x-4">
-                <div className="w-8 h-8 bg-[#70ff00] rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                  <span className="text-white font-bold text-sm">✓</span>
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white mb-2">Sem Investimento Inicial</h3>
-                  <p className="text-gray-300">Cadastro 100% gratuito, sem taxas de adesão ou mensalidades. Comece a ganhar a partir da primeira compra ou indicação.</p>
                 </div>
               </div>
             </div>
@@ -303,129 +304,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Testimonials Section */}
-      <section className="py-20 bg-white/5 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              O que Nossos Afiliados Dizem
-            </h2>
-            <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-              Histórias reais de pessoas que transformaram suas vidas com o CashMais
-            </p>
-          </div>
-
-          <div className="grid lg:grid-cols-3 gap-8">
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl p-8 border border-white/10">
-              <div className="mb-6">
-                <div className="flex text-[#70ff00] mb-4">
-                  {'★'.repeat(5)}
-                </div>
-                <p className="text-gray-300 italic leading-relaxed">
-                  "Em apenas 3 meses consegui construir uma rede de 45 pessoas. O cashback das minhas compras já paga as contas de casa, e as comissões viraram uma renda extra incrível!"
-                </p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-[#70ff00] to-green-400 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold">M</span>
-                </div>
-                <div>
-                  <div className="text-white font-semibold">Maria Silva</div>
-                  <div className="text-gray-400 text-sm">Afiliada há 4 meses</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl p-8 border border-white/10">
-              <div className="mb-6">
-                <div className="flex text-[#70ff00] mb-4">
-                  {'★'.repeat(5)}
-                </div>
-                <p className="text-gray-300 italic leading-relaxed">
-                  "Nunca acreditei em MLM, mas o CashMais é diferente. O cashback é real e as comissões chegam todo mês. Já consegui R$ 1.800 no último mês só com indicações!"
-                </p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold">J</span>
-                </div>
-                <div>
-                  <div className="text-white font-semibold">João Santos</div>
-                  <div className="text-gray-400 text-sm">Afiliado há 6 meses</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white/5 backdrop-blur-md rounded-2xl p-8 border border-white/10">
-              <div className="mb-6">
-                <div className="flex text-[#70ff00] mb-4">
-                  {'★'.repeat(5)}
-                </div>
-                <p className="text-gray-300 italic leading-relaxed">
-                  "A transparência do sistema me conquistou. Vejo cada compra, cada comissão, tudo em tempo real. Minha rede já tem 120 pessoas e cresce todo dia!"
-                </p>
-              </div>
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-gradient-to-r from-pink-500 to-red-500 rounded-full flex items-center justify-center">
-                  <span className="text-white font-bold">A</span>
-                </div>
-                <div>
-                  <div className="text-white font-semibold">Ana Costa</div>
-                  <div className="text-gray-400 text-sm">Afiliada há 8 meses</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Stats Section */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-              Números que Impressionam
-            </h2>
-            <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-              Resultados reais de uma comunidade em crescimento constante
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="text-center">
-              <div className="bg-gradient-to-r from-[#70ff00]/20 to-green-500/20 rounded-2xl p-8 border border-[#70ff00]/30">
-                <div className="text-4xl md:text-5xl font-bold text-[#70ff00] mb-2">15.847</div>
-                <div className="text-gray-300 font-semibold mb-1">Afiliados Ativos</div>
-                <div className="text-gray-400 text-sm">Crescimento de 40% ao mês</div>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-2xl p-8 border border-blue-500/30">
-                <div className="text-4xl md:text-5xl font-bold text-blue-400 mb-2">R$ 2.4M</div>
-                <div className="text-gray-300 font-semibold mb-1">Cashback Distribuído</div>
-                <div className="text-gray-400 text-sm">Nos últimos 12 meses</div>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 rounded-2xl p-8 border border-purple-500/30">
-                <div className="text-4xl md:text-5xl font-bold text-purple-400 mb-2">890</div>
-                <div className="text-gray-300 font-semibold mb-1">Lojas Parceiras</div>
-                <div className="text-gray-400 text-sm">Em todo o Brasil</div>
-              </div>
-            </div>
-
-            <div className="text-center">
-              <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 rounded-2xl p-8 border border-yellow-500/30">
-                <div className="text-4xl md:text-5xl font-bold text-yellow-400 mb-2">98.2%</div>
-                <div className="text-gray-300 font-semibold mb-1">Satisfação</div>
-                <div className="text-gray-400 text-sm">Dos nossos afiliados</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      
 
       {/* FAQ Section */}
       <section className="py-20 bg-white/5 backdrop-blur-sm">
@@ -444,7 +323,7 @@ export default function Home() {
               <div className="p-6">
                 <h3 className="text-xl font-bold text-white mb-3">Como funciona o sistema de cashback?</h3>
                 <p className="text-gray-300 leading-relaxed">
-                  Você recebe um cupom único após o cadastro. Ao fazer compras em lojas parceiras, informe seu cupom ao caixa e receba 5% de cashback sobre o valor da compra, creditado instantaneamente na sua conta.
+                  Você recebe um cupom único após o cadastro. Ao fazer compras em lojas parceiras, informe seu cupom ao caixa e receba cashback sobre o valor da compra, creditado instantaneamente na sua conta.
                 </p>
               </div>
             </div>
@@ -462,7 +341,7 @@ export default function Home() {
               <div className="p-6">
                 <h3 className="text-xl font-bold text-white mb-3">Qual o valor mínimo para saque?</h3>
                 <p className="text-gray-300 leading-relaxed">
-                  O saque mínimo é de R$ 30,00 via PIX. Cobramos uma taxa de 30% sobre o valor sacado para manutenção do sistema, suporte técnico e desenvolvimento de novas funcionalidades.
+                  O saque mínimo é de R$ 10,00 via PIX.
                 </p>
               </div>
             </div>
@@ -543,8 +422,10 @@ export default function Home() {
             </div>
             
             <div className="text-gray-400 text-sm text-center md:text-right">
-              <p>&copy; 2024 CashMais. Sistema de cashback com MLM.</p>
-              <p className="mt-1">Transformando compras em oportunidades de renda.</p>
+              <p>&copy; 2024 CashMais. Sistema de cashback com MMN</p>
+              <p className="mt-1">CNPJ: 61356738000180</p>
+              <p className="mt-1">CashMais Tecnologia em Consumo e Cashback Ltda</p>
+              <p className="mt-1">Desenvolvido por <a href="https://www.p4dmidia.com.br/" target="_blank" rel="noopener noreferrer" className="text-[#70ff00] hover:underline">P4D Mídia</a></p>
             </div>
           </div>
         </div>

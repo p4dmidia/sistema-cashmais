@@ -38,10 +38,7 @@ export default function Layout({ children, user }: LayoutProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link to="/dashboard" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-[#70ff00] rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">C</span>
-              </div>
-              <span className="text-white font-bold text-xl">CashMais</span>
+              <img src="/cashmais-logo.png" alt="CashMais" className="h-8 w-auto" />
             </Link>
 
             <div className="flex items-center space-x-4">
