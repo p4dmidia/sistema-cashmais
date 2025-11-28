@@ -160,7 +160,7 @@ function Login() {
           <div className="relative z-10">
             {/* Header */}
             <div className="text-center mb-8">
-              <img src="/cashmais-logo.png" alt="CashMais" className="h-16 w-auto mx-auto mb-2" />
+              <img src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" alt="CashMais" className="h-16 w-auto mx-auto mb-2" />
               <p className="text-slate-300 text-sm">
                 Acesso do Afiliado
               </p>

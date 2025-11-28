@@ -38,7 +38,7 @@ export default function Layout({ children, user }: LayoutProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <Link to="/dashboard" className="flex items-center space-x-2">
-              <img src="/cashmais-logo.png" alt="CashMais" className="h-8 w-auto" />
+              <img src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" alt="CashMais" className="h-8 w-auto" />
             </Link>
 
             <div className="flex items-center space-x-4">
