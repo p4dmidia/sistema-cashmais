@@ -233,14 +233,29 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
       total_referrals: data.direct_referrals || 0,
       children: {}
     };
+    if (typeof data.position_slot === 'number') {
+      converted.position = data.position_slot === 0 ? 'left' : data.position_slot === 1 ? 'center' : 'right';
+    }
 
     if (Array.isArray(data.children) && data.children.length) {
-      const a = data.children[0];
-      const b = data.children[1];
-      const c = data.children[2];
-      if (a) converted.children!.right = { ...convertToTernaryStructure(a), position: 'right' };
-      if (b) converted.children!.center = { ...convertToTernaryStructure(b), position: 'center' };
-      if (c) converted.children!.left = { ...convertToTernaryStructure(c), position: 'left' };
+      const slots: { left?: NetworkNode; center?: NetworkNode; right?: NetworkNode } = {};
+      for (const child of data.children) {
+        const ps = typeof child.position_slot === 'number' ? child.position_slot : null;
+        const childConverted = convertToTernaryStructure(child);
+        if (ps === 0) {
+          slots.left = { ...childConverted, position: 'left' };
+        } else if (ps === 1) {
+          slots.center = { ...childConverted, position: 'center' };
+        } else if (ps === 2) {
+          slots.right = { ...childConverted, position: 'right' };
+        } else {
+          // fallback: keep order if no slot info
+          if (!slots.left) slots.left = { ...childConverted, position: 'left' };
+          else if (!slots.center) slots.center = { ...childConverted, position: 'center' };
+          else if (!slots.right) slots.right = { ...childConverted, position: 'right' };
+        }
+      }
+      converted.children = slots;
     }
 
     return converted;

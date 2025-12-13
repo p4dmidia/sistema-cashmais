@@ -108,7 +108,21 @@ function NetworkPage() {
       });
       if (response.ok) {
         const data = await response.json();
+        console.log('[NETWORK] Fetched preference from API:', {
+          preference: data.preference,
+          preference_raw: data.preference_raw,
+          preference_normalized: data.preference_normalized,
+        })
         setPreference(data.preference);
+        try {
+          const prev = await fetch('/api/affiliate/network/placement-preview', { credentials: 'include' })
+          if (prev.ok) {
+            const pv = await prev.json()
+            console.log('[NETWORK] Placement preview:', pv)
+          }
+        } catch (e) {
+          console.log('[NETWORK] Placement preview error:', e)
+        }
       }
     } catch (error) {
       console.error('Error fetching network preference:', error);
@@ -116,6 +130,7 @@ function NetworkPage() {
   };
 
   const handlePreferenceChange = async (newPreference: PreferenceType) => {
+    console.log('[NETWORK] Updating preference to:', newPreference)
     setUpdatingPreference(true);
     try {
       const response = await fetch('/api/affiliate/network/preference', {
@@ -128,7 +143,11 @@ function NetworkPage() {
       });
 
       if (response.ok) {
-        setPreference(newPreference);
+        console.log('[NETWORK] Preference update OK')
+        await fetchNetworkPreference()
+      } else {
+        const err = await response.text()
+        console.log('[NETWORK] Preference update failed:', err)
       }
     } catch (error) {
       console.error('Error updating preference:', error);

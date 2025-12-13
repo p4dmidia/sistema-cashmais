@@ -11,6 +11,19 @@ export default defineConfig(({ mode }) => {
     plugins,
     server: {
       allowedHosts: true,
+      proxy: {
+        "/api": {
+          target: "https://hffxmntvtsimwlsapfod.supabase.co/functions/v1",
+          changeOrigin: true,
+          secure: false,
+          rewrite: (path) => path,
+        },
+        "/affiliate": {
+          target: "https://hffxmntvtsimwlsapfod.supabase.co/functions/v1/api",
+          changeOrigin: true,
+          secure: false,
+        },
+      },
     },
     base: "/",
     build: {

@@ -96,13 +96,18 @@ function Profile() {
     setMessage(null);
 
     try {
-      const response = await fetch('/api/affiliate/profile', {
+      const response = await fetch('/api/affiliate/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          full_name: formData.full_name ?? '',
+          phone: formData.whatsapp ?? '',
+          pix_key: settingsData.pix_key ?? '',
+          leg_preference: settingsData.leg_preference ?? 'automatic',
+        }),
       });
 
       if (response.ok) {
@@ -269,7 +274,7 @@ function Profile() {
                 </label>
                 <input
                   type="text"
-                  value={formData.full_name}
+                  value={formData.full_name ?? ''}
                   onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
                   placeholder="Seu nome completo"
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500"
@@ -313,7 +318,7 @@ function Profile() {
                 </label>
                 <input
                   type="text"
-                  value={formData.whatsapp}
+                  value={formData.whatsapp ?? ''}
                   onChange={(e) => handlePhoneChange(e, false)}
                   placeholder="(11) 99999-9999"
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:border-purple-500 focus:ring-1 focus:ring-purple-500"

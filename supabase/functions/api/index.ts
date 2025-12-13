@@ -125,6 +125,40 @@ async function getOrCreateAffiliateProfileSupabase(client: any, affiliateId: num
   return newProfile || null
 }
 
+async function ensureUserProfileExists(client: any, affiliateId: number, cpf: string): Promise<number | null> {
+  const mochaUserId = `affiliate_${affiliateId}`
+  const { data: byMocha } = await client
+    .from('user_profiles')
+    .select('id, mocha_user_id, cpf')
+    .eq('mocha_user_id', mochaUserId)
+    .maybeSingle()
+  if ((byMocha as any)?.id) return (byMocha as any).id as number
+  const cleanCpf = String(cpf || '').replace(/\D/g, '')
+  const { data: byCpf } = await client
+    .from('user_profiles')
+    .select('id, mocha_user_id, cpf')
+    .eq('cpf', cleanCpf)
+    .maybeSingle()
+  if ((byCpf as any)?.id) {
+    const pid = (byCpf as any).id
+    await client
+      .from('user_profiles')
+      .update({ mocha_user_id: mochaUserId, role: 'affiliate', is_active: true, updated_at: new Date().toISOString() })
+      .eq('id', pid)
+    return pid as number
+  }
+  const { data: created } = await client
+    .from('user_profiles')
+    .insert({ mocha_user_id: mochaUserId, cpf: cleanCpf, role: 'affiliate', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .select('id')
+    .single()
+  return ((created as any)?.id ?? null) as number | null
+}
+
+async function ensureProfileExists(client: any, cpf: string, affiliateId: number): Promise<number | null> {
+  return await ensureUserProfileExists(client, affiliateId, cpf)
+}
+
 async function recordCommissionSupabase(client: any, purchaseId: number, affiliateId: number, level: number, commissionAmount: number, commissionPercentage: number, baseCashback: number, isBlocked: boolean) {
   const payload: any = { purchase_id: purchaseId, affiliate_id: affiliateId, level, commission_amount: commissionAmount, commission_percentage: commissionPercentage, base_cashback: baseCashback, created_at: new Date().toISOString() }
   if (typeof isBlocked === 'boolean') payload.is_blocked = isBlocked
@@ -999,29 +1033,61 @@ function getSessionExpiration(days = 30): Date {
   return d
 }
 
-async function getSponsorPreference(supabase: any, sponsorId: number): Promise<'automatic' | 'left' | 'center' | 'right'> {
-  let { data: profile } = await supabase
-    .from('user_profiles')
-    .select('id')
-    .eq('mocha_user_id', `affiliate_${sponsorId}`)
-    .single()
-  if (!profile) {
-    const { data: newProfile } = await supabase
-      .from('user_profiles')
-      .insert({ mocha_user_id: `affiliate_${sponsorId}`, role: 'affiliate', is_active: true })
-      .select('id')
-      .single()
-    profile = newProfile
-  }
-  if (!profile) return 'automatic'
-  const { data: settings } = await supabase
-    .from('user_settings')
-    .select('leg_preference')
-    .eq('user_id', (profile as any).id)
-    .single()
-  const pref = ((settings as any)?.leg_preference || 'automatic') as string
-  if (pref === 'left' || pref === 'center' || pref === 'right') return pref as any
+const LEG_TO_SLOT: Record<'left' | 'center' | 'right', number> = { left: 0, center: 1, right: 2 }
+
+function normalizeLegPreference(input: any): 'automatic' | 'left' | 'center' | 'right' {
+  if (input === null || input === undefined) return 'automatic'
+  const raw = String(input).toLowerCase().trim()
+  if (raw === 'auto' || raw === 'automatic') return 'automatic'
+  if (raw === 'left' || raw === 'esquerda' || raw === '0') return 'left'
+  if (raw === 'center' || raw === 'centro' || raw === '1') return 'center'
+  if (raw === 'right' || raw === 'direita' || raw === '2') return 'right'
   return 'automatic'
+}
+
+async function getSponsorPreference(supabase: any, sponsorId: number, debugLog?: string[]): Promise<'automatic' | 'left' | 'center' | 'right'> {
+  const mochaUserId = `affiliate_${sponsorId}`
+  console.log(`[PREF_DEBUG] Buscando preferência para Sponsor: ${sponsorId} (mocha_id: ${mochaUserId})`)
+
+  const { data: profile, error: profileError } = await supabase
+    .from('user_profiles')
+    .select('id, mocha_user_id')
+    .eq('mocha_user_id', mochaUserId)
+    .maybeSingle()
+
+  if (profileError) {
+    console.error(`[PREF_DEBUG] Erro ao buscar perfil:`, profileError)
+    if (debugLog) debugLog.push(`PREF_ERR profile sponsor=${sponsorId}`)
+    return 'automatic'
+  }
+
+  if (!profile) {
+    console.error(`[PREF_DEBUG] PERFIL NÃO ENCONTRADO para ${mochaUserId}. O sistema usará AUTOMATIC. Verifique se o ID no banco user_profiles bate com 'affiliate_${sponsorId}'`)
+    if (debugLog) debugLog.push(`PREF_NO_PROFILE sponsor=${sponsorId}`)
+    return 'automatic'
+  }
+
+  console.log(`[PREF_DEBUG] Perfil encontrado: ID ${profile.id}. Buscando settings...`)
+
+  const { data: settings, error: settingsError } = await supabase
+    .from('user_settings')
+    .select('leg_preference, user_id')
+    .eq('user_id', (profile as any).id)
+    .maybeSingle()
+
+  if (settingsError) {
+    console.error(`[PREF_DEBUG] Erro ao buscar settings:`, settingsError)
+    if (debugLog) debugLog.push(`PREF_ERR settings sponsor=${sponsorId}`)
+  }
+
+  const rawPref = (settings as any)?.leg_preference
+  console.log(`[PREF_DEBUG] Configuração crua no DB para Profile ${(profile as any).id}: "${rawPref}"`)
+
+  const normalized = normalizeLegPreference(rawPref)
+  console.log(`[PREF_DEBUG] Preferência final resolvida: "${normalized}"`)
+  if (debugLog) debugLog.push(`PREF_OK sponsor=${sponsorId} profile=${(profile as any).id} raw=${rawPref} norm=${normalized}`)
+  
+  return normalized
 }
 
 async function getChildren(supabase: any, parentId: number): Promise<number[]> {
@@ -1034,34 +1100,77 @@ async function getChildren(supabase: any, parentId: number): Promise<number[]> {
   return (data || []).map((r: any) => r.id as number)
 }
 
-async function findPlacementTarget(supabase: any, rootSponsorId: number, preference: 'automatic' | 'left' | 'center' | 'right', maxDepth = 10): Promise<number> {
+async function getChildrenBySlot(supabase: any, parentId: number): Promise<(number | undefined)[]> {
+  const { data } = await supabase
+    .from('affiliates')
+    .select('id, position_slot, created_at')
+    .eq('sponsor_id', parentId)
+    .eq('is_active', true)
+    .order('created_at', { ascending: true })
+  const slots: (number | undefined)[] = [undefined, undefined, undefined]
+  for (const row of data || []) {
+    const ps = (row as any).position_slot
+    if (ps === 0 || ps === 1 || ps === 2) {
+      if (slots[ps] === undefined) {
+        slots[ps] = (row as any).id as number
+        continue
+      }
+    }
+    for (let i = 0; i < 3; i++) {
+      if (slots[i] === undefined) {
+        slots[i] = (row as any).id as number
+        break
+      }
+    }
+  }
+  return slots
+}
+
+async function getChildInSlot(supabase: any, parentId: number, slotIdx: number): Promise<number | null> {
+  const { data } = await supabase
+    .from('affiliates')
+    .select('id')
+    .eq('sponsor_id', parentId)
+    .eq('is_active', true)
+    .eq('position_slot', slotIdx)
+    .order('created_at', { ascending: true })
+    .maybeSingle()
+  return (data as any)?.id ?? null
+}
+
+async function findPlacementTarget(supabase: any, rootSponsorId: number, preference: 'automatic' | 'left' | 'center' | 'right', maxDepth = 10, debugLog?: string[]): Promise<number> {
   if (preference === 'automatic') {
-    const rootChildren = await getChildren(supabase, rootSponsorId)
-    if (rootChildren.length < 3) return rootSponsorId
+    const rootSlots = await getChildrenBySlot(supabase, rootSponsorId)
+    if (rootSlots.some((s) => s === undefined)) return rootSponsorId
     const queue: number[] = [rootSponsorId]
     let depth = 0
     while (queue.length && depth <= maxDepth) {
       const current = queue.shift() as number
-      const children = await getChildren(supabase, current)
-      if (children.length < 3) return current
-      for (const c of children) queue.push(c)
+      const slots = await getChildrenBySlot(supabase, current)
+      if (debugLog) debugLog.push(`AUTO depth=${depth} current=${current} free=${slots.some(s=>s===undefined)}`)
+      if (slots.some((s) => s === undefined)) return current
+      for (const c of slots) if (typeof c === 'number') queue.push(c)
       depth++
     }
     return rootSponsorId
   }
-  let current = rootSponsorId
-  let depth = 0
-  while (depth <= maxDepth) {
-    const children = await getChildren(supabase, current)
-    let idx = 0
-    if (preference === 'left') idx = 0
-    else if (preference === 'center') idx = 1
-    else idx = 2
-    if (children[idx] === undefined) {
-      return current
-    }
-    current = children[idx]
-    depth++
+  const idx = LEG_TO_SLOT[preference as 'left' | 'center' | 'right']
+  if (idx === undefined || idx === null) return rootSponsorId
+  let currentId = rootSponsorId
+  let level = 0
+  while (level <= maxDepth) {
+    const { data: child } = await supabase
+      .from('affiliates')
+      .select('id')
+      .eq('sponsor_id', currentId)
+      .eq('is_active', true)
+      .eq('position_slot', idx)
+      .maybeSingle()
+    const childId = (child as any)?.id ?? null
+    if (debugLog) debugLog.push(`STRICT level=${level} current=${currentId} idx=${idx} child=${childId ?? 'null'}`)
+    if (!childId) return currentId
+    currentId = childId
+    level++
   }
   return rootSponsorId
 }
@@ -1164,6 +1273,7 @@ app.post('/api/affiliate/register', async (c) => {
         .single()
       sponsorId = (sponsor as any)?.id ?? null
     }
+    const debugLogs: string[] = []
     const passwordHash = await bcrypt.hash(parsed.data.password, 12)
     const nowIso = new Date().toISOString()
     // Generate unique referral_code before insert to satisfy NOT NULL/UNIQUE constraints
@@ -1174,35 +1284,82 @@ app.post('/api/affiliate/register', async (c) => {
       if (!exists) break
     }
     let finalSponsorId: number | null = sponsorId
+    let selectedPref: 'automatic' | 'left' | 'center' | 'right' = 'automatic'
     if (sponsorId) {
-      const pref = await getSponsorPreference(supabase, sponsorId)
-      finalSponsorId = await findPlacementTarget(supabase, sponsorId, pref)
+      selectedPref = await getSponsorPreference(supabase, sponsorId)
+      debugLogs.push(`1. Preferência do Pai ${sponsorId}: ${selectedPref}`)
+      finalSponsorId = await findPlacementTarget(supabase, sponsorId, selectedPref)
+      debugLogs.push(`2. ID Final de Posicionamento: ${finalSponsorId}`)
+      if (finalSponsorId !== sponsorId) {
+        debugLogs.push(`3. O sistema desceu níveis (Drill-down)`)
+      }
     }
-    const insertPayload: any = {
+    // --- CORREÇÃO DE SLOT: INÍCIO ---
+    // 1. Definição Blindada do Slot (Padrão 0 para evitar NULL)
+    let positionSlot: number = 0
+
+    if (finalSponsorId) {
+      const map: Record<string, number> = { 'center': 1, 'right': 2, 'centro': 1, 'direita': 2 }
+      if (selectedPref && selectedPref !== 'automatic' && map[selectedPref] !== undefined) {
+        positionSlot = map[selectedPref]
+        console.log(`[DEBUG] Slot fixado pela preferência '${selectedPref}': ${positionSlot}`)
+      } else {
+        try {
+          const slots = await getChildrenBySlot(supabase, finalSponsorId)
+          for (let i = 0; i < 3; i++) {
+            if (slots[i] === undefined) {
+              positionSlot = i
+              console.log(`[DEBUG] Slot automático encontrado: ${i}`)
+              break
+            }
+          }
+        } catch (err) {
+          console.error('[DEBUG] Erro ao calcular slot automático, usando fallback 0:', err)
+          positionSlot = 0
+        }
+      }
+    }
+
+    console.log(`>>> CHAMANDO RPC register_affiliate_v2 com SLOT: ${positionSlot}`)
+    const { data: rpcData, error: rpcError } = await supabase
+      .rpc('register_affiliate_v2', {
+        p_full_name: parsed.data.full_name.trim(),
+        p_cpf: cleanCpf,
+        p_email: parsed.data.email.trim(),
+        p_phone: parsed.data.whatsapp ? String(parsed.data.whatsapp).replace(/\D/g, '') : null,
+        p_password_hash: passwordHash,
+        p_sponsor_id: finalSponsorId,
+        p_referral_code: referralCode,
+        p_position_slot: positionSlot
+      })
+    if (rpcError) {
+      console.error('>>> ERRO CRÍTICO NA RPC:', rpcError)
+      return c.json({ error: 'Erro ao cadastrar via RPC', details: rpcError }, 500)
+    }
+    const newAffiliate: any = {
+      id: (rpcData as any)?.id,
       full_name: parsed.data.full_name.trim(),
-      cpf: cleanCpf,
       email: parsed.data.email.trim(),
-      phone: parsed.data.whatsapp ? String(parsed.data.whatsapp).replace(/\D/g, '') : null,
-      password_hash: passwordHash,
-      sponsor_id: finalSponsorId,
-      is_active: true,
+      cpf: cleanCpf,
       referral_code: referralCode,
-      created_at: nowIso,
-      updated_at: nowIso,
+      position_slot: positionSlot
     }
-    const { data: newAffiliate, error: insErr } = await supabase
+    const { data: verifyRow } = await supabase
       .from('affiliates')
-      .insert(insertPayload)
-      .select('*')
-      .single()
-    if (insErr || !newAffiliate) return c.json({ error: 'Erro interno do servidor' }, 500)
-    const { data: profile, error: profErr } = await supabase
-      .from('user_profiles')
-      .insert({ mocha_user_id: `affiliate_${(newAffiliate as any).id}`, cpf: cleanCpf, role: 'affiliate', is_active: true })
-      .select('id')
-      .single()
-    if (profErr || !profile) return c.json({ error: 'Erro interno do servidor' }, 500)
-    const profileId = (profile as any)?.id
+      .select('id, position_slot, sponsor_id, created_at')
+      .eq('id', (newAffiliate as any).id)
+      .maybeSingle()
+    const verifiedSlot = (verifyRow as any)?.position_slot ?? null
+    debugLogs.push(`VERIFY_AFTER_RPC id=${(newAffiliate as any).id} slot=${verifiedSlot}`)
+    if (verifiedSlot === null) {
+      const { error: fixErr } = await supabase
+        .from('affiliates')
+        .update({ position_slot: positionSlot })
+        .eq('id', (newAffiliate as any).id)
+      debugLogs.push(`FIX_UPDATE slot=${positionSlot} err=${fixErr ? String(fixErr) : 'none'}`)
+    }
+    const profileId = await ensureProfileExists(supabase, cleanCpf, (newAffiliate as any).id as number)
+    if (!profileId) return c.json({ error: 'Erro interno do servidor' }, 500)
     if (profileId) {
       const { data: existingCoupon } = await supabase
         .from('customer_coupons')
@@ -1239,7 +1396,8 @@ app.post('/api/affiliate/register', async (c) => {
       .from('affiliate_sessions')
       .insert({ affiliate_id: (newAffiliate as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 30 * 24 * 60 * 60 })
-    return c.json({ success: true, affiliate: { id: (newAffiliate as any).id, full_name: (newAffiliate as any).full_name, email: (newAffiliate as any).email, referral_code: referralCode, customer_coupon: cleanCpf } })
+    debugLogs.push(`REGISTER_DONE affiliate=${(newAffiliate as any).id}`)
+    return c.json({ success: true, affiliate: { id: (newAffiliate as any).id, full_name: (newAffiliate as any).full_name, email: (newAffiliate as any).email, referral_code: referralCode, customer_coupon: cleanCpf }, debug_info: debugLogs, versao_do_codigo: "VERSAO_CORRIGIDA_RPC_AGORA_VAI" })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
@@ -1369,20 +1527,8 @@ app.get('/api/users/balance', async (c) => {
       baseAvailable = Math.round(purchaseCashback * 100) / 100
       baseFrozen = 0
     }
-    let { data: profileData } = await supabase
-      .from('user_profiles')
-      .select('id')
-      .eq('mocha_user_id', `affiliate_${affiliate.id}`)
-      .single()
-    if (!profileData) {
-      const { data: newProfile } = await supabase
-        .from('user_profiles')
-        .insert({ mocha_user_id: `affiliate_${affiliate.id}`, cpf: affiliate.cpf || '', role: 'affiliate', is_active: true })
-        .select()
-        .single()
-      profileData = newProfile
-    }
-    const profile = profileData
+    const profileId = await ensureProfileExists(supabase, affiliate.cpf as string, affiliate.id as number)
+    const profile = { id: profileId }
     const { data: withdrawalData } = await supabase
       .from('withdrawals')
       .select('amount_requested')
@@ -1538,9 +1684,10 @@ app.post('/api/affiliate/settings', async (c) => {
         .single()
       profile = upsertedProfile
     }
+    const normalizedPref = normalizeLegPreference(body.leg_preference)
     const { error: upErr } = await supabase
       .from('user_settings')
-      .upsert({ user_id: (profile as any).id, pix_key: body.pix_key, leg_preference: body.leg_preference, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+      .upsert({ user_id: (profile as any).id, pix_key: body.pix_key, leg_preference: normalizedPref, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
     if (upErr) return c.json({ error: 'Erro interno do servidor' }, 500)
     return c.json({ success: true })
   } catch (e) {
@@ -2534,11 +2681,40 @@ app.get('/api/affiliate/network/preference', async (c) => {
       .select('leg_preference')
       .eq('user_id', (profile as any).id)
       .single()
-    const pref = (settings as any)?.leg_preference || 'automatic'
-    const apiPref = pref === 'automatic' ? 'auto' : pref
-    return c.json({ preference: apiPref })
+    const prefRaw = (settings as any)?.leg_preference || 'automatic'
+    const prefNorm = normalizeLegPreference(prefRaw)
+    const apiPref = prefNorm === 'automatic' ? 'auto' : prefNorm
+    return c.json({ preference: apiPref, preference_raw: prefRaw, preference_normalized: prefNorm })
   } catch (e) {
     return c.json({ preference: 'auto' })
+  }
+})
+
+app.get('/api/affiliate/network/placement-preview', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const sponsorId = (sessionData as any).affiliates.id as number
+    const pref = await getSponsorPreference(supabase, sponsorId)
+    const idx = pref === 'automatic' ? null : LEG_TO_SLOT[pref as 'left' | 'center' | 'right']
+    const targetParentId = await findPlacementTarget(supabase, sponsorId, pref)
+    let slotVacant: boolean | null = null
+    if (idx !== null && idx !== undefined) {
+      const child = await getChildInSlot(supabase, targetParentId, idx)
+      slotVacant = child === null
+    }
+    return c.json({ sponsorId, preference: pref, targetParentId, targetSlotIndex: idx, slotVacant })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 })
 
@@ -2600,7 +2776,7 @@ app.get('/api/affiliate/network/tree', async (c) => {
     async function buildNode(affiliateId: number, level: number): Promise<any> {
       const { data: aff } = await supabase
         .from('affiliates')
-        .select('id, full_name, cpf, created_at, last_access_at')
+        .select('id, full_name, cpf, created_at, last_access_at, position_slot')
         .eq('id', affiliateId)
         .single()
       const isActive = (aff as any)?.last_access_at ? new Date((aff as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
@@ -2618,18 +2794,32 @@ app.get('/api/affiliate/network/tree', async (c) => {
         cpf: (aff as any)?.cpf || '',
         direct_referrals: directCount || 0,
         signup_date: (aff as any)?.created_at,
+        position_slot: (aff as any)?.position_slot ?? null,
         children: [] as any[],
       }
       if (level >= maxDepth) return node
       const { data: direct } = await supabase
         .from('affiliates')
-        .select('id')
+        .select('id, position_slot, created_at')
         .eq('sponsor_id', affiliateId)
         .eq('is_active', true)
         .order('created_at', { ascending: true })
+      const slots: (number | null)[] = [null, null, null]
       for (const m of direct || []) {
-        const childNode = await buildNode((m as any).id, level + 1)
-        node.children.push(childNode)
+        const ps = (m as any).position_slot
+        if ((ps === 0 || ps === 1 || ps === 2) && slots[ps] === null) {
+          slots[ps] = (m as any).id
+        } else {
+          for (let i = 0; i < 3; i++) {
+            if (slots[i] === null) { slots[i] = (m as any).id; break }
+          }
+        }
+      }
+      for (let i = 0; i < 3; i++) {
+        if (slots[i] !== null) {
+          const childNode = await buildNode(slots[i] as number, level + 1)
+          node.children.push(childNode)
+        }
       }
       return node
     }
