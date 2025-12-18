@@ -102,6 +102,63 @@ export default function Reports() {
     }
     return map;
   }, [selectedRows]);
+  const totalsByCompany = useMemo(() => {
+    const res: Record<number, number> = {};
+    for (const [cidStr, rows] of Object.entries(groupedByCompany)) {
+      const cid = Number(cidStr);
+      res[cid] = rows.reduce((sum, r) => sum + Number(r.cashback_generated || 0), 0);
+    }
+    return res;
+  }, [groupedByCompany]);
+
+  const [showModal, setShowModal] = useState(false);
+  const [modalCompanyId, setModalCompanyId] = useState<number | null>(null);
+  const [modalDueDate, setModalDueDate] = useState<string>('');
+  const [modalLoading, setModalLoading] = useState(false);
+  const [modalMessage, setModalMessage] = useState<string | null>(null);
+  const [boletoLink, setBoletoLink] = useState<string | null>(null);
+
+  const openGenerateModal = (company_id: number) => {
+    setModalCompanyId(company_id);
+    setModalDueDate('');
+    setModalMessage(null);
+    setBoletoLink(null);
+    setShowModal(true);
+  };
+
+  const submitGenerateInvoice = async () => {
+    if (!modalCompanyId || !modalDueDate) {
+      setModalMessage('Informe a data de vencimento');
+      return;
+    }
+    const amount = totalsByCompany[modalCompanyId] || 0;
+    if (amount <= 0) {
+      setModalMessage('Selecione registros dessa empresa para somar o valor');
+      return;
+    }
+    setModalLoading(true);
+    try {
+      const res = await fetch('/api/admin/invoices/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ company_id: modalCompanyId, amount, due_date: modalDueDate }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setModalMessage(data.error || 'Erro ao gerar boleto');
+        setBoletoLink(null);
+      } else {
+        setModalMessage('Boleto Gerado!');
+        setBoletoLink(data.boleto_link || null);
+      }
+    } catch (e) {
+      setModalMessage('Erro de conexão');
+      setBoletoLink(null);
+    } finally {
+      setModalLoading(false);
+    }
+  };
 
   const generateReportPDF = () => {
     const doc = new jsPDF('p', 'pt');
@@ -313,6 +370,7 @@ export default function Reports() {
                         <th className="text-left text-sm font-medium text-gray-400 pb-3">Valor</th>
                         <th className="text-left text-sm font-medium text-gray-400 pb-3">Cashback</th>
                         <th className="text-left text-sm font-medium text-gray-400 pb-3">Cupom</th>
+                        <th className="text-left text-sm font-medium text-gray-400 pb-3">Ação</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -328,6 +386,15 @@ export default function Reports() {
                           <td className="py-3 text-sm text-white font-medium">{formatCurrency(Number(row.purchase_value || 0))}</td>
                           <td className="py-3 text-sm text-green-400 font-medium">{formatCurrency(Number(row.cashback_generated || 0))}</td>
                           <td className="py-3 text-sm text-gray-300 font-mono">{row.customer_coupon || '-'}</td>
+                          <td className="py-3 text-sm">
+                            <button
+                              onClick={() => openGenerateModal(row.company_id)}
+                              disabled={!totalsByCompany[row.company_id] || (totalsByCompany[row.company_id] || 0) <= 0}
+                              className="border px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Gerar Boleto
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -353,6 +420,38 @@ export default function Reports() {
               </div>
             )}
           </div>
+          {showModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+              <div className="bg-black/80 border border-white/10 rounded-xl p-6 w-full max-w-md">
+                <h3 className="text-white text-lg font-semibold mb-4">Gerar Boleto</h3>
+                <p className="text-gray-300 text-sm mb-4">
+                  Empresa: {companies.find(c => c.id === modalCompanyId!)?.nome_fantasia || modalCompanyId}
+                </p>
+                <p className="text-gray-300 text-sm mb-4">
+                  Valor selecionado: {formatCurrency(totalsByCompany[modalCompanyId! || 0] || 0)}
+                </p>
+                <label className="block text-sm text-gray-400 mb-2">Vencimento</label>
+                <input
+                  type="date"
+                  value={modalDueDate}
+                  onChange={e => setModalDueDate(e.target.value)}
+                  className="w-full bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2 mb-4"
+                />
+                {modalMessage && <div className="text-sm mb-3 text-gray-200">{modalMessage}</div>}
+                {boletoLink && (
+                  <a href={boletoLink} target="_blank" rel="noreferrer" className="inline-block bg-green-500/20 text-green-400 border border-green-500/30 px-3 py-2 rounded-lg text-sm mr-2">
+                    Visualizar Boleto
+                  </a>
+                )}
+                <div className="flex items-center justify-end space-x-2">
+                  <button onClick={() => setShowModal(false)} className="bg-white/5 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg text-sm">Cancelar</button>
+                  <button onClick={submitGenerateInvoice} disabled={modalLoading} className="bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                    {modalLoading ? 'Gerando...' : 'Gerar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

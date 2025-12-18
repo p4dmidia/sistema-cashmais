@@ -1,12 +1,11 @@
 import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { cloudflare } from "@cloudflare/vite-plugin";
 import { mochaPlugins } from "@getmocha/vite-plugins";
 
 export default defineConfig(({ mode }) => {
   const isNetlify = process.env.NETLIFY === "true";
-  const plugins = isNetlify ? [react()] : [...mochaPlugins(process.env as any), react(), cloudflare()];
+  const plugins = isNetlify ? [react()] : [...mochaPlugins(process.env as any), react()];
   return {
     plugins,
     server: {
@@ -23,6 +22,9 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+      },
+      hmr: {
+        overlay: false,
       },
     },
     base: "/",

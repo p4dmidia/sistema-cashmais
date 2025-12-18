@@ -148,10 +148,11 @@ export default function WithdrawalsManagement() {
         <div className="flex h-full flex-col">
           {/* Logo */}
           <div className="flex h-16 items-center justify-center border-b border-white/10">
-            <div className="flex items-center space-x-2">
-              <Shield className="h-8 w-8 text-green-400" />
-              <span className="text-xl font-bold text-white">Admin</span>
-            </div>
+            <img
+              src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png"
+              alt="CashMais"
+              className="h-20 w-auto"
+            />
           </div>
 
           {/* Navigation */}

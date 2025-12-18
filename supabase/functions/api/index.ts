@@ -591,7 +591,7 @@ app.get('/admin/withdrawals', async (c) => {
     const supabase = createSupabase()
     const { data: rows, count } = await supabase
       .from('withdrawals')
-      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at, affiliate_id, affiliates!inner(full_name,cpf,email)', { count: 'exact' })
+      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at, affiliate_id, affiliates(full_name,cpf,email)', { count: 'exact' })
       .eq('status', status)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
@@ -611,7 +611,7 @@ app.get('/api/admin/withdrawals', async (c) => {
     const supabase = createSupabase()
     const { data: rows, count } = await supabase
       .from('withdrawals')
-      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at, affiliate_id, affiliates!inner(full_name,cpf,email)', { count: 'exact' })
+      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at, affiliate_id, affiliates(full_name,cpf,email)', { count: 'exact' })
       .eq('status', status)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
@@ -680,6 +680,150 @@ app.get('/api/admin/reports/companies', async (c) => {
   }
 })
 
+app.post('/api/admin/invoices/generate', async (c) => {
+  // 1. Verifica Permissão (Admin)
+  const token = getCookie(c, 'admin_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const body = await c.req.json()
+    const { company_id, amount, due_date } = body as any
+    if (!company_id || !amount) return c.json({ error: 'Dados incompletos' }, 400)
+    const supabase = createSupabase()
+    // 2. Busca dados da Empresa e Endereço
+    const searchId = Number(company_id)
+    console.log(`>>> Buscando Empresa ID: ${searchId} (Original: ${company_id})`)
+    const { data: company, error: searchError } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('id', searchId)
+      .maybeSingle()
+    if (!company) {
+      console.error('>>> Erro na busca:', searchError)
+      return c.json({ error: 'Empresa não encontrada no banco', debug_id: searchId, db_error: searchError }, 404)
+    }
+    // 3. Validação Rigorosa de Endereço (PagBank exige)
+    if (!(company as any).address_street || !(company as any).address_city || !(company as any).address_state || !(company as any).address_zip) {
+      return c.json({
+        error: 'Endereço incompleto. Atualize o cadastro da empresa.',
+        missing_fields: {
+          rua: !(company as any).address_street,
+          cidade: !(company as any).address_city,
+          estado: !(company as any).address_state,
+          cep: !(company as any).address_zip,
+        },
+      }, 400)
+    }
+    // 4. Monta Payload do PagBank
+    const pagbankToken = Deno.env.get('PAGBANK_TOKEN')
+    if (!pagbankToken) return c.json({ error: 'Erro de configuração: Token PagBank ausente' }, 500)
+    // Formata telefone
+    const rawPhone = String((company as any).telefone || '').replace(/\D/g, '')
+    const area = rawPhone.substring(0, 2)
+    const number = rawPhone.substring(2)
+    // Formata CPF/CNPJ
+    const taxId = String((company as any).cnpj || '').replace(/\D/g, '')
+    const payload = {
+      reference_id: `inv_${company_id}_${Date.now()}`,
+      customer: {
+        name: (company as any).nome_fantasia,
+        email: (company as any).email,
+        tax_id: taxId,
+        phones: [
+          {
+            country: '55',
+            area,
+            number,
+            type: 'MOBILE',
+          },
+        ],
+      },
+      items: [
+        {
+          reference_id: 'comissao_cashback',
+          name: 'Comissoes Cashmais',
+          quantity: 1,
+          unit_amount: Math.round(Number(amount) * 100),
+        },
+      ],
+      shipping: {
+        address: {
+          street: (company as any).address_street,
+          number: (company as any).address_number || 'S/N',
+          complement: 'Comercial',
+          locality: (company as any).address_district || 'Centro',
+          city: (company as any).address_city,
+          region_code: (company as any).address_state,
+          country: 'BRA',
+          postal_code: String((company as any).address_zip || '').replace(/\D/g, ''),
+        },
+      },
+      charges: [
+        {
+          reference_id: `chg_${company_id}_${Date.now()}`,
+          description: 'Pagamento de Comissoes',
+          amount: { value: Math.round(Number(amount) * 100), currency: 'BRL' },
+          payment_method: {
+            type: 'BOLETO',
+            boleto: {
+              due_date: (due_date as any) || new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
+              instruction_lines: {
+                line_1: 'Pagamento referente a comissões de cashback',
+                line_2: 'Não receber após o vencimento',
+              },
+              holder: {
+                name: (company as any).nome_fantasia,
+                tax_id: taxId,
+                email: (company as any).email,
+                address: {
+                  street: (company as any).address_street,
+                  number: (company as any).address_number || 'S/N',
+                  locality: (company as any).address_district || 'Centro',
+                  city: (company as any).address_city,
+                  region: (company as any).address_state,
+                  country: 'BRA',
+                  postal_code: String((company as any).address_zip || '').replace(/\D/g, ''),
+                },
+              },
+            },
+          },
+        },
+      ],
+    }
+    // --- FORÇANDO PRODUÇÃO ---
+    const url = 'https://api.pagseguro.com/orders'
+    console.log('>>> MODO PRODUÇÃO ATIVO: Enviando para api.pagseguro.com')
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${pagbankToken}`,
+        'Content-Type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    })
+    const result = await response.json()
+    if (!response.ok) {
+      return c.json({ error: 'Erro ao gerar boleto no PagBank', details: result }, 400)
+    }
+    // 6. Sucesso: Extrai o link
+    const charge = (result as any)?.charges ? (result as any).charges[0] : null
+    const boletoLink = charge?.links?.find((l: any) => (l as any).rel === 'PAY')?.href
+    const boletoId = (result as any)?.id
+    // Salva no banco
+    await supabase.from('company_invoices').insert({
+      company_id,
+      amount,
+      status: 'pending',
+      pagbank_id: boletoId,
+      boleto_link: boletoLink,
+      due_date,
+      created_at: new Date().toISOString(),
+    })
+    return c.json({ success: true, boleto_link: boletoLink })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
 app.get('/admin/reports/purchases', async (c) => {
   try {
     const companyId = c.req.query('companyId')
@@ -1606,6 +1750,127 @@ app.get('/api/withdrawals', async (c) => {
   }
 })
 
+app.post('/api/withdrawals/request', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const body = await c.req.json()
+    const amount = Number((body as any)?.amount)
+    if (!amount || amount < 50) return c.json({ error: 'Valor mínimo para saque é R$ 50,00' }, 400)
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id, cpf)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const affiliateId = (sessionData as any).affiliates.id as number
+    const { data: profileWithSettings } = await supabase
+      .from('user_profiles')
+      .select('id, user_settings: user_settings!inner(available_balance, pix_key)')
+      .eq('mocha_user_id', `affiliate_${affiliateId}`)
+      .single()
+    if (!profileWithSettings) return c.json({ error: 'Perfil não encontrado' }, 404)
+    const profileId = (profileWithSettings as any).id as number
+    const settings = (profileWithSettings as any).user_settings
+    const currentBalance = Number(settings?.available_balance || 0)
+    const pixKey = settings?.pix_key || null
+    if (!pixKey) return c.json({ error: 'Cadastre sua chave PIX nas configurações antes de sacar' }, 400)
+    if (currentBalance < amount) return c.json({ error: 'Saldo insuficiente' }, 400)
+    const newBalance = currentBalance - amount
+    const { error: updateErr } = await supabase
+      .from('user_settings')
+      .update({ available_balance: newBalance, updated_at: new Date().toISOString() })
+      .eq('user_id', profileId)
+      .eq('available_balance', currentBalance)
+    if (updateErr) return c.json({ error: 'Erro ao processar saldo. Tente novamente.' }, 500)
+    const { error: insertErr } = await supabase
+      .from('withdrawals')
+      .insert({ user_id: profileId, affiliate_id: affiliateId, amount_requested: amount, status: 'pending', pix_key: pixKey, created_at: new Date().toISOString() })
+    if (insertErr) {
+      await supabase.from('user_settings').update({ available_balance: currentBalance, updated_at: new Date().toISOString() }).eq('user_id', profileId)
+      return c.json({ error: 'Erro ao registrar saque' }, 500)
+    }
+    return c.json({ success: true, new_balance: newBalance })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
+app.post('/api/withdrawals', async (c) => {
+  const token = getCookie(c, 'affiliate_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const body = await c.req.json()
+    const amount = Number(body?.amount || 0)
+    if (!amount || amount <= 0) return c.json({ error: 'Valor inválido' }, 400)
+    const supabase = createSupabase()
+    const { data: sessionData } = await supabase
+      .from('affiliate_sessions')
+      .select('affiliate_id, affiliates!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .eq('affiliates.is_active', true)
+      .single()
+    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    const affiliateId = (sessionData as any).affiliates.id as number
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('mocha_user_id', `affiliate_${affiliateId}`)
+      .single()
+    if (!profile) return c.json({ error: 'Configure suas informações primeiro' }, 400)
+    const profileId = (profile as any).id as number
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString()
+    const { data: existingWithdrawal } = await supabase
+      .from('withdrawals')
+      .select('id')
+      .eq('user_id', profileId)
+      .gte('created_at', monthStart)
+      .lt('created_at', nextMonthStart)
+      .maybeSingle()
+    if (existingWithdrawal) return c.json({ error: 'Você já solicitou um saque este mês. Saques são limitados a 1 por mês.' }, 400)
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('available_balance, frozen_balance, total_earnings, is_active_this_month, pix_key')
+      .eq('user_id', profileId)
+      .single()
+    if (!settings) return c.json({ error: 'Configure suas informações primeiro' }, 400)
+    if (!(settings as any).pix_key) return c.json({ error: 'Configure sua chave PIX primeiro' }, 400)
+    if (!(settings as any).is_active_this_month) return c.json({ error: 'Você precisa ter feito pelo menos uma compra no mês anterior' }, 400)
+    const available = Number((settings as any).available_balance || 0)
+    if (amount > available) return c.json({ error: 'Saldo insuficiente' }, 400)
+    const { data: withdrawal, error: wErr } = await supabase
+      .from('withdrawals')
+      .insert({
+        user_id: profileId,
+        affiliate_id: affiliateId,
+        amount_requested: amount,
+        fee_amount: 0,
+        net_amount: amount,
+        status: 'pending',
+        pix_key: (settings as any).pix_key,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single()
+    if (wErr || !withdrawal) return c.json({ error: 'Erro ao criar solicitação de saque' }, 500)
+    const { error: upErr } = await supabase
+      .from('user_settings')
+      .update({
+        available_balance: available - amount,
+        frozen_balance: Number((settings as any).frozen_balance || 0) + amount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', profileId)
+    if (upErr) return c.json({ error: 'Erro ao atualizar saldo' }, 500)
+    return c.json({ success: true, withdrawal: { id: (withdrawal as any).id, amount_requested: amount, fee_amount: 0, net_amount: amount, status: 'pending' } })
+  } catch (e) {
+    return c.json({ error: 'Erro interno do servidor' }, 500)
+  }
+})
 app.get('/api/affiliate/settings', async (c) => {
   const token = getCookie(c, 'affiliate_session')
   if (!token) return c.json({ error: 'Não autenticado' }, 401)

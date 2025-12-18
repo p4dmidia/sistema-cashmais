@@ -934,15 +934,7 @@ app.post("/api/withdrawals", async (c) => {
       return c.json({ error: "Valor inválido" }, 400);
     }
 
-    // Check withdrawal date restrictions (only on 10th or 15th of each month)
     const currentDate = new Date();
-    const currentDay = currentDate.getDate();
-    
-    if (currentDay !== 10 && currentDay !== 15) {
-      return c.json({ 
-        error: "Saques só podem ser solicitados nos dias 10 ou 15 de cada mês" 
-      }, 400);
-    }
 
     // Check if already made a withdrawal this month
     const currentMonth = currentDate.getMonth() + 1;

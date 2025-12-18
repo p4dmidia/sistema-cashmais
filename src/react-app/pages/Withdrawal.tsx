@@ -317,25 +317,13 @@ function WithdrawalPage() {
                 </span>
               </div>
 
-              {/* Withdrawal Date Restriction */}
-              <div className="flex items-center space-x-3">
-                {(() => {
-                  const currentDay = new Date().getDate();
-                  const isWithdrawalDay = currentDay === 10 || currentDay === 15;
-                  return isWithdrawalDay ? (
-                    <CheckCircle className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <XCircle className="w-5 h-5 text-red-500" />
-                  );
-                })()}
-                <span className={(() => {
-                  const currentDay = new Date().getDate();
-                  const isWithdrawalDay = currentDay === 10 || currentDay === 15;
-                  return isWithdrawalDay ? 'text-green-400' : 'text-red-400';
-                })()}>
-                  Dia permitido para saque (apenas dias 10 e 15)
-                </span>
-              </div>
+          {/* Withdrawal Date Restriction - Temporarily disabled for testing */}
+          <div className="flex items-center space-x-3">
+            <CheckCircle className="w-5 h-5 text-green-500" />
+            <span className="text-green-400">
+              Saques liberados para teste
+            </span>
+          </div>
             </div>
           )}
 
@@ -398,7 +386,7 @@ function WithdrawalPage() {
 
             <button
               type="submit"
-              disabled={submitting || !balance?.pix_key || !balance?.is_active_this_month || !amount || parseFloat(amount) <= 0 || !(new Date().getDate() === 10 || new Date().getDate() === 15)}
+              disabled={submitting || !balance?.pix_key || !balance?.is_active_this_month || !amount || parseFloat(amount) <= 0}
               className="w-full flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
