@@ -680,6 +680,21 @@ app.get('/api/admin/reports/companies', async (c) => {
   }
 })
 
+app.get('/api/health', async (c) => {
+  return c.json({ status: 'ok', time: new Date().toISOString() })
+})
+app.post('/api/admin/invoices/generate', async (c) => {
+app.get('/api/debug-vars', async (c) => {
+  const envGet = (n: string) => (typeof Deno !== 'undefined' && (Deno as any).env && (Deno as any).env.get ? (Deno as any).env.get(n) : undefined)
+  const toState = (v: string | undefined) => (v ? 'defined' : 'undefined')
+  return c.json({
+    SUPABASE_URL: toState(envGet('SUPABASE_URL')),
+    VITE_SUPABASE_URL: toState(envGet('VITE_SUPABASE_URL')),
+    DATABASE_URL: toState(envGet('DATABASE_URL')),
+    NEXT_PUBLIC_SUPABASE_URL: toState(envGet('NEXT_PUBLIC_SUPABASE_URL')),
+    time: new Date().toISOString(),
+  })
+})
 app.post('/api/admin/invoices/generate', async (c) => {
   // 1. Verifica Permissão (Admin)
   const token = getCookie(c, 'admin_session')
