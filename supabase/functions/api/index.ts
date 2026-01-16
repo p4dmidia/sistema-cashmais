@@ -683,7 +683,6 @@ app.get('/api/admin/reports/companies', async (c) => {
 app.get('/api/health', async (c) => {
   return c.json({ status: 'ok', time: new Date().toISOString() })
 })
-app.post('/api/admin/invoices/generate', async (c) => {
 app.get('/api/debug-vars', async (c) => {
   const envGet = (n: string) => (typeof Deno !== 'undefined' && (Deno as any).env && (Deno as any).env.get ? (Deno as any).env.get(n) : undefined)
   const toState = (v: string | undefined) => (v ? 'defined' : 'undefined')
@@ -1342,27 +1341,16 @@ app.post('/affiliate/login', async (c) => {
     const cleanCpf = parsed.data.cpf.replace(/\D/g, '')
     if (!validateCPF(cleanCpf)) return c.json({ error: 'CPF inválido' }, 422)
     const supabase = createSupabase()
-    const { data: affiliate } = await supabase
-      .from('affiliates')
-      .select('*')
-      .eq('cpf', cleanCpf)
-      .eq('is_active', true)
+    const { data: authRow, error: rpcErr } = await supabase
+      .rpc('login_affiliate', { p_cpf: cleanCpf, p_password: parsed.data.password })
       .single()
-    if (!affiliate) return c.json({ error: 'CPF ou senha inválidos' }, 401)
-    let storedHash = (affiliate as any).password_hash as string | null
-    if (!storedHash) {
-      const newHash = await bcrypt.hash(parsed.data.password, 12)
-      await supabase.from('affiliates').update({ password_hash: newHash, updated_at: new Date().toISOString() }).eq('id', (affiliate as any).id)
-      storedHash = newHash
-    }
-    const valid = await bcrypt.compare(parsed.data.password, storedHash as string)
-    if (!valid) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+    if (rpcErr || !authRow) return c.json({ error: 'CPF ou senha inválidos' }, 401)
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
-    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (affiliate as any).id)
-    await supabase.from('affiliate_sessions').insert({ affiliate_id: (affiliate as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (authRow as any).affiliate_id)
+    await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 30 * 24 * 60 * 60 })
-    return c.json({ success: true, affiliate: { id: (affiliate as any).id, full_name: (affiliate as any).full_name, email: (affiliate as any).email, referral_code: (affiliate as any).referral_code, customer_coupon: (affiliate as any).cpf } })
+    return c.json({ success: true, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
@@ -1376,27 +1364,16 @@ app.post('/api/affiliate/login', async (c) => {
     const cleanCpf = parsed.data.cpf.replace(/\D/g, '')
     if (!validateCPF(cleanCpf)) return c.json({ error: 'CPF inválido' }, 422)
     const supabase = createSupabase()
-    const { data: affiliate } = await supabase
-      .from('affiliates')
-      .select('*')
-      .eq('cpf', cleanCpf)
-      .eq('is_active', true)
+    const { data: authRow, error: rpcErr } = await supabase
+      .rpc('login_affiliate', { p_cpf: cleanCpf, p_password: parsed.data.password })
       .single()
-    if (!affiliate) return c.json({ error: 'CPF ou senha inválidos' }, 401)
-    let storedHash = (affiliate as any).password_hash as string | null
-    if (!storedHash) {
-      const newHash = await bcrypt.hash(parsed.data.password, 12)
-      await supabase.from('affiliates').update({ password_hash: newHash, updated_at: new Date().toISOString() }).eq('id', (affiliate as any).id)
-      storedHash = newHash
-    }
-    const valid = await bcrypt.compare(parsed.data.password, storedHash as string)
-    if (!valid) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+    if (rpcErr || !authRow) return c.json({ error: 'CPF ou senha inválidos' }, 401)
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
-    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (affiliate as any).id)
-    await supabase.from('affiliate_sessions').insert({ affiliate_id: (affiliate as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (authRow as any).affiliate_id)
+    await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 30 * 24 * 60 * 60 })
-    return c.json({ success: true, affiliate: { id: (affiliate as any).id, full_name: (affiliate as any).full_name, email: (affiliate as any).email, referral_code: (affiliate as any).referral_code, customer_coupon: (affiliate as any).cpf } })
+    return c.json({ success: true, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
