@@ -2,16 +2,20 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/debug-vars",
+      "destination": "/api/debug-vars"
+    },
+    {
       "source": "/api",
-      "destination": "https://hffxmntvtsimwlsapfod.supabase.co/functions/v1/api"
+      "destination": "/api/proxy"
     },
     {
       "source": "/api/",
-      "destination": "https://hffxmntvtsimwlsapfod.supabase.co/functions/v1/api"
+      "destination": "/api/proxy"
     },
     {
       "source": "/api/(.*)",
-      "destination": "https://hffxmntvtsimwlsapfod.supabase.co/functions/v1/api/$1"
+      "destination": "/api/proxy?path=$1"
     },
     {
       "source": "/:path((?!api/).*)",
