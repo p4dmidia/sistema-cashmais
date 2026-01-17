@@ -287,7 +287,7 @@ app.post('/api/admin/login', async (c) => {
     await supabase
       .from('admin_audit_logs')
       .insert({ admin_user_id: (adminUser as any).id, action: 'LOGIN', entity_type: 'admin_session' })
-    return c.json({ success: true, admin: { id: (adminUser as any).id, username: (adminUser as any).username, email: (adminUser as any).email, full_name: (adminUser as any).full_name } })
+    return c.json({ success: true, token: sessionToken, admin: { id: (adminUser as any).id, username: (adminUser as any).username, email: (adminUser as any).email, full_name: (adminUser as any).full_name } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
@@ -332,7 +332,10 @@ app.get('/admin/me', async (c) => {
 
 app.get('/api/admin/me', async (c) => {
   try {
-    const token = getCookie(c, 'admin_session')
+    const cookieToken = getCookie(c, 'admin_session')
+    const authHeader = c.req.header('authorization') || ''
+    const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+    const token = cookieToken || bearerToken
     if (!token) return c.json({ error: 'Não autenticado' }, 401)
     const supabase = createSupabase()
     const { data: session } = await supabase
@@ -1348,7 +1351,7 @@ app.post('/affiliate/login', async (c) => {
     await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (authRow as any).affiliate_id)
     await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
-    return c.json({ success: true, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
+    return c.json({ success: true, token: sessionToken, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
@@ -1371,7 +1374,7 @@ app.post('/api/affiliate/login', async (c) => {
     await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (authRow as any).affiliate_id)
     await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
-    return c.json({ success: true, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
+    return c.json({ success: true, token: sessionToken, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
@@ -1559,7 +1562,10 @@ app.get('/affiliate/me', async (c) => {
 })
 
 app.get('/api/affiliate/me', async (c) => {
-  const token = getCookie(c, 'affiliate_session')
+  const cookieToken = getCookie(c, 'affiliate_session')
+  const authHeader = c.req.header('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+  const token = cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const supabase = createSupabase()

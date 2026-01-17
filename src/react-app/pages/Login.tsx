@@ -107,8 +107,12 @@ function Login() {
       console.log('Response data:', data);
       
       if (response.ok) {
-        console.log('Login bem-sucedido, redirecionando para dashboard');
-        // Success - redirect to dashboard immediately
+        const token = data?.token;
+        if (token) {
+          try {
+            localStorage.setItem('affiliate_token', token);
+          } catch {}
+        }
         window.location.href = '/dashboard';
       } else {
         // Handle different error types

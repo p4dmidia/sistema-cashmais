@@ -166,8 +166,8 @@ export function useAffiliateAuth() {
     try {
       console.log('[AFFILIATE_AUTH] Checking authentication...');
       const headers: Record<string, string> = {};
-      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
-      if (anon) headers['Authorization'] = `Bearer ${anon}`;
+      const token = localStorage.getItem('affiliate_token');
+      if (token) headers['Authorization'] = `Bearer ${token}`;
       const response = await fetch('/api/affiliate/me', {
         credentials: 'include',
         headers,
@@ -213,9 +213,9 @@ export function setupAuthInterceptor() {
   window.fetch = async (input: RequestInfo, init?: RequestInit) => {
     let url = typeof input === 'string' ? input : (input as Request).url;
     const headers = new Headers(init?.headers || {});
-    const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
-    if (url.startsWith('/api') && anon && !headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${anon}`);
+    const affToken = localStorage.getItem('affiliate_token');
+    if (url.startsWith('/api') && affToken && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${affToken}`);
     }
     const response = await originalFetch(input, { ...(init || {}), headers });
     

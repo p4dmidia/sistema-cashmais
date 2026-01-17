@@ -35,8 +35,8 @@ export function useAdminAuth() {
       console.log('[ADMIN_AUTH] Current cookies:', document.cookie);
       
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
-      if (anon) headers['Authorization'] = `Bearer ${anon}`;
+      const adminToken = localStorage.getItem('admin_token');
+      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
       const response = await fetch('/api/admin/me', {
         credentials: 'include',
         headers,
@@ -75,8 +75,6 @@ export function useAdminAuth() {
   const login = async (username: string, password: string) => {
     try {
       const headers2: Record<string, string> = { 'Content-Type': 'application/json' };
-      const anon2 = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
-      if (anon2) headers2['Authorization'] = `Bearer ${anon2}`;
       const response = await fetch('/api/admin/login', {
         method: 'POST',
         headers: headers2,
@@ -88,6 +86,12 @@ export function useAdminAuth() {
 
       if (response.ok) {
         console.log('Login API response successful:', data);
+        const token = (data as any)?.token;
+        if (token) {
+          try {
+            localStorage.setItem('admin_token', token);
+          } catch {}
+        }
         // Immediately update state with authenticated user
         setState({
           user: data.admin,
