@@ -8,6 +8,10 @@ import { z } from 'https://esm.sh/zod@3.24.3'
 
 const app = new Hono()
 
+function cookieDomain(c: any) {
+  const h = c.req.header('x-forwarded-host') || c.req.header('host') || ''
+  return h ? h.split(':')[0] : undefined
+}
 function createSupabase() {
   const url = Deno.env.get('SUPABASE_URL') || ''
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
@@ -247,13 +251,7 @@ app.post('/admin/login', async (c) => {
       .from('admin_sessions')
       .insert({ admin_user_id: (adminUser as any).id, session_token: sessionToken, expires_at: expiresAt })
     if (sessErr) return c.json({ error: 'Erro interno do servidor' }, 500)
-    setCookie(c, 'admin_session', sessionToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'None',
-      maxAge: 24 * 60 * 60,
-      path: '/',
-    })
+    setCookie(c, 'admin_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 24 * 60 * 60, path: '/' })
     await supabase
       .from('admin_audit_logs')
       .insert({ admin_user_id: (adminUser as any).id, action: 'LOGIN', entity_type: 'admin_session' })
@@ -285,7 +283,7 @@ app.post('/api/admin/login', async (c) => {
       .from('admin_sessions')
       .insert({ admin_user_id: (adminUser as any).id, session_token: sessionToken, expires_at: expiresAt })
     if (sessErr) return c.json({ error: 'Erro interno do servidor' }, 500)
-    setCookie(c, 'admin_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', maxAge: 24 * 60 * 60, path: '/' })
+    setCookie(c, 'admin_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 24 * 60 * 60, path: '/' })
     await supabase
       .from('admin_audit_logs')
       .insert({ admin_user_id: (adminUser as any).id, action: 'LOGIN', entity_type: 'admin_session' })
@@ -355,7 +353,7 @@ app.post('/admin/logout', async (c) => {
     const token = getCookie(c, 'admin_session')
     const supabase = createSupabase()
     if (token) await supabase.from('admin_sessions').delete().eq('session_token', token)
-    setCookie(c, 'admin_session', '', { httpOnly: true, secure: true, sameSite: 'None', maxAge: 0, path: '/' })
+    setCookie(c, 'admin_session', '', { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 0, path: '/' })
     return c.json({ success: true })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
@@ -367,7 +365,7 @@ app.post('/api/admin/logout', async (c) => {
     const token = getCookie(c, 'admin_session')
     const supabase = createSupabase()
     if (token) await supabase.from('admin_sessions').delete().eq('session_token', token)
-    setCookie(c, 'admin_session', '', { httpOnly: true, secure: true, sameSite: 'None', maxAge: 0, path: '/' })
+    setCookie(c, 'admin_session', '', { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 0, path: '/' })
     return c.json({ success: true })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
@@ -425,8 +423,8 @@ app.get('/api/admin/dashboard/stats', async (c) => {
       for (const r of distRows || []) {
         const amt = Number((r as any).commission_amount || 0)
         const lvl = Number((r as any).level || 0)
-        const aid = Number((r as any).affiliate_id || 0)
-        if (lvl === 999 || aid === 0) companyReceivableMonth += amt
+        const aid = String((r as any).affiliate_id || '')
+        if (lvl === 999 || aid === '0') companyReceivableMonth += amt
         else affiliatesCommissionsMonth += amt
       }
     } catch {}
@@ -1349,7 +1347,7 @@ app.post('/affiliate/login', async (c) => {
     const expiresAt = getSessionExpiration()
     await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (authRow as any).affiliate_id)
     await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
-    setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 30 * 24 * 60 * 60 })
+    setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     return c.json({ success: true, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
@@ -1372,7 +1370,7 @@ app.post('/api/affiliate/login', async (c) => {
     const expiresAt = getSessionExpiration()
     await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (authRow as any).affiliate_id)
     await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
-    setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 30 * 24 * 60 * 60 })
+    setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     return c.json({ success: true, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
@@ -1531,7 +1529,7 @@ app.post('/api/affiliate/register', async (c) => {
     await supabase
       .from('affiliate_sessions')
       .insert({ affiliate_id: (newAffiliate as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
-    setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 30 * 24 * 60 * 60 })
+    setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     debugLogs.push(`REGISTER_DONE affiliate=${(newAffiliate as any).id}`)
     return c.json({ success: true, affiliate: { id: (newAffiliate as any).id, full_name: (newAffiliate as any).full_name, email: (newAffiliate as any).email, referral_code: referralCode, customer_coupon: cleanCpf }, debug_info: debugLogs, versao_do_codigo: "VERSAO_CORRIGIDA_RPC_AGORA_VAI" })
   } catch (e) {
@@ -1589,7 +1587,7 @@ app.post('/affiliate/logout', async (c) => {
       await supabase.from('affiliate_sessions').delete().eq('session_token', token)
     }
   } catch {}
-  setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 0 })
+  setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 0, domain: cookieDomain(c) })
   return c.json({ success: true })
 })
 
@@ -1601,7 +1599,7 @@ app.post('/api/affiliate/logout', async (c) => {
       await supabase.from('affiliate_sessions').delete().eq('session_token', token)
     }
   } catch {}
-  setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 0 })
+  setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 0, domain: cookieDomain(c) })
   return c.json({ success: true })
 })
 
@@ -2056,7 +2054,7 @@ app.post('/api/empresa/login', async (c) => {
     const sessionToken = crypto.randomUUID().replace(/-/g, '')
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
     await supabase.from('company_sessions').insert({ company_id: (company as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
-    setCookie(c, 'company_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', maxAge: 24 * 60 * 60, path: '/' })
+    setCookie(c, 'company_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 24 * 60 * 60, path: '/' })
     return c.json({ success: true, company: { id: (company as any).id, razao_social: (company as any).razao_social, nome_fantasia: (company as any).nome_fantasia, email: (company as any).email, role: 'company' } })
   } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
 })
@@ -2081,7 +2079,7 @@ app.get('/api/empresa/me', async (c) => {
 app.post('/api/empresa/logout', async (c) => {
   const token = getCookie(c, 'company_session')
   try { if (token) { const supabase = createSupabase(); await supabase.from('company_sessions').delete().eq('session_token', token) } } catch {}
-  setCookie(c, 'company_session', '', { httpOnly: true, secure: true, sameSite: 'None', maxAge: 0, path: '/' })
+  setCookie(c, 'company_session', '', { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 0, path: '/' })
   return c.json({ success: true })
 })
 
@@ -2123,7 +2121,7 @@ app.post('/api/caixa/login', async (c) => {
     const sessionToken = crypto.randomUUID().replace(/-/g, '')
     const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
     await supabase.from('cashier_sessions').insert({ cashier_id: (cashier as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
-    setCookie(c, 'cashier_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'None', maxAge: 8 * 60 * 60, path: '/' })
+    setCookie(c, 'cashier_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 8 * 60 * 60, path: '/' })
     return c.json({ success: true, cashier: { id: (cashier as any).id, name: (cashier as any).name, cpf: (cashier as any).cpf, company_name: (cashier as any).companies.nome_fantasia, role: 'cashier' } })
   } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
 })
@@ -2310,7 +2308,7 @@ app.post('/api/caixa/compra', async (c) => {
 app.post('/api/caixa/logout', async (c) => {
   const token = getCookie(c, 'cashier_session')
   try { if (token) { const supabase = createSupabase(); await supabase.from('cashier_sessions').delete().eq('session_token', token) } } catch {}
-  setCookie(c, 'cashier_session', '', { httpOnly: true, secure: true, sameSite: 'None', maxAge: 0, path: '/' })
+  setCookie(c, 'cashier_session', '', { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 0, path: '/' })
   return c.json({ success: true })
 })
 
