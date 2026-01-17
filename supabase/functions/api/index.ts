@@ -1345,7 +1345,8 @@ app.post('/affiliate/login', async (c) => {
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
     await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (authRow as any).affiliate_id)
-    await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+    const { error: insErr1 } = await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+    if (insErr1) return c.json({ error: 'Erro ao criar sessão do afiliado' }, 500)
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     return c.json({ success: true, token: sessionToken, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
@@ -1368,7 +1369,8 @@ app.post('/api/affiliate/login', async (c) => {
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
     await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (authRow as any).affiliate_id)
-    await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+    const { error: insErr2 } = await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+    if (insErr2) return c.json({ error: 'Erro ao criar sessão do afiliado' }, 500)
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     return c.json({ success: true, token: sessionToken, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
