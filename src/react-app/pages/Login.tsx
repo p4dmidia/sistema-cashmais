@@ -108,11 +108,14 @@ function Login() {
       
       if (response.ok) {
         const token = data?.token;
-        if (token) {
-          try {
-            localStorage.setItem('affiliate_token', token);
-          } catch {}
+        if (!token) {
+          setErrors({ general: 'Falha ao receber token de sessão. Tente novamente.' });
+          setIsLoading(false);
+          return;
         }
+        try {
+          localStorage.setItem('affiliate_token', token);
+        } catch {}
         window.location.href = '/dashboard';
       } else {
         // Handle different error types
