@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { authenticatedFetch } from '@/react-app/lib/authFetch';
 import { useNavigate } from 'react-router';
 
 export interface CompanyAuthUser {
@@ -165,13 +166,7 @@ export function useAffiliateAuth() {
   const checkAuth = async () => {
     try {
       console.log('[AFFILIATE_AUTH] Checking authentication...');
-      const headers: Record<string, string> = {};
-      const token = localStorage.getItem('affiliate_token');
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-      const response = await fetch('/api/affiliate/me', {
-        credentials: 'include',
-        headers,
-      });
+      const response = await authenticatedFetch('/api/affiliate/me');
 
       if (response.ok) {
         const data = await response.json();
