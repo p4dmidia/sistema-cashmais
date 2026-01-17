@@ -1564,9 +1564,11 @@ app.get('/api/affiliate/me', async (c) => {
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = cookieToken || bearerToken
-  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  console.log('[AFFILIATE_ME] token source:', cookieToken ? 'cookie' : (bearerToken ? 'header' : 'none'), 'token=', token)
+  if (!token) return c.json({ error: 'Não autenticado', debug: 'Sem token via Cookie ou Header' }, 401)
   try {
     const supabase = createSupabase()
+    console.log('[AFFILIATE_ME] Query params:', { table: 'affiliate_sessions', where: { session_token: token, expires_at_gt: new Date().toISOString(), affiliates_is_active: true } })
     const { data: sessionData } = await supabase
       .from('affiliate_sessions')
       .select('affiliate_id, affiliates!inner(id, full_name, cpf, email, phone, referral_code, sponsor_id, is_verified, created_at, last_access_at)')
@@ -1574,12 +1576,18 @@ app.get('/api/affiliate/me', async (c) => {
       .gt('expires_at', new Date().toISOString())
       .eq('affiliates.is_active', true)
       .single()
-    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    console.log('[AFFILIATE_ME] Raw sessionData:', sessionData)
+    if (!sessionData) return c.json({ error: 'Não autenticado', debug: 'Sessão não encontrada ou expirada' }, 401)
     const affiliate = (sessionData as any).affiliates
+    if (!affiliate || !affiliate.id) {
+      console.log('[AFFILIATE_ME] Sessão existe mas afiliado não encontrado para affiliate_id=', (sessionData as any)?.affiliate_id)
+      return c.json({ error: 'Não autenticado', debug: `Sessão existe mas afiliado ${(sessionData as any)?.affiliate_id ?? 'null'} não encontrado` }, 401)
+    }
     await supabase.from('affiliates').update({ last_access_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', affiliate.id)
     return c.json({ id: affiliate.id, full_name: affiliate.full_name, cpf: affiliate.cpf, email: affiliate.email, whatsapp: (affiliate as any).phone, referral_code: affiliate.referral_code, customer_coupon: affiliate.cpf, sponsor_id: affiliate.sponsor_id, is_verified: Boolean(affiliate.is_verified), created_at: affiliate.created_at, last_access_at: affiliate.last_access_at })
   } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
+    console.log('[AFFILIATE_ME] Exception:', e)
+    return c.json({ error: 'Erro interno do servidor', debug: String(e) }, 500)
   }
 })
 
