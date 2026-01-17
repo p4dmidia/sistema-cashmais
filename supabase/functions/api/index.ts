@@ -8,10 +8,6 @@ import { z } from 'https://esm.sh/zod@3.24.3'
 
 const app = new Hono()
 
-function cookieDomain(c: any) {
-  const h = c.req.header('x-forwarded-host') || c.req.header('host') || ''
-  return h ? h.split(':')[0] : undefined
-}
 function createSupabase() {
   const url = Deno.env.get('SUPABASE_URL') || ''
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
@@ -1593,7 +1589,7 @@ app.post('/affiliate/logout', async (c) => {
       await supabase.from('affiliate_sessions').delete().eq('session_token', token)
     }
   } catch {}
-  setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 0, domain: cookieDomain(c) })
+  setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 0 })
   return c.json({ success: true })
 })
 
@@ -1605,7 +1601,7 @@ app.post('/api/affiliate/logout', async (c) => {
       await supabase.from('affiliate_sessions').delete().eq('session_token', token)
     }
   } catch {}
-  setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'None', path: '/', maxAge: 0, domain: cookieDomain(c) })
+  setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 0 })
   return c.json({ success: true })
 })
 
