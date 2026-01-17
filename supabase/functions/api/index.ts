@@ -1565,7 +1565,7 @@ app.get('/api/affiliate/me', async (c) => {
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = cookieToken || bearerToken
   console.log('[AFFILIATE_ME] token source:', cookieToken ? 'cookie' : (bearerToken ? 'header' : 'none'), 'token=', token)
-  if (!token) return c.json({ error: 'Não autenticado', debug: 'Sem token via Cookie ou Header' }, 401)
+  if (!token) return c.json({ error: 'Token não enviado pelo navegador' }, 401)
   try {
     const supabase = createSupabase()
     console.log('[AFFILIATE_ME] Query params:', { table: 'affiliate_sessions', where: { session_token: token, expires_at_gt: new Date().toISOString(), affiliates_is_active: true } })
@@ -1577,11 +1577,11 @@ app.get('/api/affiliate/me', async (c) => {
       .eq('affiliates.is_active', true)
       .single()
     console.log('[AFFILIATE_ME] Raw sessionData:', sessionData)
-    if (!sessionData) return c.json({ error: 'Não autenticado', debug: 'Sessão não encontrada ou expirada' }, 401)
+    if (!sessionData) return c.json({ error: 'Sessão não encontrada no banco', token_recebido: (token || '').slice(0, 10) + '...' }, 401)
     const affiliate = (sessionData as any).affiliates
     if (!affiliate || !affiliate.id) {
       console.log('[AFFILIATE_ME] Sessão existe mas afiliado não encontrado para affiliate_id=', (sessionData as any)?.affiliate_id)
-      return c.json({ error: 'Não autenticado', debug: `Sessão existe mas afiliado ${(sessionData as any)?.affiliate_id ?? 'null'} não encontrado` }, 401)
+      return c.json({ error: 'Sessão órfã: ID do afiliado não existe', id_na_sessao: (sessionData as any)?.affiliate_id }, 401)
     }
     await supabase.from('affiliates').update({ last_access_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', affiliate.id)
     return c.json({ id: affiliate.id, full_name: affiliate.full_name, cpf: affiliate.cpf, email: affiliate.email, whatsapp: (affiliate as any).phone, referral_code: affiliate.referral_code, customer_coupon: affiliate.cpf, sponsor_id: affiliate.sponsor_id, is_verified: Boolean(affiliate.is_verified), created_at: affiliate.created_at, last_access_at: affiliate.last_access_at })
