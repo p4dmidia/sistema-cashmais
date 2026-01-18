@@ -1366,10 +1366,16 @@ app.post('/affiliate/login', async (c) => {
     }
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
-    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', String((authRow as any).affiliate_id))
+    const { data: affResolve1 } = await supabase
+      .from('affiliates')
+      .select('id, cpf, email')
+      .eq('cpf', String((authRow as any).cpf || ''))
+      .maybeSingle()
+    const canonicalAffId1 = affResolve1 ? String((affResolve1 as any).id) : String((authRow as any).affiliate_id)
+    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', canonicalAffId1)
     const { error: insErr1 } = await supabase
       .from('affiliate_sessions')
-      .insert({ affiliate_id: String((authRow as any).affiliate_id), session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
+      .insert({ affiliate_id: canonicalAffId1, session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
     if (insErr1) {
       console.error('Erro ao salvar sessão no banco:', insErr1)
       return c.json({ error: 'Erro ao criar sessão do afiliado', details: insErr1 }, 500)
@@ -1417,10 +1423,16 @@ app.post('/api/affiliate/login', async (c) => {
     }
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
-    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', String((authRow as any).affiliate_id))
+    const { data: affResolve2 } = await supabase
+      .from('affiliates')
+      .select('id, cpf, email')
+      .eq('cpf', String((authRow as any).cpf || ''))
+      .maybeSingle()
+    const canonicalAffId2 = affResolve2 ? String((affResolve2 as any).id) : String((authRow as any).affiliate_id)
+    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', canonicalAffId2)
     const { error: insErr2 } = await supabase
       .from('affiliate_sessions')
-      .insert({ affiliate_id: String((authRow as any).affiliate_id), session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
+      .insert({ affiliate_id: canonicalAffId2, session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
     if (insErr2) {
       console.error('Erro ao salvar sessão no banco:', insErr2)
       return c.json({ error: 'Erro ao criar sessão do afiliado', details: insErr2 }, 500)
