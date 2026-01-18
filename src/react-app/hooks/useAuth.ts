@@ -173,6 +173,12 @@ export function useAffiliateAuth() {
         setUser(data);
       } else {
         console.log('[AFFILIATE_AUTH] No valid session, status:', response.status);
+        if (response.status === 401) {
+          try {
+            localStorage.removeItem('affiliate_token');
+            localStorage.removeItem('affiliate_user');
+          } catch {}
+        }
         try {
           const cached = localStorage.getItem('affiliate_user');
           if (cached) {

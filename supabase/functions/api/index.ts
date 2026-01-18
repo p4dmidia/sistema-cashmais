@@ -1962,14 +1962,18 @@ app.post('/api/withdrawals', async (c) => {
   }
 })
 app.get('/api/affiliate/settings', async (c) => {
-  const token = getCookie(c, 'affiliate_session')
+  const xSession = c.req.header('x-session-token') || ''
+  const cookieToken = getCookie(c, 'affiliate_session')
+  const authHeader = c.req.header('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const supabase = createSupabase()
     const { data: sessionData } = await supabase
       .from('affiliate_sessions')
       .select('affiliate_id, affiliates!inner(id, cpf, full_name, phone)')
-      .eq('session_token', token)
+      .eq('session_token', String(token))
       .gt('expires_at', new Date().toISOString())
       .eq('affiliates.is_active', true)
       .single()
@@ -2008,7 +2012,11 @@ app.get('/api/affiliate/settings', async (c) => {
 })
 
 app.post('/api/affiliate/settings', async (c) => {
-  const token = getCookie(c, 'affiliate_session')
+  const xSession = c.req.header('x-session-token') || ''
+  const cookieToken = getCookie(c, 'affiliate_session')
+  const authHeader = c.req.header('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const body = await c.req.json()
@@ -2016,7 +2024,7 @@ app.post('/api/affiliate/settings', async (c) => {
     const { data: sessionData } = await supabase
       .from('affiliate_sessions')
       .select('affiliate_id, affiliates!inner(id, cpf)')
-      .eq('session_token', token)
+      .eq('session_token', String(token))
       .gt('expires_at', new Date().toISOString())
       .eq('affiliates.is_active', true)
       .single()

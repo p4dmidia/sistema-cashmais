@@ -60,9 +60,8 @@ function Profile() {
 
   const fetchSettings = async () => {
     try {
-      const response = await fetch('/api/affiliate/settings', {
-        credentials: 'include',
-      });
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/affiliate/settings');
 
       if (response.ok) {
         const data = await response.json();
@@ -77,9 +76,8 @@ function Profile() {
 
   const fetchBalance = async () => {
     try {
-      const response = await fetch('/api/users/balance', {
-        credentials: 'include',
-      });
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/users/balance');
 
       if (response.ok) {
         const data = await response.json();
@@ -96,12 +94,12 @@ function Profile() {
     setMessage(null);
 
     try {
-      const response = await fetch('/api/affiliate/settings', {
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/affiliate/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({
           full_name: formData.full_name ?? '',
           phone: formData.whatsapp ?? '',
@@ -129,12 +127,12 @@ function Profile() {
     setMessage(null);
 
     try {
-      const response = await fetch('/api/affiliate/settings', {
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/affiliate/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({
           full_name: settingsData.full_name,
           phone: settingsData.phone,
@@ -157,8 +155,8 @@ function Profile() {
     }
   };
 
-  const formatPhone = (value: string) => {
-    const cleaned = value.replace(/\D/g, '');
+  const formatPhone = (value: string | undefined | null) => {
+    const cleaned = String(value || '').replace(/\D/g, '');
     const formatted = cleaned.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
     return formatted;
   };
@@ -182,8 +180,8 @@ function Profile() {
     }
   };
 
-  const formatCpf = (cpf: string) => {
-    const cleaned = cpf.replace(/\D/g, '');
+  const formatCpf = (cpf: string | undefined | null) => {
+    const cleaned = String(cpf || '').replace(/\D/g, '');
     return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
   };
 
