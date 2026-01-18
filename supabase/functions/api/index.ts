@@ -1668,11 +1668,15 @@ app.get('/api/affiliate/me', async (c) => {
 })
 
 app.post('/affiliate/logout', async (c) => {
-  const token = getCookie(c, 'affiliate_session')
+  const xSession = c.req.header('x-session-token') || ''
+  const cookieToken = getCookie(c, 'affiliate_session')
+  const authHeader = c.req.header('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+  const token = xSession || cookieToken || bearerToken
   try {
     if (token) {
       const supabase = createSupabase()
-      await supabase.from('affiliate_sessions').delete().eq('session_token', token)
+      await supabase.from('affiliate_sessions').delete().eq('session_token', String(token))
     }
   } catch {}
   setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 0 })
@@ -1680,11 +1684,15 @@ app.post('/affiliate/logout', async (c) => {
 })
 
 app.post('/api/affiliate/logout', async (c) => {
-  const token = getCookie(c, 'affiliate_session')
+  const xSession = c.req.header('x-session-token') || ''
+  const cookieToken = getCookie(c, 'affiliate_session')
+  const authHeader = c.req.header('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+  const token = xSession || cookieToken || bearerToken
   try {
     if (token) {
       const supabase = createSupabase()
-      await supabase.from('affiliate_sessions').delete().eq('session_token', token)
+      await supabase.from('affiliate_sessions').delete().eq('session_token', String(token))
     }
   } catch {}
   setCookie(c, 'affiliate_session', '', { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 0 })

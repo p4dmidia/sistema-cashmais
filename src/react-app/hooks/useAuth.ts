@@ -193,13 +193,17 @@ export function useAffiliateAuth() {
 
   const logout = async () => {
     try {
-      await fetch('/api/affiliate/logout', {
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      await authenticatedFetch('/api/affiliate/logout', {
         method: 'POST',
-        credentials: 'include',
       });
     } catch (error) {
       console.error('Affiliate logout error:', error);
     } finally {
+      try {
+        localStorage.removeItem('affiliate_token');
+        localStorage.removeItem('affiliate_user');
+      } catch {}
       setUser(null);
       navigate('/login');
     }
