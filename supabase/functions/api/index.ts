@@ -1338,10 +1338,32 @@ app.post('/affiliate/login', async (c) => {
     const cleanCpf = parsed.data.cpf.replace(/\D/g, '')
     if (!validateCPF(cleanCpf)) return c.json({ error: 'CPF inválido' }, 422)
     const supabase = createSupabase()
-    const { data: authRow, error: rpcErr } = await supabase
+    let { data: authRow, error: rpcErr } = await supabase
       .rpc('login_affiliate', { p_cpf: cleanCpf, p_password: parsed.data.password })
       .single()
-    if (rpcErr || !authRow) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+    if (rpcErr || !authRow) {
+      const { data: profileRow } = await supabase
+        .from('user_profiles')
+        .select('id, password_hash')
+        .eq('cpf', cleanCpf)
+        .maybeSingle()
+      if (!profileRow || !(profileRow as any).password_hash) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+      const okPass = await bcrypt.compare(parsed.data.password, String((profileRow as any).password_hash))
+      if (!okPass) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+      const { data: affiliateRow } = await supabase
+        .from('affiliates')
+        .select('id, full_name, email, cpf, referral_code, is_active')
+        .eq('cpf', cleanCpf)
+        .single()
+      if (!affiliateRow || !(affiliateRow as any).is_active) return c.json({ error: 'Conta inativa ou não encontrada' }, 401)
+      authRow = {
+        affiliate_id: String((affiliateRow as any).id),
+        full_name: (affiliateRow as any).full_name,
+        email: (affiliateRow as any).email,
+        cpf: (affiliateRow as any).cpf,
+        referral_code: (affiliateRow as any).referral_code
+      }
+    }
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
     await supabase.from('affiliate_sessions').delete().eq('affiliate_id', String((authRow as any).affiliate_id))
@@ -1367,10 +1389,32 @@ app.post('/api/affiliate/login', async (c) => {
     const cleanCpf = parsed.data.cpf.replace(/\D/g, '')
     if (!validateCPF(cleanCpf)) return c.json({ error: 'CPF inválido' }, 422)
     const supabase = createSupabase()
-    const { data: authRow, error: rpcErr } = await supabase
+    let { data: authRow, error: rpcErr } = await supabase
       .rpc('login_affiliate', { p_cpf: cleanCpf, p_password: parsed.data.password })
       .single()
-    if (rpcErr || !authRow) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+    if (rpcErr || !authRow) {
+      const { data: profileRow } = await supabase
+        .from('user_profiles')
+        .select('id, password_hash')
+        .eq('cpf', cleanCpf)
+        .maybeSingle()
+      if (!profileRow || !(profileRow as any).password_hash) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+      const okPass = await bcrypt.compare(parsed.data.password, String((profileRow as any).password_hash))
+      if (!okPass) return c.json({ error: 'CPF ou senha inválidos' }, 401)
+      const { data: affiliateRow } = await supabase
+        .from('affiliates')
+        .select('id, full_name, email, cpf, referral_code, is_active')
+        .eq('cpf', cleanCpf)
+        .single()
+      if (!affiliateRow || !(affiliateRow as any).is_active) return c.json({ error: 'Conta inativa ou não encontrada' }, 401)
+      authRow = {
+        affiliate_id: String((affiliateRow as any).id),
+        full_name: (affiliateRow as any).full_name,
+        email: (affiliateRow as any).email,
+        cpf: (affiliateRow as any).cpf,
+        referral_code: (affiliateRow as any).referral_code
+      }
+    }
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
     await supabase.from('affiliate_sessions').delete().eq('affiliate_id', String((authRow as any).affiliate_id))
