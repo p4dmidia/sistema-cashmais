@@ -1344,9 +1344,14 @@ app.post('/affiliate/login', async (c) => {
     if (rpcErr || !authRow) return c.json({ error: 'CPF ou senha inválidos' }, 401)
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
-    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (authRow as any).affiliate_id)
-    const { error: insErr1 } = await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
-    if (insErr1) return c.json({ error: 'Erro ao criar sessão do afiliado' }, 500)
+    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', String((authRow as any).affiliate_id))
+    const { error: insErr1 } = await supabase
+      .from('affiliate_sessions')
+      .insert({ affiliate_id: String((authRow as any).affiliate_id), session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
+    if (insErr1) {
+      console.error('Erro ao salvar sessão no banco:', insErr1)
+      return c.json({ error: 'Erro ao criar sessão do afiliado' }, 500)
+    }
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     return c.json({ success: true, token: sessionToken, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
@@ -1368,9 +1373,14 @@ app.post('/api/affiliate/login', async (c) => {
     if (rpcErr || !authRow) return c.json({ error: 'CPF ou senha inválidos' }, 401)
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
-    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', (authRow as any).affiliate_id)
-    const { error: insErr2 } = await supabase.from('affiliate_sessions').insert({ affiliate_id: (authRow as any).affiliate_id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
-    if (insErr2) return c.json({ error: 'Erro ao criar sessão do afiliado' }, 500)
+    await supabase.from('affiliate_sessions').delete().eq('affiliate_id', String((authRow as any).affiliate_id))
+    const { error: insErr2 } = await supabase
+      .from('affiliate_sessions')
+      .insert({ affiliate_id: String((authRow as any).affiliate_id), session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
+    if (insErr2) {
+      console.error('Erro ao salvar sessão no banco:', insErr2)
+      return c.json({ error: 'Erro ao criar sessão do afiliado' }, 500)
+    }
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     return c.json({ success: true, token: sessionToken, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
@@ -1527,9 +1537,13 @@ app.post('/api/affiliate/register', async (c) => {
     }
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = getSessionExpiration()
-    await supabase
+    const { error: regSessErr } = await supabase
       .from('affiliate_sessions')
-      .insert({ affiliate_id: (newAffiliate as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
+      .insert({ affiliate_id: String((newAffiliate as any).id), session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
+    if (regSessErr) {
+      console.error('Erro ao salvar sessão no banco:', regSessErr)
+      return c.json({ error: 'Erro ao criar sessão do afiliado' }, 500)
+    }
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     debugLogs.push(`REGISTER_DONE affiliate=${(newAffiliate as any).id}`)
     return c.json({ success: true, affiliate: { id: (newAffiliate as any).id, full_name: (newAffiliate as any).full_name, email: (newAffiliate as any).email, referral_code: referralCode, customer_coupon: cleanCpf }, debug_info: debugLogs, versao_do_codigo: "VERSAO_CORRIGIDA_RPC_AGORA_VAI" })
@@ -1572,7 +1586,7 @@ app.get('/api/affiliate/me', async (c) => {
     const { data: sessionRow } = await supabase
       .from('affiliate_sessions')
       .select('affiliate_id, expires_at')
-      .eq('session_token', token)
+      .eq('session_token', String(token))
       .gt('expires_at', new Date().toISOString())
       .single()
     console.log('[AFFILIATE_ME] Raw sessionRow:', sessionRow)
