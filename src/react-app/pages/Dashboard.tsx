@@ -42,6 +42,7 @@ function Dashboard() {
       ]).finally(() => setLoading(false));
     } else if (!authLoading && !affiliateUser) {
       setLoading(false);
+      navigate('/login');
     }
   }, [affiliateUser, authLoading]);
 
