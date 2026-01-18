@@ -1065,7 +1065,7 @@ app.get('/api/admin/affiliates', async (c) => {
 
 app.patch('/api/admin/affiliates/:id', async (c) => {
   try {
-    const id = Number(c.req.param('id'))
+    const id = c.req.param('id')
     const body = await c.req.json()
     const supabase = createSupabase()
     const update: any = {}
@@ -1085,7 +1085,7 @@ app.patch('/api/admin/affiliates/:id', async (c) => {
 
 app.patch('/api/admin/affiliates/:id/toggle-status', async (c) => {
   try {
-    const id = Number(c.req.param('id'))
+    const id = c.req.param('id')
     const supabase = createSupabase()
     const { data: a } = await supabase.from('affiliates').select('id,is_active').eq('id', id).single()
     if (!a) return c.json({ error: 'Afiliado não encontrado' }, 404)
@@ -1101,7 +1101,7 @@ app.patch('/api/admin/affiliates/:id/toggle-status', async (c) => {
 
 app.delete('/api/admin/affiliates/:id', async (c) => {
   try {
-    const id = Number(c.req.param('id'))
+    const id = c.req.param('id')
     const supabase = createSupabase()
     const { data: a } = await supabase.from('affiliates').select('id,cpf').eq('id', id).single()
     if (!a) return c.json({ error: 'Afiliado não encontrado' }, 404)
@@ -1568,23 +1568,27 @@ app.get('/api/affiliate/me', async (c) => {
   if (!token) return c.json({ error: 'Token não enviado pelo navegador' }, 401)
   try {
     const supabase = createSupabase()
-    console.log('[AFFILIATE_ME] Query params:', { table: 'affiliate_sessions', where: { session_token: token, expires_at_gt: new Date().toISOString(), affiliates_is_active: true } })
-    const { data: sessionData } = await supabase
+    console.log('[AFFILIATE_ME] Query params:', { table: 'affiliate_sessions', where: { session_token: token, expires_at_gt: new Date().toISOString() } })
+    const { data: sessionRow } = await supabase
       .from('affiliate_sessions')
-      .select('affiliate_id, affiliates!inner(id, full_name, cpf, email, phone, referral_code, sponsor_id, is_verified, created_at, last_access_at)')
+      .select('affiliate_id, expires_at')
       .eq('session_token', token)
       .gt('expires_at', new Date().toISOString())
-      .eq('affiliates.is_active', true)
       .single()
-    console.log('[AFFILIATE_ME] Raw sessionData:', sessionData)
-    if (!sessionData) return c.json({ error: 'Sessão não encontrada no banco', token_recebido: (token || '').slice(0, 10) + '...' }, 401)
-    const affiliate = (sessionData as any).affiliates
-    if (!affiliate || !affiliate.id) {
-      console.log('[AFFILIATE_ME] Sessão existe mas afiliado não encontrado para affiliate_id=', (sessionData as any)?.affiliate_id)
-      return c.json({ error: 'Sessão órfã: ID do afiliado não existe', id_na_sessao: (sessionData as any)?.affiliate_id }, 401)
-    }
-    await supabase.from('affiliates').update({ last_access_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', affiliate.id)
-    return c.json({ id: affiliate.id, full_name: affiliate.full_name, cpf: affiliate.cpf, email: affiliate.email, whatsapp: (affiliate as any).phone, referral_code: affiliate.referral_code, customer_coupon: affiliate.cpf, sponsor_id: affiliate.sponsor_id, is_verified: Boolean(affiliate.is_verified), created_at: affiliate.created_at, last_access_at: affiliate.last_access_at })
+    console.log('[AFFILIATE_ME] Raw sessionRow:', sessionRow)
+    if (!sessionRow) return c.json({ error: 'Sessão não encontrada no banco', token_recebido: (token || '').slice(0, 10) + '...' }, 401)
+    const affId = String((sessionRow as any).affiliate_id || '')
+    if (!affId) return c.json({ error: 'Sessão órfã: ID do afiliado vazio', id_na_sessao: affId }, 401)
+    const { data: affiliate } = await supabase
+      .from('affiliates')
+      .select('id, full_name, cpf, email, phone, referral_code, sponsor_id, is_verified, created_at, last_access_at, is_active')
+      .eq('id', affId)
+      .single()
+    console.log('[AFFILIATE_ME] Raw affiliate:', affiliate)
+    if (!affiliate) return c.json({ error: 'Sessão órfã: ID do afiliado não existe', id_na_sessao: affId }, 401)
+    if (!(affiliate as any).is_active) return c.json({ error: 'Afiliado inativo', id_na_sessao: affId }, 401)
+    await supabase.from('affiliates').update({ last_access_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', (affiliate as any).id)
+    return c.json({ id: (affiliate as any).id, full_name: (affiliate as any).full_name, cpf: (affiliate as any).cpf, email: (affiliate as any).email, whatsapp: (affiliate as any).phone, referral_code: (affiliate as any).referral_code, customer_coupon: (affiliate as any).cpf, sponsor_id: (affiliate as any).sponsor_id, is_verified: Boolean((affiliate as any).is_verified), created_at: (affiliate as any).created_at, last_access_at: (affiliate as any).last_access_at })
   } catch (e) {
     console.log('[AFFILIATE_ME] Exception:', e)
     return c.json({ error: 'Erro interno do servidor', debug: String(e) }, 500)
