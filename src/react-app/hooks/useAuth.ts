@@ -167,11 +167,11 @@ export function useAffiliateAuth() {
     try {
       console.log('[AFFILIATE_AUTH] Checking authentication...');
       const response = await authenticatedFetch('/api/affiliate/me');
-
       if (response.ok) {
         const data = await response.json();
         console.log('[AFFILIATE_AUTH] User authenticated:', data.email);
         setUser(data);
+      } else {
         console.log('[AFFILIATE_AUTH] No valid session, status:', response.status);
         try {
           const cached = localStorage.getItem('affiliate_user');
@@ -182,7 +182,6 @@ export function useAffiliateAuth() {
           }
         } catch {}
         setUser(null);
-        setUser(null);
       }
     } catch (error) {
       console.error('[AFFILIATE_AUTH] Auth check error:', error);
@@ -190,6 +189,7 @@ export function useAffiliateAuth() {
     } finally {
       setLoading(false);
     }
+  };
 
   const logout = async () => {
     try {
