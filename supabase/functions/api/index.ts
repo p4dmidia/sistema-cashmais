@@ -1505,6 +1505,7 @@ app.post('/api/affiliate/register', async (c) => {
     }
     const profileId = await ensureProfileExists(supabase, cleanCpf, (newAffiliate as any).id as number)
     if (!profileId) return c.json({ error: 'Erro interno do servidor' }, 500)
+    await supabase.from('user_profiles').update({ password_hash: passwordHash, updated_at: nowIso }).eq('id', profileId)
     if (profileId) {
       const { data: existingCoupon } = await supabase
         .from('customer_coupons')

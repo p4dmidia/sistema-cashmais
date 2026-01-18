@@ -213,65 +213,7 @@ export function setupAuthInterceptor() {
       headers.set('Authorization', `Bearer ${affToken}`);
     }
     const response = await originalFetch(input, { ...(init || {}), headers });
-    
-    if (response.status === 401) {
-      // Determine which login page to redirect to based on current path
-      if (window.location.pathname.includes('/empresa/')) {
-        if (!window.location.pathname.includes('/empresa/login')) {
-          window.location.href = '/empresa/login';
-        }
-      } else {
-        // For affiliate routes or general routes
-        if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/cadastro')) {
-          window.location.href = '/login';
-        }
-      }
-    }
-    
-    if (response.status === 403) {
-      // Handle forbidden access - redirect based on role
-      try {
-        // Try to get current user role - check company first
-        const authResponse = await originalFetch('/api/empresa/me', { credentials: 'include' });
-        if (authResponse.ok) {
-          // Company user hitting forbidden endpoint - something's wrong, redirect to dashboard
-          window.location.href = '/empresa/dashboard';
-          return response;
-        }
-        
-        // Try cashier auth
-        const cashierResponse = await originalFetch('/api/caixa/me', { credentials: 'include' });
-        if (cashierResponse.ok) {
-          // Cashier trying to access company area - redirect to cashier page
-          window.location.href = '/empresa/caixa';
-          return response;
-        }
-        
-        // Try affiliate auth
-        const affiliateResponse = await originalFetch('/api/affiliate/me', { credentials: 'include' });
-        if (affiliateResponse.ok) {
-          // Affiliate user hitting forbidden endpoint - redirect to dashboard
-          console.log('[AUTH_INTERCEPTOR] Affiliate 403 - redirecting to dashboard');
-          window.location.href = '/dashboard';
-          return response;
-        }
-        
-        // No valid session - redirect to appropriate login
-        if (window.location.pathname.includes('/empresa/')) {
-          window.location.href = '/empresa/login';
-        } else {
-          window.location.href = '/login';
-        }
-      } catch {
-        // If all fails, redirect to appropriate login
-        if (window.location.pathname.includes('/empresa/')) {
-          window.location.href = '/empresa/login';
-        } else {
-          window.location.href = '/login';
-        }
-      }
-    }
-    
+
     return response;
   };
 }
