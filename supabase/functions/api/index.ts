@@ -1619,10 +1619,11 @@ app.get('/affiliate/me', async (c) => {
 })
 
 app.get('/api/affiliate/me', async (c) => {
+  const xSession = c.req.header('x-session-token') || ''
   const cookieToken = getCookie(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
-  const token = cookieToken || bearerToken
+  const token = xSession || cookieToken || bearerToken
   console.log('[AFFILIATE_ME] token source:', cookieToken ? 'cookie' : (bearerToken ? 'header' : 'none'), 'token=', token)
   if (!token) return c.json({ error: 'Token não enviado pelo navegador' }, 401)
   try {
@@ -1679,10 +1680,11 @@ app.post('/api/affiliate/logout', async (c) => {
 })
 
 app.get('/api/users/balance', async (c) => {
+  const xSession = c.req.header('x-session-token') || ''
   const cookieToken = getCookie(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
-  const token = cookieToken || bearerToken
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2029,10 +2031,11 @@ app.post('/api/affiliate/settings', async (c) => {
 })
 
 app.get('/api/transactions', async (c) => {
+  const xSession = c.req.header('x-session-token') || ''
   const cookieToken = getCookie(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
-  const token = cookieToken || bearerToken
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2887,10 +2890,11 @@ app.post('/api/empresa/registrar', async (c) => {
 })
 
 app.get('/api/network/members', async (c) => {
+  const xSession = c.req.header('x-session-token') || ''
   const cookieToken = getCookie(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
-  const token = cookieToken || bearerToken
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2932,10 +2936,11 @@ app.get('/api/network/members', async (c) => {
 })
 
 app.get('/api/network/stats', async (c) => {
+  const xSession = c.req.header('x-session-token') || ''
   const cookieToken = getCookie(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
-  const token = cookieToken || bearerToken
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const supabase = createSupabase()
@@ -3036,10 +3041,11 @@ app.get('/api/affiliate/network/preference', async (c) => {
 })
 
 app.get('/api/affiliate/network/placement-preview', async (c) => {
+  const xSession = c.req.header('x-session-token') || ''
   const cookieToken = getCookie(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
-  const token = cookieToken || bearerToken
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const supabase = createSupabase()
@@ -3067,10 +3073,11 @@ app.get('/api/affiliate/network/placement-preview', async (c) => {
 })
 
 app.put('/api/affiliate/network/preference', async (c) => {
+  const xSession = c.req.header('x-session-token') || ''
   const cookieToken = getCookie(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
-  const token = cookieToken || bearerToken
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const body = await c.req.json()
@@ -3109,10 +3116,11 @@ app.put('/api/affiliate/network/preference', async (c) => {
 })
 
 app.get('/api/affiliate/network/tree', async (c) => {
+  const xSession = c.req.header('x-session-token') || ''
   const cookieToken = getCookie(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
-  const token = cookieToken || bearerToken
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const supabase = createSupabase()

@@ -15,10 +15,13 @@ export default async function handler(req, res) {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
       process.env.VITE_SUPABASE_ANON_KEY ||
       ''
+    const clientAuth = req.headers['authorization'] || ''
+    const clientToken = clientAuth.toLowerCase().startsWith('bearer ') ? clientAuth.slice(7).trim() : ''
     const headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       ...(apikey ? { apikey, Authorization: `Bearer ${apikey}` } : {}),
+      ...(clientToken ? { 'x-session-token': clientToken } : {}),
     }
     const init = {
       method: req.method,
@@ -41,4 +44,3 @@ export default async function handler(req, res) {
     return res.status(502).json({ error: 'Proxy error', details: String(e) })
   }
 }
-
