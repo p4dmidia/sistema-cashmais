@@ -47,13 +47,8 @@ function Dashboard() {
 
   const fetchBalance = async () => {
     try {
-      const headers: Record<string, string> = {};
-      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
-      if (anon) headers['Authorization'] = `Bearer ${anon}`;
-      const response = await fetch('/api/users/balance', {
-        credentials: 'include',
-        headers,
-      });
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/users/balance');
       if (response.ok) {
         const data = await response.json();
         setBalance(data);
@@ -65,13 +60,8 @@ function Dashboard() {
 
   const fetchNetworkStats = async () => {
     try {
-      const headers: Record<string, string> = {};
-      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
-      if (anon) headers['Authorization'] = `Bearer ${anon}`;
-      const response = await fetch('/api/network/stats', {
-        credentials: 'include',
-        headers,
-      });
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/network/stats');
       if (response.ok) {
         const data = await response.json();
         setNetworkStats(data);

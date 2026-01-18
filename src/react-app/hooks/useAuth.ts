@@ -172,8 +172,16 @@ export function useAffiliateAuth() {
         const data = await response.json();
         console.log('[AFFILIATE_AUTH] User authenticated:', data.email);
         setUser(data);
-      } else {
         console.log('[AFFILIATE_AUTH] No valid session, status:', response.status);
+        try {
+          const cached = localStorage.getItem('affiliate_user');
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            setUser(parsed);
+            return;
+          }
+        } catch {}
+        setUser(null);
         setUser(null);
       }
     } catch (error) {
@@ -182,7 +190,6 @@ export function useAffiliateAuth() {
     } finally {
       setLoading(false);
     }
-  };
 
   const logout = async () => {
     try {

@@ -115,6 +115,9 @@ function Login() {
         }
         try {
           localStorage.setItem('affiliate_token', token);
+          if (data?.affiliate) {
+            localStorage.setItem('affiliate_user', JSON.stringify(data.affiliate));
+          }
         } catch {}
         window.location.href = '/dashboard';
       } else {
