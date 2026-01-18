@@ -166,6 +166,13 @@ export function useAffiliateAuth() {
   const checkAuth = async () => {
     try {
       console.log('[AFFILIATE_AUTH] Checking authentication...');
+      const token = localStorage.getItem('affiliate_token');
+      if (!token) {
+        console.log('[AFFILIATE_AUTH] No token in localStorage, setting unauthenticated');
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       const response = await authenticatedFetch('/api/affiliate/me');
       if (response.ok) {
         const data = await response.json();
