@@ -1350,7 +1350,7 @@ app.post('/affiliate/login', async (c) => {
       .insert({ affiliate_id: String((authRow as any).affiliate_id), session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
     if (insErr1) {
       console.error('Erro ao salvar sessão no banco:', insErr1)
-      return c.json({ error: 'Erro ao criar sessão do afiliado' }, 500)
+      return c.json({ error: 'Erro ao criar sessão do afiliado', details: insErr1 }, 500)
     }
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     return c.json({ success: true, token: sessionToken, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
@@ -1379,7 +1379,7 @@ app.post('/api/affiliate/login', async (c) => {
       .insert({ affiliate_id: String((authRow as any).affiliate_id), session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
     if (insErr2) {
       console.error('Erro ao salvar sessão no banco:', insErr2)
-      return c.json({ error: 'Erro ao criar sessão do afiliado' }, 500)
+      return c.json({ error: 'Erro ao criar sessão do afiliado', details: insErr2 }, 500)
     }
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     return c.json({ success: true, token: sessionToken, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
@@ -1542,7 +1542,7 @@ app.post('/api/affiliate/register', async (c) => {
       .insert({ affiliate_id: String((newAffiliate as any).id), session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
     if (regSessErr) {
       console.error('Erro ao salvar sessão no banco:', regSessErr)
-      return c.json({ error: 'Erro ao criar sessão do afiliado' }, 500)
+      return c.json({ error: 'Erro ao criar sessão do afiliado', details: regSessErr }, 500)
     }
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     debugLogs.push(`REGISTER_DONE affiliate=${(newAffiliate as any).id}`)
