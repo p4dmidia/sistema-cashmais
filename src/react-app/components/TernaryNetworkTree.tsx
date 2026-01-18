@@ -203,9 +203,8 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
 
   const fetchNetworkTree = async () => {
     try {
-      const response = await fetch('/api/affiliate/network/tree?max_depth=5', {
-        credentials: 'include',
-      });
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/affiliate/network/tree?max_depth=5');
 
       if (response.ok) {
         const data = await response.json();

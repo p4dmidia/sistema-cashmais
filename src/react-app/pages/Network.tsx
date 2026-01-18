@@ -75,9 +75,8 @@ function NetworkPage() {
 
   const fetchNetworkMembers = async () => {
     try {
-      const response = await fetch('/api/network/members', {
-        credentials: 'include',
-      });
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/network/members');
       if (response.ok) {
         const data = await response.json();
         setMembers(data);
@@ -89,9 +88,8 @@ function NetworkPage() {
 
   const fetchNetworkStats = async () => {
     try {
-      const response = await fetch('/api/network/stats', {
-        credentials: 'include',
-      });
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/network/stats');
       if (response.ok) {
         const data = await response.json();
         setStats(data);
@@ -103,9 +101,8 @@ function NetworkPage() {
 
   const fetchNetworkPreference = async () => {
     try {
-      const response = await fetch('/api/affiliate/network/preference', {
-        credentials: 'include',
-      });
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/affiliate/network/preference');
       if (response.ok) {
         const data = await response.json();
         console.log('[NETWORK] Fetched preference from API:', {
@@ -115,7 +112,7 @@ function NetworkPage() {
         })
         setPreference(data.preference);
         try {
-          const prev = await fetch('/api/affiliate/network/placement-preview', { credentials: 'include' })
+          const prev = await authenticatedFetch('/api/affiliate/network/placement-preview')
           if (prev.ok) {
             const pv = await prev.json()
             console.log('[NETWORK] Placement preview:', pv)
@@ -133,12 +130,12 @@ function NetworkPage() {
     console.log('[NETWORK] Updating preference to:', newPreference)
     setUpdatingPreference(true);
     try {
-      const response = await fetch('/api/affiliate/network/preference', {
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/affiliate/network/preference', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        credentials: 'include',
         body: JSON.stringify({ preference: newPreference }),
       });
 
