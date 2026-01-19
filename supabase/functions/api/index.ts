@@ -3268,7 +3268,6 @@ app.get('/api/affiliate/network/tree', async (c) => {
         .from('affiliates')
         .select('id', { count: 'exact', head: true })
         .eq('sponsor_id', String(affiliateId))
-        .eq('is_active', true)
       const node: any = {
         id: String(affiliateId),
         name: (aff as any)?.full_name || (aff as any)?.cpf || 'Afiliado',
@@ -3286,7 +3285,6 @@ app.get('/api/affiliate/network/tree', async (c) => {
         .from('affiliates')
         .select('id, position_slot, created_at')
         .eq('sponsor_id', String(affiliateId))
-        .eq('is_active', true)
         .order('created_at', { ascending: true })
       const slots: (string | null)[] = [null, null, null]
       for (const m of direct || []) {
