@@ -1648,7 +1648,7 @@ app.get('/api/affiliate/me', async (c) => {
       .gt('expires_at', new Date().toISOString())
       .single()
     console.log('[AFFILIATE_ME] Raw sessionRow:', sessionRow)
-    if (!sessionRow) return c.json({ error: 'Sessão não encontrada no banco', token_recebido: (token || '').slice(0, 10) + '...' }, 401)
+    if (!sessionRow) return c.json({ error: 'Sessão não encontrada', debug_token_recebido: token }, 401)
     const affId = String((sessionRow as any).affiliate_id || '')
     if (!affId) return c.json({ error: 'Sessão órfã: ID do afiliado vazio', id_na_sessao: affId }, 401)
     const { data: affiliate } = await supabase

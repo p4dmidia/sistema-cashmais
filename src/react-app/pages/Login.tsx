@@ -105,6 +105,7 @@ function Login() {
       
       if (response.ok) {
         const token = data?.token;
+        console.log('TOKEN RECEBIDO NO LOGIN:', token);
         if (!token) {
           setErrors({ general: 'Falha ao receber token de sessão. Tente novamente.' });
           setIsLoading(false);
