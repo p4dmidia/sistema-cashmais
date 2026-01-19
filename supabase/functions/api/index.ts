@@ -125,8 +125,8 @@ async function getOrCreateAffiliateProfileSupabase(client: any, affiliateId: num
   return newProfile || null
 }
 
-async function ensureUserProfileExists(client: any, affiliateId: number, cpf: string): Promise<number | null> {
-  const mochaUserId = `affiliate_${affiliateId}`
+async function ensureUserProfileExists(client: any, affiliateId: string | number, cpf: string): Promise<number | null> {
+  const mochaUserId = `affiliate_${String(affiliateId)}`
   const { data: byMocha } = await client
     .from('user_profiles')
     .select('id, mocha_user_id, cpf')
@@ -155,7 +155,7 @@ async function ensureUserProfileExists(client: any, affiliateId: number, cpf: st
   return ((created as any)?.id ?? null) as number | null
 }
 
-async function ensureProfileExists(client: any, cpf: string, affiliateId: number): Promise<number | null> {
+async function ensureProfileExists(client: any, cpf: string, affiliateId: string | number): Promise<number | null> {
   return await ensureUserProfileExists(client, affiliateId, cpf)
 }
 
@@ -253,7 +253,7 @@ app.post('/admin/login', async (c) => {
       .insert({ admin_user_id: (adminUser as any).id, action: 'LOGIN', entity_type: 'admin_session' })
     return c.json({ success: true, admin: { id: (adminUser as any).id, username: (adminUser as any).username, email: (adminUser as any).email, full_name: (adminUser as any).full_name } })
   } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ error: 'Erro interno do servidor', details: (e as any)?.message || (e as any)?.description || JSON.stringify(e) }, 500)
   }
 })
 
@@ -1559,7 +1559,7 @@ app.post('/api/affiliate/register', async (c) => {
         .eq('id', (newAffiliate as any).id)
       debugLogs.push(`FIX_UPDATE slot=${positionSlot} err=${fixErr ? String(fixErr) : 'none'}`)
     }
-    const profileId = await ensureProfileExists(supabase, cleanCpf, (newAffiliate as any).id as number)
+    const profileId = await ensureProfileExists(supabase, cleanCpf, String((newAffiliate as any).id))
     if (!profileId) return c.json({ error: 'Erro interno do servidor' }, 500)
     await supabase.from('user_profiles').update({ password_hash: passwordHash, updated_at: nowIso }).eq('id', profileId)
     if (profileId) {
@@ -1761,7 +1761,7 @@ app.get('/api/users/balance', async (c) => {
       baseAvailable = Math.round(purchaseCashback * 100) / 100
       baseFrozen = 0
     }
-    const profileId = await ensureProfileExists(supabase, affiliate.cpf as string, affiliate.id as number)
+    const profileId = await ensureProfileExists(supabase, affiliate.cpf as string, String(affiliate.id))
     const profile = { id: profileId }
     const { data: withdrawalData } = await supabase
       .from('withdrawals')
