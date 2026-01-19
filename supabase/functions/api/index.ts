@@ -1700,22 +1700,23 @@ app.get('/api/affiliate/me', async (c) => {
     const affId = String((sessionRow as any).affiliate_id || '')
     if (!affId) return c.json({ error: 'Sessão órfã: ID do afiliado vazio', id_na_sessao: affId }, 401)
     console.log('[AFFILIATE_ME] Searching affiliate by id:', affId)
-    // Flexible search: try by id or user_id if exists
-    let { data: affiliate, error: affErr } = await supabase
+    // First try strict by id with full row
+    let { data: affiliate, error: affErr1 } = await supabase
       .from('affiliates')
-      .select('id, full_name, cpf, email, phone, referral_code, sponsor_id, is_verified, created_at, last_access_at')
-      .or(`id.eq.${affId},user_id.eq.${affId}`)
+      .select('*')
+      .eq('id', affId)
       .maybeSingle()
-    if (affErr) {
-      console.log('[AFFILIATE_ME] Primary search error:', affErr)
-      const fallback = await supabase
+    console.log('[AFFILIATE_ME] Strict id search result:', affiliate, 'error:', affErr1)
+    if (!affiliate) {
+      // Flexible search: try id or user_id
+      const { data: flex, error: affErr2 } = await supabase
         .from('affiliates')
-        .select('id, full_name, cpf, email, phone, referral_code, sponsor_id, is_verified, created_at, last_access_at')
-        .eq('id', affId)
+        .select('*')
+        .or(`id.eq.${affId},user_id.eq.${affId}`)
         .maybeSingle()
-      affiliate = fallback.data
+      console.log('[AFFILIATE_ME] Flex search result:', flex, 'error:', affErr2)
+      affiliate = flex as any
     }
-    console.log('[AFFILIATE_ME] Raw affiliate result:', affiliate, 'queryId=', affId)
     if (!affiliate) return c.json({ error: 'Sessão órfã: ID do afiliado não existe', id_na_sessao: affId }, 401)
     await supabase.from('affiliates').update({ last_access_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', (affiliate as any).id)
     return c.json({ id: (affiliate as any).id, full_name: (affiliate as any).full_name, cpf: (affiliate as any).cpf, email: (affiliate as any).email, whatsapp: (affiliate as any).phone, referral_code: (affiliate as any).referral_code, customer_coupon: (affiliate as any).cpf, sponsor_id: (affiliate as any).sponsor_id, is_verified: Boolean((affiliate as any).is_verified), created_at: (affiliate as any).created_at, last_access_at: (affiliate as any).last_access_at })
