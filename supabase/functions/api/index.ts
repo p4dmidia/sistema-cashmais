@@ -1802,14 +1802,18 @@ app.get('/api/users/balance', async (c) => {
 })
 
 app.get('/api/withdrawals', async (c) => {
-  const token = getCookie(c, 'affiliate_session')
+  const xSession = c.req.header('x-session-token') || ''
+  const cookieToken = getCookie(c, 'affiliate_session')
+  const authHeader = c.req.header('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const supabase = createSupabase()
     const { data: sessionData } = await supabase
       .from('affiliate_sessions')
       .select('affiliate_id, affiliates!inner(id)')
-      .eq('session_token', token)
+      .eq('session_token', String(token))
       .gt('expires_at', new Date().toISOString())
       .eq('affiliates.is_active', true)
       .single()
@@ -1841,7 +1845,11 @@ app.get('/api/withdrawals', async (c) => {
 })
 
 app.post('/api/withdrawals/request', async (c) => {
-  const token = getCookie(c, 'affiliate_session')
+  const xSession = c.req.header('x-session-token') || ''
+  const cookieToken = getCookie(c, 'affiliate_session')
+  const authHeader = c.req.header('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const body = await c.req.json()
@@ -1851,11 +1859,11 @@ app.post('/api/withdrawals/request', async (c) => {
     const { data: sessionData } = await supabase
       .from('affiliate_sessions')
       .select('affiliate_id, affiliates!inner(id, cpf)')
-      .eq('session_token', token)
+      .eq('session_token', String(token))
       .gt('expires_at', new Date().toISOString())
       .single()
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
-    const affiliateId = (sessionData as any).affiliates.id as number
+    const affiliateId = (sessionData as any).affiliates.id
     const { data: profileWithSettings } = await supabase
       .from('user_profiles')
       .select('id, user_settings: user_settings!inner(available_balance, pix_key)')
@@ -1888,7 +1896,11 @@ app.post('/api/withdrawals/request', async (c) => {
   }
 })
 app.post('/api/withdrawals', async (c) => {
-  const token = getCookie(c, 'affiliate_session')
+  const xSession = c.req.header('x-session-token') || ''
+  const cookieToken = getCookie(c, 'affiliate_session')
+  const authHeader = c.req.header('authorization') || ''
+  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
+  const token = xSession || cookieToken || bearerToken
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const body = await c.req.json()
@@ -1898,12 +1910,12 @@ app.post('/api/withdrawals', async (c) => {
     const { data: sessionData } = await supabase
       .from('affiliate_sessions')
       .select('affiliate_id, affiliates!inner(id)')
-      .eq('session_token', token)
+      .eq('session_token', String(token))
       .gt('expires_at', new Date().toISOString())
       .eq('affiliates.is_active', true)
       .single()
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
-    const affiliateId = (sessionData as any).affiliates.id as number
+    const affiliateId = (sessionData as any).affiliates.id
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('id')
@@ -2030,9 +2042,10 @@ app.post('/api/affiliate/settings', async (c) => {
       .single()
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
     const affiliate = (sessionData as any).affiliates
+    const phoneClean = String((body as any).phone || '').replace(/\D/g, '')
     await supabase
       .from('affiliates')
-      .update({ full_name: body.full_name, phone: body.phone, updated_at: new Date().toISOString() })
+      .update({ full_name: (body as any).full_name || null, phone: phoneClean || null, updated_at: new Date().toISOString() })
       .eq('id', affiliate.id)
     let { data: profile } = await supabase
       .from('user_profiles')
@@ -2047,14 +2060,14 @@ app.post('/api/affiliate/settings', async (c) => {
         .single()
       profile = upsertedProfile
     }
-    const normalizedPref = normalizeLegPreference(body.leg_preference)
+    const normalizedPref = normalizeLegPreference((body as any).leg_preference)
     const { error: upErr } = await supabase
       .from('user_settings')
-      .upsert({ user_id: (profile as any).id, pix_key: body.pix_key, leg_preference: normalizedPref, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
-    if (upErr) return c.json({ error: 'Erro interno do servidor' }, 500)
+      .upsert({ user_id: (profile as any).id, pix_key: (body as any).pix_key || null, leg_preference: normalizedPref, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+    if (upErr) return c.json({ error: 'Erro ao salvar configurações', details: upErr }, 500)
     return c.json({ success: true })
   } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ error: 'Erro interno do servidor', details: String(e) }, 500)
   }
 })
 
