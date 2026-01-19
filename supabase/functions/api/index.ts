@@ -3257,21 +3257,21 @@ app.get('/api/affiliate/network/tree', async (c) => {
       .single()
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
     const root = (sessionData as any).affiliates
-    async function buildNode(affiliateId: number, level: number): Promise<any> {
+    async function buildNode(affiliateId: string, level: number): Promise<any> {
       const { data: aff } = await supabase
         .from('affiliates')
         .select('id, full_name, cpf, created_at, last_access_at, position_slot')
-        .eq('id', affiliateId)
+        .eq('id', String(affiliateId))
         .single()
       const isActive = (aff as any)?.last_access_at ? new Date((aff as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
       const { count: directCount } = await supabase
         .from('affiliates')
         .select('id', { count: 'exact', head: true })
-        .eq('sponsor_id', affiliateId)
+        .eq('sponsor_id', String(affiliateId))
         .eq('is_active', true)
       const node: any = {
-        id: affiliateId.toString(),
-        name: (aff as any)?.full_name || 'Afiliado',
+        id: String(affiliateId),
+        name: (aff as any)?.full_name || (aff as any)?.cpf || 'Afiliado',
         coupon: (aff as any)?.cpf || '',
         active: isActive,
         level,
@@ -3285,29 +3285,29 @@ app.get('/api/affiliate/network/tree', async (c) => {
       const { data: direct } = await supabase
         .from('affiliates')
         .select('id, position_slot, created_at')
-        .eq('sponsor_id', affiliateId)
+        .eq('sponsor_id', String(affiliateId))
         .eq('is_active', true)
         .order('created_at', { ascending: true })
-      const slots: (number | null)[] = [null, null, null]
+      const slots: (string | null)[] = [null, null, null]
       for (const m of direct || []) {
         const ps = (m as any).position_slot
         if ((ps === 0 || ps === 1 || ps === 2) && slots[ps] === null) {
-          slots[ps] = (m as any).id
+          slots[ps] = String((m as any).id)
         } else {
           for (let i = 0; i < 3; i++) {
-            if (slots[i] === null) { slots[i] = (m as any).id; break }
+            if (slots[i] === null) { slots[i] = String((m as any).id); break }
           }
         }
       }
       for (let i = 0; i < 3; i++) {
         if (slots[i] !== null) {
-          const childNode = await buildNode(slots[i] as number, level + 1)
+          const childNode = await buildNode(slots[i] as string, level + 1)
           node.children.push(childNode)
         }
       }
       return node
     }
-    const tree = await buildNode(root.id, 0)
+    const tree = await buildNode(String(root.id), 0)
     return c.json(tree)
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
