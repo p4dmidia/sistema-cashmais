@@ -2043,10 +2043,15 @@ app.post('/api/affiliate/settings', async (c) => {
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
     const affiliate = (sessionData as any).affiliates
     const phoneClean = String((body as any).phone || '').replace(/\D/g, '')
-    await supabase
+    console.log('[AFFILIATE_SETTINGS] Update payload:', { affiliateId: (affiliate as any)?.id, update: { full_name: (body as any).full_name || null, phone: phoneClean || null } })
+    const { error: updErr } = await supabase
       .from('affiliates')
       .update({ full_name: (body as any).full_name || null, phone: phoneClean || null, updated_at: new Date().toISOString() })
-      .eq('id', affiliate.id)
+      .eq('id', String((affiliate as any)?.id))
+    if (updErr) {
+      console.log('[AFFILIATE_SETTINGS] Update error:', updErr)
+      return c.json({ error: 'Erro ao atualizar afiliado', details: String(updErr) }, 500)
+    }
     let { data: profile } = await supabase
       .from('user_profiles')
       .select('id')
