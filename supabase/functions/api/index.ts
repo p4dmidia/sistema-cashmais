@@ -2043,14 +2043,30 @@ app.post('/api/affiliate/settings', async (c) => {
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
     const affiliate = (sessionData as any).affiliates
     const phoneClean = String((body as any).phone || '').replace(/\D/g, '')
-    console.log('[AFFILIATE_SETTINGS] Update payload:', { affiliateId: (affiliate as any)?.id, update: { full_name: (body as any).full_name || null, phone: phoneClean || null } })
-    const { error: updErr } = await supabase
-      .from('affiliates')
-      .update({ full_name: (body as any).full_name || null, phone: phoneClean || null, updated_at: new Date().toISOString() })
-      .eq('id', String((affiliate as any)?.id))
-    if (updErr) {
-      console.log('[AFFILIATE_SETTINGS] Update error:', updErr)
-      return c.json({ error: 'Erro ao atualizar afiliado', details: String(updErr) }, 500)
+    const allowedData: any = {
+      full_name: (body as any).full_name,
+      phone: phoneClean,
+    }
+    Object.keys(allowedData).forEach((k) => {
+      if (allowedData[k] === undefined) delete allowedData[k]
+    })
+    // never allow updating sensitive/immutable fields
+    delete (allowedData as any).id
+    delete (allowedData as any).email
+    delete (allowedData as any).user_id
+    delete (allowedData as any).created_at
+    delete (allowedData as any).referral_code
+    allowedData.updated_at = new Date().toISOString()
+    console.log('[AFFILIATE_SETTINGS] Dados sendo enviados ao Supabase:', allowedData, 'affiliateId=', String((affiliate as any)?.id))
+    if (Object.keys(allowedData).length > 0) {
+      const { error: updErr } = await supabase
+        .from('affiliates')
+        .update(allowedData)
+        .eq('id', String((affiliate as any)?.id))
+      if (updErr) {
+        console.log('[AFFILIATE_SETTINGS] Update error:', updErr)
+        return c.json({ error: 'Erro ao atualizar', details: (updErr as any)?.message || (updErr as any)?.description || JSON.stringify(updErr) }, 500)
+      }
     }
     let { data: profile } = await supabase
       .from('user_profiles')
@@ -2069,10 +2085,10 @@ app.post('/api/affiliate/settings', async (c) => {
     const { error: upErr } = await supabase
       .from('user_settings')
       .upsert({ user_id: (profile as any).id, pix_key: (body as any).pix_key || null, leg_preference: normalizedPref, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
-    if (upErr) return c.json({ error: 'Erro ao salvar configurações', details: upErr }, 500)
+    if (upErr) return c.json({ error: 'Erro ao salvar configurações', details: (upErr as any)?.message || (upErr as any)?.description || JSON.stringify(upErr) }, 500)
     return c.json({ success: true })
   } catch (e) {
-    return c.json({ error: 'Erro interno do servidor', details: String(e) }, 500)
+    return c.json({ error: 'Erro interno do servidor', details: (e as any)?.message || (e as any)?.description || JSON.stringify(e) }, 500)
   }
 })
 
