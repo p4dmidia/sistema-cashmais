@@ -1690,6 +1690,7 @@ app.get('/api/affiliate/me', async (c) => {
     const supabase = createSupabase()
     console.log('[AFFILIATE_ME] Query params:', { table: 'affiliate_sessions', where: { session_token: token, expires_at_gt: new Date().toISOString() } })
     const { data: sessionRow } = await supabase
+      .schema('public')
       .from('affiliate_sessions')
       .select('affiliate_id, expires_at')
       .eq('session_token', String(token))
@@ -1700,16 +1701,16 @@ app.get('/api/affiliate/me', async (c) => {
     const affId = String((sessionRow as any).affiliate_id || '')
     if (!affId) return c.json({ error: 'Sessão órfã: ID do afiliado vazio', id_na_sessao: affId }, 401)
     console.log('[AFFILIATE_ME] Searching affiliate by id:', affId)
-    // First try strict by id with full row
     let { data: affiliate, error: affErr1 } = await supabase
+      .schema('public')
       .from('affiliates')
       .select('*')
       .eq('id', affId)
       .maybeSingle()
     console.log('[AFFILIATE_ME] Strict id search result:', affiliate, 'error:', affErr1)
     if (!affiliate) {
-      // Flexible search: try id or user_id
       const { data: flex, error: affErr2 } = await supabase
+        .schema('public')
         .from('affiliates')
         .select('*')
         .or(`id.eq.${affId},user_id.eq.${affId}`)
