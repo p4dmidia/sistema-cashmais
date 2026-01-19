@@ -1699,14 +1699,24 @@ app.get('/api/affiliate/me', async (c) => {
     if (!sessionRow) return c.json({ error: 'Sessão não encontrada', debug_token_recebido: token }, 401)
     const affId = String((sessionRow as any).affiliate_id || '')
     if (!affId) return c.json({ error: 'Sessão órfã: ID do afiliado vazio', id_na_sessao: affId }, 401)
-    const { data: affiliate } = await supabase
+    console.log('[AFFILIATE_ME] Searching affiliate by id:', affId)
+    // Flexible search: try by id or user_id if exists
+    let { data: affiliate, error: affErr } = await supabase
       .from('affiliates')
-      .select('id, full_name, cpf, email, phone, referral_code, sponsor_id, is_verified, created_at, last_access_at, is_active')
-      .eq('id', affId)
-      .single()
-    console.log('[AFFILIATE_ME] Raw affiliate:', affiliate)
+      .select('id, full_name, cpf, email, phone, referral_code, sponsor_id, is_verified, created_at, last_access_at')
+      .or(`id.eq.${affId},user_id.eq.${affId}`)
+      .maybeSingle()
+    if (affErr) {
+      console.log('[AFFILIATE_ME] Primary search error:', affErr)
+      const fallback = await supabase
+        .from('affiliates')
+        .select('id, full_name, cpf, email, phone, referral_code, sponsor_id, is_verified, created_at, last_access_at')
+        .eq('id', affId)
+        .maybeSingle()
+      affiliate = fallback.data
+    }
+    console.log('[AFFILIATE_ME] Raw affiliate result:', affiliate, 'queryId=', affId)
     if (!affiliate) return c.json({ error: 'Sessão órfã: ID do afiliado não existe', id_na_sessao: affId }, 401)
-    if (!(affiliate as any).is_active) return c.json({ error: 'Afiliado inativo', id_na_sessao: affId }, 401)
     await supabase.from('affiliates').update({ last_access_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', (affiliate as any).id)
     return c.json({ id: (affiliate as any).id, full_name: (affiliate as any).full_name, cpf: (affiliate as any).cpf, email: (affiliate as any).email, whatsapp: (affiliate as any).phone, referral_code: (affiliate as any).referral_code, customer_coupon: (affiliate as any).cpf, sponsor_id: (affiliate as any).sponsor_id, is_verified: Boolean((affiliate as any).is_verified), created_at: (affiliate as any).created_at, last_access_at: (affiliate as any).last_access_at })
   } catch (e) {
