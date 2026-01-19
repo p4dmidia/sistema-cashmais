@@ -1563,31 +1563,33 @@ app.post('/api/affiliate/register', async (c) => {
     if (!profileId) return c.json({ error: 'Erro interno do servidor' }, 500)
     await supabase.from('user_profiles').update({ password_hash: passwordHash, updated_at: nowIso }).eq('id', profileId)
     if (profileId) {
-      const { data: existingCoupon } = await supabase
-        .from('customer_coupons')
-        .select('id')
-        .eq('coupon_code', cleanCpf)
-        .maybeSingle()
-      const payload: any = { coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, is_active: true, affiliate_id: (newAffiliate as any).id }
-      const tryUpsert = async (useAffiliateId: boolean) => {
-        const upPayload = { ...payload }
-        if (!useAffiliateId) delete upPayload.affiliate_id
+      try {
+        const { data: existingCoupon } = await supabase
+          .from('customer_coupons')
+          .select('id')
+          .eq('coupon_code', cleanCpf)
+          .maybeSingle()
+        const payload: any = { coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, is_active: true }
         const { error: upErr } = await supabase
           .from('customer_coupons')
-          .upsert(upPayload, { onConflict: 'coupon_code' })
-        return upErr
+          .upsert(payload, { onConflict: 'coupon_code' })
+        if (upErr) {
+          console.log('[REGISTER] COUPON_UPSERT_ERROR:', upErr)
+          debugLogs.push(`COUPON_UPSERT_ERROR=${(upErr as any)?.message || (upErr as any)?.code || 'unknown'}`)
+        } else {
+          const { data: verifyCoupon } = await supabase
+            .from('customer_coupons')
+            .select('id')
+            .eq('coupon_code', cleanCpf)
+            .maybeSingle()
+          if (!verifyCoupon) {
+            debugLogs.push('COUPON_VERIFY_FAILED')
+          }
+        }
+      } catch (couponErr) {
+        console.log('[REGISTER] COUPON_EXCEPTION:', couponErr)
+        debugLogs.push(`COUPON_EXCEPTION=${String(couponErr)}`)
       }
-      let upErr = await tryUpsert(true)
-      if (upErr && String(upErr.message || upErr).toLowerCase().includes('affiliate_id')) {
-        upErr = await tryUpsert(false)
-      }
-      if (upErr) return c.json({ error: 'Erro interno do servidor' }, 500)
-      const { data: verifyCoupon } = await supabase
-        .from('customer_coupons')
-        .select('id')
-        .eq('coupon_code', cleanCpf)
-        .maybeSingle()
-      if (!verifyCoupon) return c.json({ error: 'Erro interno do servidor' }, 500)
     }
     if (finalSponsorId) {
       await releaseBlockedIfQualified(supabase, finalSponsorId as number)
