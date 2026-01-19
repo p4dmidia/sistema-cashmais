@@ -1545,6 +1545,20 @@ app.post('/api/affiliate/register', async (c) => {
       referral_code: referralCode,
       position_slot: positionSlot
     }
+    // Garantir o ID do afiliado criado (RPC pode não retornar o ID)
+    if (!(newAffiliate as any).id) {
+      const { data: createdAff } = await supabase
+        .from('affiliates')
+        .select('id, position_slot, sponsor_id, created_at')
+        .eq('cpf', cleanCpf)
+        .maybeSingle()
+      if ((createdAff as any)?.id) {
+        (newAffiliate as any).id = (createdAff as any).id
+      } else {
+        console.error('[REGISTER] Falha ao obter ID do afiliado após RPC')
+        return c.json({ error: 'Erro interno do servidor', details: 'ID do afiliado não encontrado após registro' }, 500)
+      }
+    }
     const { data: verifyRow } = await supabase
       .from('affiliates')
       .select('id, position_slot, sponsor_id, created_at')
