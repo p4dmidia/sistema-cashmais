@@ -3299,13 +3299,16 @@ app.get('/api/affiliate/network/tree', async (c) => {
       const { data: direct } = await supabase
         .schema('public')
         .from('affiliates')
-        .select('id, position_slot, created_at')
+        .select('id, position_slot, created_at, full_name, last_access_at, cpf')
         .eq('sponsor_id', String(affiliateId))
         .order('created_at', { ascending: true })
-      for (const m of direct || []) {
-        const childNode = await buildNode(String((m as any).id), level + 1)
-        node.children.push(childNode)
-      }
+      console.log('ID do Pai:', String(affiliateId), 'Filhos encontrados no DB:', direct || [])
+      const childNodes = await Promise.all(
+        (direct || []).map((m: any) =>
+          buildNode(String(m.id), level + 1, m)
+        )
+      )
+      node.children = childNodes
       return node
     }
     const tree = await buildNode(String(root.id), 0, root)
