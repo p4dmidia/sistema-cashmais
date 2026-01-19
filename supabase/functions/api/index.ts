@@ -3298,22 +3298,9 @@ app.get('/api/affiliate/network/tree', async (c) => {
         .select('id, position_slot, created_at')
         .eq('sponsor_id', String(affiliateId))
         .order('created_at', { ascending: true })
-      const slots: (string | null)[] = [null, null, null]
       for (const m of direct || []) {
-        const ps = (m as any).position_slot
-        if ((ps === 0 || ps === 1 || ps === 2) && slots[ps] === null) {
-          slots[ps] = String((m as any).id)
-        } else {
-          for (let i = 0; i < 3; i++) {
-            if (slots[i] === null) { slots[i] = String((m as any).id); break }
-          }
-        }
-      }
-      for (let i = 0; i < 3; i++) {
-        if (slots[i] !== null) {
-          const childNode = await buildNode(slots[i] as string, level + 1)
-          node.children.push(childNode)
-        }
+        const childNode = await buildNode(String((m as any).id), level + 1)
+        node.children.push(childNode)
       }
       return node
     }
