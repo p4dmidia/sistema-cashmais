@@ -1670,10 +1670,8 @@ app.get('/affiliate/me', async (c) => {
 app.get('/api/affiliate/me', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
   const cookieToken = getCookie(c, 'affiliate_session')
-  const authHeader = c.req.header('authorization') || ''
-  const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
-  const token = xSession || cookieToken || bearerToken
-  console.log('[AFFILIATE_ME] token source:', cookieToken ? 'cookie' : (bearerToken ? 'header' : 'none'), 'token=', token)
+  const token = xSession || cookieToken
+  console.log('[AFFILIATE_ME] token source:', xSession ? 'x-session-token' : (cookieToken ? 'cookie' : 'none'), 'token=', token)
   if (!token) return c.json({ error: 'Token não enviado pelo navegador' }, 401)
   try {
     const supabase = createSupabase()
