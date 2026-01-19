@@ -3257,21 +3257,25 @@ app.get('/api/affiliate/network/tree', async (c) => {
       .single()
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
     const root = (sessionData as any).affiliates
-    async function buildNode(affiliateId: string, level: number): Promise<any> {
-      let { data: aff } = await supabase
-        .schema('public')
-        .from('affiliates')
-        .select('id, full_name, cpf, created_at, last_access_at, position_slot, user_id')
-        .eq('id', String(affiliateId))
-        .maybeSingle()
+    async function buildNode(affiliateId: string, level: number, affPrefetched?: any): Promise<any> {
+      let aff = affPrefetched
       if (!aff) {
-        const { data: flex } = await supabase
+        const { data: affStrict } = await supabase
           .schema('public')
           .from('affiliates')
           .select('id, full_name, cpf, created_at, last_access_at, position_slot, user_id')
-          .or(`id.eq.${String(affiliateId)},user_id.eq.${String(affiliateId)}`)
+          .eq('id', String(affiliateId))
           .maybeSingle()
-        aff = flex as any
+        aff = affStrict as any
+        if (!aff) {
+          const { data: affFlex } = await supabase
+            .schema('public')
+            .from('affiliates')
+            .select('id, full_name, cpf, created_at, last_access_at, position_slot, user_id')
+            .or(`id.eq.${String(affiliateId)},user_id.eq.${String(affiliateId)}`)
+            .maybeSingle()
+          aff = affFlex as any
+        }
       }
       const { count: directCount } = await supabase
         .schema('public')
@@ -3304,7 +3308,7 @@ app.get('/api/affiliate/network/tree', async (c) => {
       }
       return node
     }
-    const tree = await buildNode(String(root.id), 0)
+    const tree = await buildNode(String(root.id), 0, root)
     return c.json(tree)
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
