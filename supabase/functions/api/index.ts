@@ -3311,8 +3311,15 @@ app.get('/api/affiliate/network/tree', async (c) => {
       node.children = childNodes
       return node
     }
+    console.log('Buscando filhos para o ID:', String(root.id))
+    const { data: todosOsFilhos } = await supabase
+      .schema('public')
+      .from('affiliates')
+      .select('*')
+      .eq('sponsor_id', String(root.id))
+    console.log('Resultado filhos nível 1:', (todosOsFilhos?.length || 0))
     const tree = await buildNode(String(root.id), 0, root)
-    return c.json(tree)
+    return c.json({ ...tree, raw_children_count: todosOsFilhos?.length || 0, raw_data: todosOsFilhos || [] })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }

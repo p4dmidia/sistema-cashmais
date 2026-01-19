@@ -225,7 +225,7 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
   const convertToTernaryStructure = (data: any): NetworkNode => {
     const converted: NetworkNode = {
       id: data.id || 'root',
-      name: data.name || 'Você',
+      name: data.name || data.full_name || 'Você',
       active: data.active !== false,
       level: data.level || 0,
       signup_date: data.signup_date || new Date().toISOString(),
@@ -236,11 +236,26 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
       converted.position = data.position_slot === 0 ? 'left' : data.position_slot === 1 ? 'center' : 'right';
     }
 
-    if (Array.isArray(data.children) && data.children.length) {
-      const slots: { left?: NetworkNode; center?: NetworkNode; right?: NetworkNode } = {};
-      for (const child of data.children) {
+    const slots: { left?: NetworkNode; center?: NetworkNode; right?: NetworkNode } = {};
+    const sourceChildren: any[] =
+      Array.isArray(data.children) && data.children.length ? data.children :
+      Array.isArray(data.raw_data) && data.raw_data.length ? data.raw_data : [];
+    try {
+      console.log('[TREE] Source children length:', sourceChildren.length, 'node id:', converted.id);
+    } catch {}
+    if (sourceChildren.length) {
+      sourceChildren.forEach((child, idx) => {
         const ps = typeof child.position_slot === 'number' ? child.position_slot : null;
-        const childConverted = convertToTernaryStructure(child);
+        const childConverted = convertToTernaryStructure({
+          id: child.id,
+          name: child.full_name || child.name,
+          active: child.last_access_at ? (new Date(child.last_access_at).getTime() > (Date.now() - 30 * 24 * 60 * 60 * 1000)) : true,
+          level: (converted.level || 0) + 1,
+          signup_date: child.created_at,
+          direct_referrals: 0,
+          position_slot: child.position_slot ?? null,
+          children: child.children || [],
+        });
         if (ps === 0) {
           slots.left = { ...childConverted, position: 'left' };
         } else if (ps === 1) {
@@ -248,14 +263,57 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
         } else if (ps === 2) {
           slots.right = { ...childConverted, position: 'right' };
         } else {
-          // fallback: keep order if no slot info
           if (!slots.left) slots.left = { ...childConverted, position: 'left' };
           else if (!slots.center) slots.center = { ...childConverted, position: 'center' };
           else if (!slots.right) slots.right = { ...childConverted, position: 'right' };
         }
+        // Index-based fallback to ensure visibility
+        if (!slots.left && idx === 0) slots.left = { ...childConverted, position: 'left' };
+        if (!slots.center && idx === 1) slots.center = { ...childConverted, position: 'center' };
+        if (!slots.right && idx === 2) slots.right = { ...childConverted, position: 'right' };
+      });
+      // Final safety: if still empty, assign first items directly without recursion
+      if (!slots.left && sourceChildren[0]) {
+        const c = sourceChildren[0];
+        slots.left = {
+          id: c.id,
+          name: c.full_name || c.name || 'Afiliado',
+          active: c.last_access_at ? (new Date(c.last_access_at).getTime() > (Date.now() - 30 * 24 * 60 * 60 * 1000)) : true,
+          level: (converted.level || 0) + 1,
+          signup_date: c.created_at,
+          total_referrals: 0,
+          children: {},
+          position: 'left'
+        };
       }
-      converted.children = slots;
+      if (!slots.center && sourceChildren[1]) {
+        const c = sourceChildren[1];
+        slots.center = {
+          id: c.id,
+          name: c.full_name || c.name || 'Afiliado',
+          active: c.last_access_at ? (new Date(c.last_access_at).getTime() > (Date.now() - 30 * 24 * 60 * 60 * 1000)) : true,
+          level: (converted.level || 0) + 1,
+          signup_date: c.created_at,
+          total_referrals: 0,
+          children: {},
+          position: 'center'
+        };
+      }
+      if (!slots.right && sourceChildren[2]) {
+        const c = sourceChildren[2];
+        slots.right = {
+          id: c.id,
+          name: c.full_name || c.name || 'Afiliado',
+          active: c.last_access_at ? (new Date(c.last_access_at).getTime() > (Date.now() - 30 * 24 * 60 * 60 * 1000)) : true,
+          level: (converted.level || 0) + 1,
+          signup_date: c.created_at,
+          total_referrals: 0,
+          children: {},
+          position: 'right'
+        };
+      }
     }
+    converted.children = slots;
 
     return converted;
   };
