@@ -1594,6 +1594,19 @@ app.post('/api/affiliate/register', async (c) => {
         .eq('id', (newAffiliate as any).id)
       debugLogs.push(`FIX_UPDATE slot=${positionSlot} err=${fixErr ? String(fixErr) : 'none'}`)
     }
+    // Ensure referral_code and sponsor_id are set
+    const { error: rcErr } = await supabase
+      .from('affiliates')
+      .update({ referral_code: referralCode })
+      .eq('id', (newAffiliate as any).id)
+    if (rcErr) debugLogs.push(`REFERRAL_CODE_UPDATE_ERR=${String(rcErr)}`)
+    if (finalSponsorId) {
+      const { error: spErr } = await supabase
+        .from('affiliates')
+        .update({ sponsor_id: finalSponsorId })
+        .eq('id', (newAffiliate as any).id)
+      if (spErr) debugLogs.push(`SPONSOR_UPDATE_ERR=${String(spErr)}`)
+    }
     const profileId = await ensureProfileExists(supabase, cleanCpf, String((newAffiliate as any).id))
     if (!profileId) return c.json({ error: 'Erro interno do servidor' }, 500)
     await supabase.from('user_profiles').update({ password_hash: passwordHash, updated_at: nowIso }).eq('id', profileId)
@@ -3003,8 +3016,8 @@ app.get('/api/network/members', async (c) => {
       .eq('affiliates.is_active', true)
       .single()
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
-    const rootId = (sessionData as any).affiliates.id as number
-    async function getLevel(sponsorId: number, level: number, maxLevel: number): Promise<any[]> {
+    const rootId = String((sessionData as any).affiliates.id)
+    async function getLevel(sponsorId: string, level: number, maxLevel: number): Promise<any[]> {
       if (level > maxLevel) return []
       const { data: direct } = await supabase
         .from('affiliates')
@@ -3019,8 +3032,8 @@ app.get('/api/network/members', async (c) => {
           .from('company_purchases')
           .select('id', { count: 'exact', head: true })
           .eq('customer_coupon', (m as any).cpf || '')
-        rows.push({ id: (m as any).id, email: (m as any).email, cpf: (m as any).cpf || 'N/A', level, is_active_this_month: isActive, last_purchase_date: (m as any).last_access_at || (m as any).created_at, total_purchases: purchases || 0, created_at: (m as any).created_at })
-        const subs = await getLevel((m as any).id, level + 1, maxLevel)
+        rows.push({ id: String((m as any).id), email: (m as any).email, cpf: (m as any).cpf || 'N/A', level, is_active_this_month: isActive, last_purchase_date: (m as any).last_access_at || (m as any).created_at, total_purchases: purchases || 0, created_at: (m as any).created_at })
+        const subs = await getLevel(String((m as any).id), level + 1, maxLevel)
         rows.push(...subs)
       }
       return rows
@@ -3049,8 +3062,8 @@ app.get('/api/network/stats', async (c) => {
       .eq('affiliates.is_active', true)
       .single()
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
-    const rootId = (sessionData as any).affiliates.id as number
-    async function countLevels(sponsorId: number, level: number, maxLevel: number, acc: Record<number, number>) {
+    const rootId = String((sessionData as any).affiliates.id)
+    async function countLevels(sponsorId: string, level: number, maxLevel: number, acc: Record<number, number>) {
       if (level > maxLevel) return
       const { data: direct } = await supabase
         .from('affiliates')
@@ -3059,10 +3072,10 @@ app.get('/api/network/stats', async (c) => {
         .eq('is_active', true)
       acc[level] = (acc[level] || 0) + (direct?.length || 0)
       for (const m of direct || []) {
-        await countLevels((m as any).id, level + 1, maxLevel, acc)
+        await countLevels(String((m as any).id), level + 1, maxLevel, acc)
       }
     }
-    async function countActive(sponsorId: number, level: number, maxLevel: number): Promise<number> {
+    async function countActive(sponsorId: string, level: number, maxLevel: number): Promise<number> {
       if (level > maxLevel) return 0
       const { data: direct } = await supabase
         .from('affiliates')
@@ -3073,7 +3086,7 @@ app.get('/api/network/stats', async (c) => {
       for (const m of direct || []) {
         const isActive = (m as any).last_access_at ? new Date((m as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
         if (isActive) active++
-        active += await countActive((m as any).id, level + 1, maxLevel)
+        active += await countActive(String((m as any).id), level + 1, maxLevel)
       }
       return active
     }
@@ -3154,10 +3167,10 @@ app.get('/api/affiliate/network/placement-preview', async (c) => {
       .eq('affiliates.is_active', true)
       .single()
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
-    const sponsorId = (sessionData as any).affiliates.id as number
-    const pref = await getSponsorPreference(supabase, sponsorId)
+    const sponsorId = String((sessionData as any).affiliates.id)
+    const pref = await getSponsorPreference(supabase, sponsorId as any)
     const idx = pref === 'automatic' ? null : LEG_TO_SLOT[pref as 'left' | 'center' | 'right']
-    const targetParentId = await findPlacementTarget(supabase, sponsorId, pref)
+    const targetParentId = await findPlacementTarget(supabase, sponsorId as any, pref)
     let slotVacant: boolean | null = null
     if (idx !== null && idx !== undefined) {
       const child = await getChildInSlot(supabase, targetParentId, idx)
