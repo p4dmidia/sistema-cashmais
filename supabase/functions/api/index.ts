@@ -3258,16 +3258,27 @@ app.get('/api/affiliate/network/tree', async (c) => {
     if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
     const root = (sessionData as any).affiliates
     async function buildNode(affiliateId: string, level: number): Promise<any> {
-      const { data: aff } = await supabase
+      let { data: aff } = await supabase
+        .schema('public')
         .from('affiliates')
-        .select('id, full_name, cpf, created_at, last_access_at, position_slot')
+        .select('id, full_name, cpf, created_at, last_access_at, position_slot, user_id')
         .eq('id', String(affiliateId))
-        .single()
-      const isActive = (aff as any)?.last_access_at ? new Date((aff as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : false
+        .maybeSingle()
+      if (!aff) {
+        const { data: flex } = await supabase
+          .schema('public')
+          .from('affiliates')
+          .select('id, full_name, cpf, created_at, last_access_at, position_slot, user_id')
+          .or(`id.eq.${String(affiliateId)},user_id.eq.${String(affiliateId)}`)
+          .maybeSingle()
+        aff = flex as any
+      }
       const { count: directCount } = await supabase
+        .schema('public')
         .from('affiliates')
         .select('id', { count: 'exact', head: true })
         .eq('sponsor_id', String(affiliateId))
+      const isActive = (aff as any)?.last_access_at ? new Date((aff as any).last_access_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) : (Number(directCount || 0) > 0)
       const node: any = {
         id: String(affiliateId),
         name: (aff as any)?.full_name || (aff as any)?.cpf || 'Afiliado',
@@ -3282,6 +3293,7 @@ app.get('/api/affiliate/network/tree', async (c) => {
       }
       if (level >= maxDepth) return node
       const { data: direct } = await supabase
+        .schema('public')
         .from('affiliates')
         .select('id, position_slot, created_at')
         .eq('sponsor_id', String(affiliateId))
