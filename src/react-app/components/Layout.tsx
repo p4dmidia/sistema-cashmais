@@ -12,23 +12,18 @@ export default function Layout({ children, user }: LayoutProps) {
   const location = useLocation();
 
   const handleLogout = async () => {
-    // Try affiliate logout first
     try {
-      const response = await fetch('/api/affiliate/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      
-      if (response.ok) {
-        navigate('/');
-        return;
-      }
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      await authenticatedFetch('/api/affiliate/logout', { method: 'POST' });
     } catch (error) {
       console.error('Affiliate logout error:', error);
+    } finally {
+      try {
+        localStorage.removeItem('affiliate_token');
+        localStorage.removeItem('affiliate_user');
+      } catch {}
+      navigate('/login');
     }
-    
-    // Navigate to home anyway
-    navigate('/');
   };
 
   return (
