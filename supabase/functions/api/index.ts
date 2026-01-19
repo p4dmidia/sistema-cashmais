@@ -1603,7 +1603,7 @@ app.post('/api/affiliate/register', async (c) => {
     }
     setCookie(c, 'affiliate_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 30 * 24 * 60 * 60 })
     debugLogs.push(`REGISTER_DONE affiliate=${(newAffiliate as any).id}`)
-    return c.json({ success: true, affiliate: { id: (newAffiliate as any).id, full_name: (newAffiliate as any).full_name, email: (newAffiliate as any).email, referral_code: referralCode, customer_coupon: cleanCpf }, debug_info: debugLogs, versao_do_codigo: "VERSAO_CORRIGIDA_RPC_AGORA_VAI" })
+    return c.json({ success: true, token: sessionToken, affiliate: { id: (newAffiliate as any).id, full_name: (newAffiliate as any).full_name, email: (newAffiliate as any).email, referral_code: referralCode, customer_coupon: cleanCpf }, debug_info: debugLogs })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }

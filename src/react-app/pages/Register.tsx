@@ -190,8 +190,6 @@ function Register() {
       const whatsappDigits = formData.whatsapp.replace(/\D/g, '');
       
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
-      if (anon) headers['Authorization'] = `Bearer ${anon}`;
       const response = await fetch('/api/affiliate/register', {
         method: 'POST',
         headers,
@@ -208,7 +206,15 @@ function Register() {
       const data = await response.json();
       
       if (response.ok) {
-        // Success - redirect to dashboard
+        const token = data?.token;
+        if (token) {
+          try {
+            localStorage.setItem('affiliate_token', token);
+            if (data?.affiliate) {
+              localStorage.setItem('affiliate_user', JSON.stringify(data.affiliate));
+            }
+          } catch {}
+        }
         navigate('/dashboard');
       } else {
         // Handle different error types
