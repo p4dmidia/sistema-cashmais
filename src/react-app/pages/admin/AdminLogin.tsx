@@ -28,12 +28,15 @@ export default function AdminLogin() {
       });
 
       if (res.ok) {
-        await res.json();
-        
-        // Aguardar um pouco para garantir que o cookie foi definido
-        setTimeout(() => {
-          window.location.href = '/admin/dashboard';
-        }, 500);
+        const data = await res.json();
+        console.log('Dados recebidos no login:', data);
+        try {
+          if (data?.token) {
+            localStorage.setItem('admin_token', data.token);
+          }
+        } catch {}
+        await new Promise((r) => setTimeout(r, 500));
+        window.location.href = '/admin/dashboard';
       } else {
         let errorData;
         const contentType = res.headers.get('content-type');
