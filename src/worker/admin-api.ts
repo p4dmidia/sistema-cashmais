@@ -70,10 +70,22 @@ adminApi.get("/api/admin/me", requireAdminAuth, async (c) => {
   try {
     const adminUser: any = (c as any).get("adminUser");
     const supabase = createSupabaseClient(c);
+    const tokenUsed = getCookie(c, "admin_session") || c.req.header('x-admin-token') || (c.req.header('authorization') || '').replace(/^Bearer\s+/i, '');
+    console.log('[ADMIN_ME] Validating with token:', (tokenUsed || '').slice(0, 12) + '...');
+    const { data: sessionRow } = await supabase
+      .from('admin_sessions')
+      .select('*, admin_users(*)')
+      .eq('session_token', String(tokenUsed))
+      .gt('expires_at', new Date().toISOString())
+      .maybeSingle();
+    if (!sessionRow) {
+      console.log('[ADMIN_ME] Session not found for token');
+      return c.json({ error: "Sessão inválida" }, 401);
+    }
     const { data: fullAdminData, error } = await supabase
       .from('admin_users')
       .select('id, username, email, full_name, is_active, last_login_at, created_at')
-      .eq('id', (adminUser as any).admin_user_id)
+      .eq('id', (sessionRow as any).admin_user_id)
       .single();
     if (error || !fullAdminData) {
       return c.json({ error: "Usuário não encontrado" }, 404);
