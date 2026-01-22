@@ -36,7 +36,8 @@ export default function AdminLogin() {
           }
         } catch {}
         await new Promise((r) => setTimeout(r, 500));
-        window.location.href = '/admin/dashboard';
+        //window.location.href = '/admin/dashboard';
+        console.log("LOGIN BATEU AQUI, MAS EU PAREI O REDIRECIONAMENTO");
       } else {
         let errorData;
         const contentType = res.headers.get('content-type');
