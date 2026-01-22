@@ -80,13 +80,12 @@ export default function AffiliatesManagement() {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/admin/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      await authenticatedFetch('/api/admin/logout', { method: 'POST' });
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      try { localStorage.removeItem('admin_token'); } catch {}
       navigate('/admin/login');
     }
   };
@@ -115,17 +114,14 @@ export default function AffiliatesManagement() {
   const loadAffiliatesData = async () => {
     setIsLoading(true);
     try {
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
       const [statsResponse, affiliatesResponse] = await Promise.all([
-        fetch('/api/admin/affiliates/stats', {
-          credentials: 'include',
-        }),
-        fetch(`/api/admin/affiliates?${new URLSearchParams({
+        authenticatedFetch('/api/admin/affiliates/stats'),
+        authenticatedFetch(`/api/admin/affiliates?${new URLSearchParams({
           page: pagination.page.toString(),
           limit: pagination.limit.toString(),
           ...(search && { search }),
-        })}`, {
-          credentials: 'include',
-        })
+        })}`)
       ]);
 
       if (statsResponse.ok) {
@@ -171,9 +167,9 @@ export default function AffiliatesManagement() {
   const handleToggleStatus = async (affiliateId: number) => {
     setActionLoading(affiliateId);
     try {
-      const response = await fetch(`/api/admin/affiliates/${affiliateId}/toggle-status`, {
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch(`/api/admin/affiliates/${affiliateId}/toggle-status`, {
         method: 'PATCH',
-        credentials: 'include',
       });
 
       if (response.ok) {
@@ -211,12 +207,10 @@ export default function AffiliatesManagement() {
 
     setEditLoading(true);
     try {
-      const response = await fetch(`/api/admin/affiliates/${editModal.affiliate.id}`, {
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch(`/api/admin/affiliates/${editModal.affiliate.id}`, {
         method: 'PATCH',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editFormData),
       });
 
@@ -244,9 +238,9 @@ export default function AffiliatesManagement() {
 
     setActionLoading(deleteModal.affiliate.id);
     try {
-      const response = await fetch(`/api/admin/affiliates/${deleteModal.affiliate.id}`, {
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch(`/api/admin/affiliates/${deleteModal.affiliate.id}`, {
         method: 'DELETE',
-        credentials: 'include',
       });
 
       if (response.ok) {
