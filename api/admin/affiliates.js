@@ -4,6 +4,7 @@ export default async function handler(req, res) {
   const url = process.env.SUPABASE_URL || ''
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   const supabase = createClient(url, key)
+  console.log('Conectando ao Supabase URL:', process.env.SUPABASE_URL)
   const headerAdminToken = req.headers['x-admin-token'] || ''
   const xSessionToken = req.headers['x-session-token'] || ''
   const authHeader = req.headers['authorization'] || ''
@@ -33,26 +34,13 @@ export default async function handler(req, res) {
   const offset = (page - 1) * limit
 
   try {
-    let query = supabase
+    // Ultra simple query to validate data visibility
+    const { data: ultra } = await supabase
       .from('affiliates')
-      .select('id, full_name, email, cpf, phone, referral_code, sponsor_id, is_active, is_verified, created_at, last_access_at', { count: 'exact' })
-      .order('created_at', { ascending: false })
-    if (search) {
-      const term = `%${search}%`
-      query = query.or(`full_name.ilike.${term},email.ilike.${term},cpf.ilike.${term}`)
-    }
-    const { data: rows, count: totalCountValue } = await query.range(offset, offset + limit - 1)
-    console.log('[API_ADMIN_AFFILIATES] Query result:', { page, limit, offset, totalCountValue, rowsLength: (rows || []).length })
-    let affiliates = rows || []
-    if ((totalCountValue || 0) > 0 && affiliates.length === 0) {
-      const { data: fallbackRows } = await (search ? query : supabase
-        .from('affiliates')
-        .select('id, full_name, email, cpf, phone, referral_code, sponsor_id, is_active, is_verified, created_at, last_access_at')
-        .order('created_at', { ascending: false })
-      ).limit(limit)
-      affiliates = fallbackRows || []
-      console.log('[API_ADMIN_AFFILIATES] Fallback rows length:', affiliates.length)
-    }
+      .select('*')
+    console.log('[API_ADMIN_AFFILIATES] Ultra simple query length:', (ultra || []).length)
+    let affiliates = ultra || []
+    const totalCountValue = (ultra || []).length
 
     // Enrich
     const enriched = []
@@ -95,7 +83,8 @@ export default async function handler(req, res) {
         total: totalCountValue || 0,
         totalPages: Math.ceil((totalCountValue || 0) / limit)
       },
-      debug_total_rows: enriched.length
+      debug_total_rows: enriched.length,
+      supabase_url_used: (process.env.SUPABASE_URL || '').substring(0, 20)
     })
   } catch (e) {
     return res.status(500).json({ error: e.message || 'Erro interno', affiliates: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } })
