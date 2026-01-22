@@ -28,9 +28,11 @@ export default function WithAdminAuth({ children }: WithAdminAuthProps) {
         console.log(`[WITH_ADMIN_AUTH] Checking admin authentication (attempt ${retryCount + 1}/${maxRetries + 1})...`);
         console.log('[WITH_ADMIN_AUTH] Current cookies:', document.cookie);
         
-        const response = await fetch('/api/admin/me', {
+        const adminToken = localStorage.getItem('admin_token') || '';
+        console.log('[WITH_ADMIN_AUTH] Token lido do localStorage:', adminToken);
+        const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+        const response = await authenticatedFetch('/api/admin/me', {
           method: 'GET',
-          credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
             'Cache-Control': 'no-cache'
