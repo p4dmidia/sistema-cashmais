@@ -7,7 +7,9 @@ import { validateCommissionSettings } from "./commission-utils";
 const adminApi = new Hono<{ Bindings: Env }>();
 
 function createSupabaseClient(c: any) {
-  return createClient(c.env.SUPABASE_URL, c.env.SUPABASE_SERVICE_ROLE_KEY);
+  const url = (c?.env?.SUPABASE_URL) || (process?.env?.SUPABASE_URL as string) || '';
+  const key = (c?.env?.SUPABASE_SERVICE_ROLE_KEY) || (process?.env?.SUPABASE_SERVICE_ROLE_KEY as string) || '';
+  return createClient(url, key);
 }
 
 // Middleware para verificar autenticação admin

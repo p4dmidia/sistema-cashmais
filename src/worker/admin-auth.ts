@@ -6,6 +6,12 @@ import { createClient } from '@supabase/supabase-js'
 
 const adminAuth = new Hono<{ Bindings: Env }>();
 
+function createSupabaseClient(c: any) {
+  const url = (c?.env?.SUPABASE_URL) || (process?.env?.SUPABASE_URL as string) || '';
+  const key = (c?.env?.SUPABASE_SERVICE_ROLE_KEY) || (process?.env?.SUPABASE_SERVICE_ROLE_KEY as string) || '';
+  return createClient(url, key);
+}
+
 // Admin login schema
 const AdminLoginSchema = z.object({
   username: z.string().min(1, "Username é obrigatório"),
