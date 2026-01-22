@@ -277,7 +277,7 @@ app.post('/api/admin/login', async (c) => {
     }
     const ok = await bcrypt.compare(password, (adminUser as any).password_hash)
     if (!ok) return c.json({ error: 'Credenciais inválidas' }, 401)
-    const sessionToken = crypto.randomUUID() + '-' + Date.now()
+    const sessionToken = crypto.randomUUID()
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     const { error: sessErr } = await supabase
       .schema('public')

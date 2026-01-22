@@ -81,11 +81,10 @@ adminApi.get("/api/admin/me", requireAdminAuth, async (c) => {
       .from('admin_sessions')
       .select('*, admin_users(*)')
       .eq('session_token', String(tokenUsed))
-      .gt('expires_at', new Date().toISOString())
-      .single();
+      .maybeSingle();
     if (!sessionRow) {
       console.log('[ADMIN_ME] Session not found for token');
-      return c.json({ error: "Sessão inválida" }, 401);
+      return c.json({ error: 'Sessão inválida', debug_token_recebido: tokenUsed, debug_header_admin: c.req.header('x-admin-token') }, 401);
     }
     const { data: fullAdminData, error } = await supabase
       .from('admin_users')
