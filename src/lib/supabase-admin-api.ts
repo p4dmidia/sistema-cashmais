@@ -15,7 +15,7 @@ export async function getCurrentAdminUser(sessionToken: string) {
       .single();
 
     if (sessionError || !session) {
-      return { error: 'Sessão inválida' };
+      return { error: 'Sessão inválida - Supabase Admin Lib' };
     }
 
     const { data: fullAdminData, error: adminError } = await supabase

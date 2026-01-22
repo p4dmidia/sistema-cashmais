@@ -170,34 +170,38 @@ adminAuth.post("/api/admin/login", async (c) => {
 // Get current admin user
 adminAuth.get("/api/admin/me", async (c) => {
   try {
-    const sessionToken = getCookie(c, "admin_session");
+    const headerAdminToken = c.req.header('x-admin-token') || '';
+    const xSessionToken = c.req.header('x-session-token') || '';
+    const authHeader = c.req.header('authorization') || '';
+    const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
+    const cookieToken = getCookie(c, "admin_session") || '';
+    const sessionToken = headerAdminToken || xSessionToken || bearer || cookieToken;
+    console.log('[ADMIN_AUTH_LIB] Token recebido:', sessionToken ? sessionToken.substring(0, 10) + '...' : 'none');
     
     if (!sessionToken) {
       return c.json({ error: "Não autenticado" }, 401);
     }
 
-    // Get session with user data
+    // Get session with user data using Service Role
     const supabase = createSupabaseClient(c);
     const { data: session } = await supabase
       .from('admin_sessions')
       .select('*, admin_users!inner(username,email,full_name,is_active)')
-      .eq('session_token', sessionToken)
-      .gt('expires_at', new Date().toISOString())
-      .single();
+      .eq('session_token', String(sessionToken))
+      .maybeSingle();
 
     if (!session) {
-      return c.json({ error: "Sessão inválida" }, 401);
+      return c.json({ error: "Sessão inválida - Admin Auth Lib", debug_token_recebido: sessionToken, debug_header_admin: headerAdminToken }, 401);
     }
 
     return c.json({
       admin: {
-        id: session.admin_user_id,
+        id: (session as any).admin_user_id,
         username: (session as any).admin_users.username,
         email: (session as any).admin_users.email,
         full_name: (session as any).admin_users.full_name,
       }
     });
-
   } catch (error) {
     console.error("Get admin user error:", error);
     return c.json({ error: "Erro interno do servidor" }, 500);

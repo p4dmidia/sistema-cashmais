@@ -121,7 +121,7 @@ export async function getCurrentAdmin(sessionToken: string) {
 
     if (sessionError || !session) {
       console.error('[ADMIN_AUTH] Sessão inválida ou expirada');
-      return { error: 'Sessão inválida' };
+      return { error: 'Sessão inválida - Supabase Admin Lib' };
     }
 
     const adminUser = session.admin_users;

@@ -63,8 +63,13 @@ export default function WithAdminAuth({ children }: WithAdminAuthProps) {
           }
           
           console.log('[WITH_ADMIN_AUTH] Max retries reached, redirecting to login');
-          const errorText = await response.text().catch(() => '');
-          console.log('[WITH_ADMIN_AUTH] Error details:', errorText);
+          try {
+            const errorJson = await response.json();
+            console.error('[WITH_ADMIN_AUTH] ERRO DETALHADO:', errorJson);
+          } catch {
+            const errorText = await response.text().catch(() => '');
+            console.log('[WITH_ADMIN_AUTH] Error details (text):', errorText);
+          }
           setUser(null);
           setIsAuthenticated(false);
           setIsLoading(false);
