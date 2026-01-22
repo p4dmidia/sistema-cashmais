@@ -42,7 +42,17 @@ export default async function handler(req, res) {
       query = query.or(`full_name.ilike.${term},email.ilike.${term},cpf.ilike.${term}`)
     }
     const { data: rows, count: totalCountValue } = await query.range(offset, offset + limit - 1)
-    const affiliates = rows || []
+    console.log('[API_ADMIN_AFFILIATES] Query result:', { page, limit, offset, totalCountValue, rowsLength: (rows || []).length })
+    let affiliates = rows || []
+    if ((totalCountValue || 0) > 0 && affiliates.length === 0) {
+      const { data: fallbackRows } = await (search ? query : supabase
+        .from('affiliates')
+        .select('id, full_name, email, cpf, phone, referral_code, sponsor_id, is_active, is_verified, created_at, last_access_at')
+        .order('created_at', { ascending: false })
+      ).limit(limit)
+      affiliates = fallbackRows || []
+      console.log('[API_ADMIN_AFFILIATES] Fallback rows length:', affiliates.length)
+    }
 
     // Enrich
     const enriched = []
@@ -84,7 +94,8 @@ export default async function handler(req, res) {
         limit,
         total: totalCountValue || 0,
         totalPages: Math.ceil((totalCountValue || 0) / limit)
-      }
+      },
+      debug_total_rows: enriched.length
     })
   } catch (e) {
     return res.status(500).json({ error: e.message || 'Erro interno', affiliates: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } })

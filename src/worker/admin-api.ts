@@ -575,7 +575,18 @@ adminApi.get("/api/admin/affiliates", requireAdminAuth, async (c) => {
       query = query.or(`full_name.ilike.${term},email.ilike.${term},cpf.ilike.${term}`);
     }
     const { data: rows, count: totalCountValue } = await query.range(offset, offset + limit - 1);
-    const affiliates = rows || [];
+    console.log('[ADMIN_API] Affiliates list query result:', { page, limit, offset, totalCountValue, rowsLength: (rows || []).length });
+    let affiliates = rows || [];
+    // Fallback: if count > 0 but rows empty, try fetching without range
+    if ((totalCountValue || 0) > 0 && affiliates.length === 0) {
+      const { data: fallbackRows } = await (search ? query : supabase
+        .from('affiliates')
+        .select('id, full_name, email, cpf, phone, referral_code, sponsor_id, is_active, is_verified, created_at, last_access_at')
+        .order('created_at', { ascending: false })
+      ).limit(limit);
+      affiliates = fallbackRows || [];
+      console.log('[ADMIN_API] Fallback rows length:', affiliates.length);
+    }
     const enrichedAffiliates = [] as any[];
     for (const a of affiliates) {
       const { count: directReferrals } = await supabase
