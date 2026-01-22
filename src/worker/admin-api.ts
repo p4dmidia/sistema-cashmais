@@ -14,9 +14,10 @@ function createSupabaseClient(c: any) {
 async function requireAdminAuth(c: any, next: any) {
   const cookieToken = getCookie(c, "admin_session");
   const headerAdminToken = c.req.header('x-admin-token') || '';
+  const xSession = c.req.header('x-session-token') || '';
   const authHeader = c.req.header('authorization') || '';
   const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
-  const sessionToken = cookieToken || headerAdminToken || bearer;
+  const sessionToken = headerAdminToken || xSession || bearer || cookieToken || '';
   const allCookies = c.req.header('cookie') || '';
   const requestUrl = c.req.url;
   const userAgent = c.req.header('user-agent') || '';
@@ -39,7 +40,7 @@ async function requireAdminAuth(c: any, next: any) {
   if (!sessionToken) {
     console.log('[ADMIN_AUTH_MIDDLEWARE] No admin_session cookie found');
     console.log('[ADMIN_AUTH_MIDDLEWARE] Available cookies:', allCookies);
-    return c.json({ error: "Não autenticado" }, 401);
+    return c.json({ error: "Não autenticado", debug_header_admin: headerAdminToken, debug_x_session: xSession }, 401);
   }
 
   try {
@@ -47,13 +48,12 @@ async function requireAdminAuth(c: any, next: any) {
     const { data: session } = await supabase
       .from('admin_sessions')
       .select('admin_user_id, admin_users!inner(username, full_name, is_active)')
-      .eq('session_token', sessionToken)
-      .gt('expires_at', new Date().toISOString())
-      .single();
+      .eq('session_token', String(sessionToken))
+      .maybeSingle();
 
     if (!session) {
       console.log('[ADMIN_AUTH_MIDDLEWARE] Invalid or expired session');
-      return c.json({ error: "Sessão inválida" }, 401);
+      return c.json({ error: "Sessão inválida", debug_token_recebido: sessionToken, debug_header_admin: headerAdminToken }, 401);
     }
 
     console.log('[ADMIN_AUTH_MIDDLEWARE] Valid session found for user:', (session as any).admin_users.username);
