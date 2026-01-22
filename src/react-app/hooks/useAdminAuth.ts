@@ -34,13 +34,10 @@ export function useAdminAuth() {
       console.log('[ADMIN_AUTH] Checking authentication...');
       console.log('[ADMIN_AUTH] Current cookies:', document.cookie);
       
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       const adminToken = localStorage.getItem('admin_token');
-      if (adminToken) headers['Authorization'] = `Bearer ${adminToken}`;
-      const response = await fetch('/api/admin/me', {
-        credentials: 'include',
-        headers,
-      });
+      console.log('[ADMIN_AUTH] Token enviado para validar:', adminToken);
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      const response = await authenticatedFetch('/api/admin/me');
 
       console.log('[ADMIN_AUTH] Auth response status:', response.status);
 
@@ -90,6 +87,7 @@ export function useAdminAuth() {
         if (token) {
           try {
             localStorage.setItem('admin_token', token);
+            console.log('Token de Admin salvo:', token);
           } catch {}
         }
         // Immediately update state with authenticated user

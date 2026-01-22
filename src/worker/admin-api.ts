@@ -12,7 +12,11 @@ function createSupabaseClient(c: any) {
 
 // Middleware para verificar autenticação admin
 async function requireAdminAuth(c: any, next: any) {
-  const sessionToken = getCookie(c, "admin_session");
+  const cookieToken = getCookie(c, "admin_session");
+  const headerAdminToken = c.req.header('x-admin-token') || '';
+  const authHeader = c.req.header('authorization') || '';
+  const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
+  const sessionToken = cookieToken || headerAdminToken || bearer;
   const allCookies = c.req.header('cookie') || '';
   const requestUrl = c.req.url;
   const userAgent = c.req.header('user-agent') || '';
