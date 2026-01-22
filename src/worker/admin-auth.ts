@@ -20,7 +20,7 @@ const AdminLoginSchema = z.object({
 
 // Generate session token
 function generateSessionToken(): string {
-  return crypto.randomUUID() + "-" + Date.now();
+  return crypto.randomUUID();
 }
 
 // Admin login endpoint
@@ -156,6 +156,7 @@ adminAuth.post("/api/admin/login", async (c) => {
 
     return c.json({
       success: true,
+      token: sessionToken,
       admin: {
         id: adminUser.id,
         username: adminUser.username,

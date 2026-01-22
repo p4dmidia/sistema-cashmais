@@ -103,6 +103,35 @@ adminApi.get("/api/admin/me", requireAdminAuth, async (c) => {
   }
 });
 
+// Debug endpoint to verify env and token resolution
+adminApi.get("/api/admin/debug", async (c) => {
+  const headerAdminToken = c.req.header('x-admin-token') || '';
+  const xSessionToken = c.req.header('x-session-token') || '';
+  const authHeader = c.req.header('authorization') || '';
+  const bearer = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : '';
+  const cookieToken = getCookie(c, "admin_session") || '';
+  const tokenUsed = headerAdminToken || xSessionToken || bearer || cookieToken || '';
+  const supabase = createSupabaseClient(c);
+  let sessionFound = false;
+  try {
+    const { data } = await supabase
+      .from('admin_sessions')
+      .select('id')
+      .eq('session_token', String(tokenUsed))
+      .maybeSingle();
+    sessionFound = !!data;
+  } catch {}
+  const envUrl = (c?.env?.SUPABASE_URL) || (process?.env?.SUPABASE_URL as string) || '';
+  const envKey = (c?.env?.SUPABASE_SERVICE_ROLE_KEY) || (process?.env?.SUPABASE_SERVICE_ROLE_KEY as string) || '';
+  return c.json({
+    token_source: headerAdminToken ? 'x-admin-token' : (xSessionToken ? 'x-session-token' : (bearer ? 'authorization' : (cookieToken ? 'cookie' : 'none'))),
+    token_preview: tokenUsed ? (tokenUsed.substring(0, 12) + '...') : 'none',
+    supabase_url_preview: envUrl ? envUrl.replace(/^https?:\/\//, '').split('.')[0] : 'none',
+    service_role_key_present: !!envKey,
+    session_lookup_found: sessionFound
+  });
+});
+
 // Dashboard stats
 adminApi.get("/api/admin/dashboard/stats", requireAdminAuth, async (c) => {
   try {
