@@ -265,27 +265,36 @@ app.post('/api/admin/login', async (c) => {
     const { username, password } = parsed.data
     const supabase = createSupabase()
     const { data: adminUser, error } = await supabase
+      .schema('public')
       .from('admin_users')
       .select('id, username, email, full_name, password_hash, is_active')
       .eq('username', username)
       .eq('is_active', true)
       .single()
-    if (error || !adminUser) return c.json({ error: 'Usuário não encontrado' }, 404)
+    if (error || !adminUser) {
+      console.log('[ADMIN_LOGIN] admin_users query error:', error)
+      return c.json({ error: 'Usuário não encontrado', details: (error as any)?.message || (error as any)?.description || JSON.stringify(error) }, 404)
+    }
     const ok = await bcrypt.compare(password, (adminUser as any).password_hash)
     if (!ok) return c.json({ error: 'Credenciais inválidas' }, 401)
     const sessionToken = crypto.randomUUID() + '-' + Date.now()
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     const { error: sessErr } = await supabase
+      .schema('public')
       .from('admin_sessions')
       .insert({ admin_user_id: (adminUser as any).id, session_token: sessionToken, expires_at: expiresAt })
-    if (sessErr) return c.json({ error: 'Erro interno do servidor' }, 500)
+    if (sessErr) {
+      console.log('[ADMIN_LOGIN] admin_sessions insert error:', sessErr)
+      return c.json({ error: 'Erro interno do servidor', details: (sessErr as any)?.message || (sessErr as any)?.description || JSON.stringify(sessErr) }, 500)
+    }
     setCookie(c, 'admin_session', sessionToken, { httpOnly: true, secure: true, sameSite: 'Lax', maxAge: 24 * 60 * 60, path: '/' })
     await supabase
+      .schema('public')
       .from('admin_audit_logs')
       .insert({ admin_user_id: (adminUser as any).id, action: 'LOGIN', entity_type: 'admin_session' })
     return c.json({ success: true, token: sessionToken, admin: { id: (adminUser as any).id, username: (adminUser as any).username, email: (adminUser as any).email, full_name: (adminUser as any).full_name } })
   } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
+    return c.json({ error: (e as any)?.message || 'Erro interno do servidor', stack: (e as any)?.stack || '', details: (e as any)?.description || '' }, 500)
   }
 })
 
