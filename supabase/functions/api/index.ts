@@ -1244,20 +1244,22 @@ function normalizeLegPreference(input: any): 'automatic' | 'left' | 'center' | '
   return 'automatic'
 }
 
-async function getSponsorPreference(supabase: any, sponsorId: number, debugLog?: string[]): Promise<'automatic' | 'left' | 'center' | 'right'> {
-  const mochaUserId = `affiliate_${sponsorId}`
-  console.log(`[PREF_DEBUG] Buscando preferência para Sponsor: ${sponsorId} (mocha_id: ${mochaUserId})`)
+async function getSponsorPreference(supabase: any, sponsorId: any, debugLog?: string[]): Promise<'automatic' | 'left' | 'center' | 'right'> {
+  const sponsorIdStr = String(sponsorId || '');
+  const mochaUserId = sponsorIdStr.includes('-') ? `affiliate_${sponsorIdStr}` : `affiliate_${sponsorIdStr}`;
+
+  console.log(`[PREF_DEBUG] Buscando preferência para: ${sponsorIdStr} (mocha_id: ${mochaUserId})`);
 
   const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('id, mocha_user_id')
+    .select('id, mocha_user_id, cpf')
     .eq('mocha_user_id', mochaUserId)
-    .maybeSingle()
+    .maybeSingle();
 
   if (profileError) {
-    console.error(`[PREF_DEBUG] Erro ao buscar perfil:`, profileError)
-    if (debugLog) debugLog.push(`PREF_ERR profile sponsor=${sponsorId}`)
-    return 'automatic'
+    console.error(`[PREF_DEBUG] Erro ao buscar perfil para ${mochaUserId}:`, profileError);
+    if (debugLog) debugLog.push(`PREF_ERR profile sponsor=${sponsorIdStr} err=${profileError.message}`);
+    return 'automatic';
   }
 
   if (!profile) {
@@ -3176,32 +3178,44 @@ app.get('/api/affiliate/network/preference', async (c) => {
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
 
-  if (!token) return c.json({ preference: 'auto' })
+  if (!token) return c.json({ preference: 'auto', error: 'Token não encontrado' })
   try {
     const supabase = createSupabase()
-    const { data: sessionData } = await supabase
+    const { data: sessionData, error: sessErr } = await supabase
       .from('affiliate_sessions')
-      .select('affiliate_id, affiliates!inner(id)')
+      .select('affiliate_id')
       .eq('session_token', String(token))
       .gt('expires_at', new Date().toISOString())
-      .eq('affiliates.is_active', true)
       .maybeSingle()
 
-    if (!sessionData) return c.json({ preference: 'auto' })
-    const affiliateId = (sessionData as any).affiliate_id
+    if (sessErr || !sessionData) {
+      console.error('[API_PREFERENCE] Sessão inválida ou expirada:', token)
+      return c.json({ preference: 'auto', error: 'Sessão inválida' })
+    }
 
-    // Use helper to get consistent preference
-    const pref = await getSponsorPreference(supabase, affiliateId as any)
+    const affiliateId = (sessionData as any).affiliate_id
+    console.log('[API_PREFERENCE] Buscando para affiliateId:', affiliateId)
+
+    // Buscamos o ID do perfil primeiro para garantir consistência com o PUT
+    const { data: aff } = await supabase.from('affiliates').select('id, cpf').eq('id', affiliateId).maybeSingle()
+    if (!aff) {
+      console.error('[API_PREFERENCE] Afiliado não encontrado no DB:', affiliateId)
+      return c.json({ preference: 'auto', error: 'Afiliado não encontrado' })
+    }
+
+    const pref = await getSponsorPreference(supabase, aff.id as any)
     const apiPref = pref === 'automatic' ? 'auto' : pref
+
+    console.log('[API_PREFERENCE] Resultado final:', { affiliateId, pref, apiPref })
 
     return c.json({
       preference: apiPref,
       preference_raw: pref,
-      preference_normalized: pref
+      preference_source: 'db'
     })
   } catch (e) {
-    console.error('[API_PREFERENCE] Error:', e)
-    return c.json({ preference: 'auto' })
+    console.error('[API_PREFERENCE] Erro exceção:', e)
+    return c.json({ preference: 'auto', error: String(e) })
   }
 })
 
@@ -3260,10 +3274,12 @@ app.put('/api/affiliate/network/preference', async (c) => {
     const affiliateId = (sessionData as any).affiliate_id
     const affiliateCpf = (sessionData as any).affiliates?.cpf || ''
 
-    const pref = body.preference === 'auto' ? 'automatic' : body.preference
+    const pref = normalizeLegPreference(body.preference)
+    console.log('[API_PUT_PREFERENCE] Preferência normalizada para salvar:', pref)
 
     // Garante que o perfil existe
     let profileId = await ensureUserProfileExists(supabase, affiliateId, affiliateCpf)
+    console.log('[API_PUT_PREFERENCE] Profile ID resolvido:', profileId)
 
     if (!profileId) {
       return c.json({ error: 'Perfil do usuário não encontrado' }, 500)
