@@ -12,13 +12,13 @@ export default defineConfig(({ mode }) => {
       allowedHosts: true,
       proxy: {
         "/api": {
-          target: "https://hffxmntvtsimwlsapfod.supabase.co/functions/v1",
+          target: "https://brxolhltjkorlkyutvyi.supabase.co/functions/v1",
           changeOrigin: true,
           secure: false,
           rewrite: (path) => path,
         },
         "/affiliate": {
-          target: "https://hffxmntvtsimwlsapfod.supabase.co/functions/v1/api",
+          target: "https://brxolhltjkorlkyutvyi.supabase.co/functions/v1/api",
           changeOrigin: true,
           secure: false,
         },

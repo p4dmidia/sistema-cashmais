@@ -28,10 +28,10 @@ const NodeModal: React.FC<NodeModalProps> = ({ node, isOpen, onClose }) => {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('pt-BR', { 
-      day: '2-digit', 
-      month: '2-digit', 
-      year: 'numeric' 
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
     });
   };
 
@@ -44,21 +44,19 @@ const NodeModal: React.FC<NodeModalProps> = ({ node, isOpen, onClose }) => {
         >
           <X className="w-5 h-5" />
         </button>
-        
+
         <div className="text-center mb-4">
-          <div className={`w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center ${
-            node.active 
-              ? 'bg-gradient-to-br from-blue-500 to-purple-600' 
-              : 'bg-gray-400'
-          }`}>
+          <div className={`w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center ${node.active
+            ? 'bg-gradient-to-br from-blue-500 to-purple-600'
+            : 'bg-gray-400'
+            }`}>
             <User className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-xl font-bold text-gray-800">{node.name}</h2>
-          <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${
-            node.active 
-              ? 'bg-green-100 text-green-800' 
-              : 'bg-red-100 text-red-800'
-          }`}>
+          <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${node.active
+            ? 'bg-green-100 text-green-800'
+            : 'bg-red-100 text-red-800'
+            }`}>
             {node.active ? 'Ativo' : 'Inativo'}
           </span>
         </div>
@@ -68,17 +66,17 @@ const NodeModal: React.FC<NodeModalProps> = ({ node, isOpen, onClose }) => {
             <Mail className="w-5 h-5 text-blue-500" />
             <span>{node.email || 'Email não informado'}</span>
           </div>
-          
+
           <div className="flex items-center space-x-3 text-gray-700">
             <Calendar className="w-5 h-5 text-green-500" />
             <span>Cadastrado em {formatDate(node.signup_date)}</span>
           </div>
-          
+
           <div className="flex items-center space-x-3 text-gray-700">
             <Users className="w-5 h-5 text-purple-500" />
             <span>{node.total_referrals} indicações diretas</span>
           </div>
-          
+
           <div className="flex items-center space-x-3 text-gray-700">
             <Activity className="w-5 h-5 text-orange-500" />
             <span>Nível {node.level} na rede</span>
@@ -107,15 +105,15 @@ interface TreeNodeProps {
   position?: 'left' | 'center' | 'right';
 }
 
-const TreeNode: React.FC<TreeNodeProps> = ({ 
-  node, 
-  level, 
-  onNodeClick, 
-  onExpandClick, 
+const TreeNode: React.FC<TreeNodeProps> = ({
+  node,
+  level,
+  onNodeClick,
+  onExpandClick,
   isExpanded
 }) => {
   const isEmpty = !node;
-  
+
   const handleNodeClick = () => {
     if (node) {
       onNodeClick(node);
@@ -130,8 +128,8 @@ const TreeNode: React.FC<TreeNodeProps> = ({
   };
 
   const hasChildren = node?.children && (
-    node.children.left || 
-    node.children.center || 
+    node.children.left ||
+    node.children.center ||
     node.children.right
   );
 
@@ -141,13 +139,12 @@ const TreeNode: React.FC<TreeNodeProps> = ({
       <div className="relative group">
         <div
           onClick={handleNodeClick}
-          className={`w-16 h-16 rounded-full border-4 flex items-center justify-center cursor-pointer transition-all duration-200 ${
-            isEmpty
-              ? 'bg-gray-100 border-gray-300 hover:bg-gray-200'
-              : node.active
+          className={`w-16 h-16 rounded-full border-4 flex items-center justify-center cursor-pointer transition-all duration-200 ${isEmpty
+            ? 'bg-gray-100 border-gray-300 hover:bg-gray-200'
+            : node.active
               ? 'bg-gradient-to-br from-blue-500 to-purple-600 border-blue-300 hover:from-blue-600 hover:to-purple-700 transform hover:scale-105'
               : 'bg-gray-400 border-gray-500 hover:bg-gray-500'
-          } shadow-lg hover:shadow-xl`}
+            } shadow-lg hover:shadow-xl`}
         >
           {isEmpty ? (
             <span className="text-gray-500 text-xs font-medium">Vazio</span>
@@ -160,11 +157,10 @@ const TreeNode: React.FC<TreeNodeProps> = ({
         {node && hasChildren && (
           <button
             onClick={handleExpandClick}
-            className={`absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center transition-all ${
-              isExpanded 
-                ? 'bg-red-500 hover:bg-red-600 text-white rotate-180' 
-                : 'bg-green-500 hover:bg-green-600 text-white'
-            }`}
+            className={`absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-6 h-6 rounded-full border-2 border-white flex items-center justify-center transition-all ${isExpanded
+              ? 'bg-red-500 hover:bg-red-600 text-white rotate-180'
+              : 'bg-green-500 hover:bg-green-600 text-white'
+              }`}
           >
             <ChevronDown className="w-3 h-3" />
           </button>
@@ -173,11 +169,10 @@ const TreeNode: React.FC<TreeNodeProps> = ({
 
       {/* Node Name */}
       <div className="mt-2 text-center">
-        <p className={`text-sm font-medium max-w-20 truncate ${
-          isEmpty 
-            ? 'text-gray-500' 
-            : 'text-gray-800'
-        }`}>
+        <p className={`text-sm font-medium max-w-20 truncate ${isEmpty
+          ? 'text-gray-500'
+          : 'text-gray-800'
+          }`}>
           {isEmpty ? 'Vazio' : node.name}
         </p>
       </div>
@@ -210,7 +205,14 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
         const data = await response.json();
         const convertedData = convertToTernaryStructure(data);
         setTreeData(convertedData);
-        setExpandedNodes(new Set(['root', convertedData?.id || '']));
+        // Expand root and level 1 by default
+        const initialExpanded = new Set(['root', convertedData?.id || '']);
+        if (convertedData?.children) {
+          Object.values(convertedData.children).forEach(child => {
+            if (child) initialExpanded.add(child.id);
+          });
+        }
+        setExpandedNodes(initialExpanded);
       } else {
         setError('Erro ao carregar árvore da rede');
       }
@@ -225,95 +227,45 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
   const convertToTernaryStructure = (data: any): NetworkNode => {
     const converted: NetworkNode = {
       id: data.id || 'root',
-      name: data.name || data.full_name || 'Você',
+      name: data.name || data.full_name || 'Afiliado',
       active: data.active !== false,
       level: data.level || 0,
-      signup_date: data.signup_date || new Date().toISOString(),
+      signup_date: data.signup_date || data.created_at || new Date().toISOString(),
       total_referrals: data.direct_referrals || 0,
       children: {}
     };
+
     if (typeof data.position_slot === 'number') {
       converted.position = data.position_slot === 0 ? 'left' : data.position_slot === 1 ? 'center' : 'right';
     }
 
-    const slots: { left?: NetworkNode; center?: NetworkNode; right?: NetworkNode } = {};
-    const sourceChildren: any[] =
-      Array.isArray(data.children) && data.children.length ? data.children :
-      Array.isArray(data.raw_data) && data.raw_data.length ? data.raw_data : [];
-    try {
-      console.log('[TREE] Source children length:', sourceChildren.length, 'node id:', converted.id);
-    } catch {}
-    if (sourceChildren.length) {
+    const sourceChildren: any[] = Array.isArray(data.children) ? data.children : [];
+
+    if (sourceChildren.length > 0) {
+      const slots: { left?: NetworkNode; center?: NetworkNode; right?: NetworkNode } = {};
+
       sourceChildren.forEach((child, idx) => {
+        // Recursively convert child
+        const childConverted = convertToTernaryStructure(child);
         const ps = typeof child.position_slot === 'number' ? child.position_slot : null;
-        const childConverted = convertToTernaryStructure({
-          id: child.id,
-          name: child.full_name || child.name,
-          active: child.last_access_at ? (new Date(child.last_access_at).getTime() > (Date.now() - 30 * 24 * 60 * 60 * 1000)) : true,
-          level: (converted.level || 0) + 1,
-          signup_date: child.created_at,
-          direct_referrals: 0,
-          position_slot: child.position_slot ?? null,
-          children: child.children || [],
-        });
-        if (ps === 0) {
-          slots.left = { ...childConverted, position: 'left' };
-        } else if (ps === 1) {
-          slots.center = { ...childConverted, position: 'center' };
-        } else if (ps === 2) {
-          slots.right = { ...childConverted, position: 'right' };
-        } else {
-          if (!slots.left) slots.left = { ...childConverted, position: 'left' };
+
+        if (ps === 0) slots.left = { ...childConverted, position: 'left' };
+        else if (ps === 1) slots.center = { ...childConverted, position: 'center' };
+        else if (ps === 2) slots.right = { ...childConverted, position: 'right' };
+        else {
+          // Fallback if no position_slot
+          if (!slots.left && idx === 0) slots.left = { ...childConverted, position: 'left' };
+          else if (!slots.center && idx === 1) slots.center = { ...childConverted, position: 'center' };
+          else if (!slots.right && idx === 2) slots.right = { ...childConverted, position: 'right' };
+          // Emergency fallback to avoid losing nodes
+          else if (!slots.left) slots.left = { ...childConverted, position: 'left' };
           else if (!slots.center) slots.center = { ...childConverted, position: 'center' };
           else if (!slots.right) slots.right = { ...childConverted, position: 'right' };
         }
-        // Index-based fallback to ensure visibility
-        if (!slots.left && idx === 0) slots.left = { ...childConverted, position: 'left' };
-        if (!slots.center && idx === 1) slots.center = { ...childConverted, position: 'center' };
-        if (!slots.right && idx === 2) slots.right = { ...childConverted, position: 'right' };
       });
-      // Final safety: if still empty, assign first items directly without recursion
-      if (!slots.left && sourceChildren[0]) {
-        const c = sourceChildren[0];
-        slots.left = {
-          id: c.id,
-          name: c.full_name || c.name || 'Afiliado',
-          active: c.last_access_at ? (new Date(c.last_access_at).getTime() > (Date.now() - 30 * 24 * 60 * 60 * 1000)) : true,
-          level: (converted.level || 0) + 1,
-          signup_date: c.created_at,
-          total_referrals: 0,
-          children: {},
-          position: 'left'
-        };
-      }
-      if (!slots.center && sourceChildren[1]) {
-        const c = sourceChildren[1];
-        slots.center = {
-          id: c.id,
-          name: c.full_name || c.name || 'Afiliado',
-          active: c.last_access_at ? (new Date(c.last_access_at).getTime() > (Date.now() - 30 * 24 * 60 * 60 * 1000)) : true,
-          level: (converted.level || 0) + 1,
-          signup_date: c.created_at,
-          total_referrals: 0,
-          children: {},
-          position: 'center'
-        };
-      }
-      if (!slots.right && sourceChildren[2]) {
-        const c = sourceChildren[2];
-        slots.right = {
-          id: c.id,
-          name: c.full_name || c.name || 'Afiliado',
-          active: c.last_access_at ? (new Date(c.last_access_at).getTime() > (Date.now() - 30 * 24 * 60 * 60 * 1000)) : true,
-          level: (converted.level || 0) + 1,
-          signup_date: c.created_at,
-          total_referrals: 0,
-          children: {},
-          position: 'right'
-        };
-      }
+
+      converted.children = slots;
     }
-    converted.children = slots;
 
     return converted;
   };
@@ -325,19 +277,19 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
   const handleExpandClick = (nodeId: string, level: number) => {
     const isExpanded = expandedNodes.has(nodeId);
     const newExpanded = new Set(expandedNodes);
-    
+
     if (isExpanded) {
       newExpanded.delete(nodeId);
     } else {
       newExpanded.add(nodeId);
-      
+
       // Load more levels if needed (mock implementation)
       if (!loadedLevels.has(`${nodeId}-${level}`)) {
         setLoadedLevels(prev => new Set(prev.add(`${nodeId}-${level}`)));
         // Here you would normally fetch more data from API
       }
     }
-    
+
     setExpandedNodes(newExpanded);
   };
 
@@ -469,7 +421,7 @@ const TernaryNetworkTree: React.FC<TernaryNetworkTreeProps> = () => {
               onExpandClick={handleExpandClick}
               isExpanded={expandedNodes.has(treeData.id)}
             />
-            
+
             {/* Render Children */}
             {treeData && expandedNodes.has(treeData.id) && renderLevel(treeData.children, 1, true)}
           </div>

@@ -38,11 +38,11 @@ function NetworkPage() {
   console.log('[NETWORK] Component mounted');
   const navigate = useNavigate();
   const { user: affiliateUser, loading: authLoading } = useAffiliateAuth();
-  
-  console.log('[NETWORK] Auth state:', { 
-    authLoading, 
-    hasUser: !!affiliateUser, 
-    userEmail: affiliateUser?.email 
+
+  console.log('[NETWORK] Auth state:', {
+    authLoading,
+    hasUser: !!affiliateUser,
+    userEmail: affiliateUser?.email
   });
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState<NetworkMember[]>([]);
@@ -54,7 +54,7 @@ function NetworkPage() {
 
   useEffect(() => {
     console.log('[NETWORK] useEffect triggered:', { authLoading, hasUser: !!affiliateUser });
-    
+
     if (!authLoading) {
       if (affiliateUser) {
         console.log('[NETWORK] User authenticated, loading data...');
@@ -129,6 +129,10 @@ function NetworkPage() {
   const handlePreferenceChange = async (newPreference: PreferenceType) => {
     console.log('[NETWORK] Updating preference to:', newPreference)
     setUpdatingPreference(true);
+    // Optimistic update
+    const previousPreference = preference;
+    setPreference(newPreference);
+
     try {
       const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
       const response = await authenticatedFetch('/api/affiliate/network/preference', {
@@ -141,13 +145,19 @@ function NetworkPage() {
 
       if (response.ok) {
         console.log('[NETWORK] Preference update OK')
+        // Refresh to be sure we are in sync with server logic
         await fetchNetworkPreference()
       } else {
         const err = await response.text()
         console.log('[NETWORK] Preference update failed:', err)
+        // Revert on error
+        setPreference(previousPreference);
+        alert("Erro ao salvar preferência. Tente novamente.");
       }
     } catch (error) {
       console.error('Error updating preference:', error);
+      // Revert on error
+      setPreference(previousPreference);
     } finally {
       setUpdatingPreference(false);
     }
@@ -158,8 +168,8 @@ function NetworkPage() {
     return date.toLocaleDateString('pt-BR');
   };
 
-  const filteredMembers = showInactive 
-    ? members 
+  const filteredMembers = showInactive
+    ? members
     : members.filter(member => member.is_active_this_month);
 
   if (authLoading || loading) {
@@ -222,7 +232,7 @@ function NetworkPage() {
                 </div>
               </div>
             ))}
-            
+
             <div className="md:col-span-5 grid grid-cols-2 gap-4">
               <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
                 <div className="flex items-center justify-between mb-4">
@@ -253,7 +263,7 @@ function NetworkPage() {
               Configurações de Rede
             </h2>
           </div>
-          
+
           <PreferenceToggle
             value={preference}
             onChange={handlePreferenceChange}
@@ -268,7 +278,7 @@ function NetworkPage() {
               <TreePine className="w-5 h-5 text-purple-500 mr-2" />
               Estrutura da Rede
             </h2>
-            
+
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setViewMode(viewMode === 'tree' ? 'list' : 'tree')}
@@ -279,7 +289,7 @@ function NetworkPage() {
                   {viewMode === 'tree' ? 'Ver Lista' : 'Ver Árvore'}
                 </span>
               </button>
-              
+
               <button
                 onClick={() => setShowInactive(!showInactive)}
                 className="flex items-center space-x-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
@@ -291,7 +301,7 @@ function NetworkPage() {
               </button>
             </div>
           </div>
-          
+
           {viewMode === 'tree' ? (
             <TernaryNetworkTree maxLevels={10} />
           ) : (
@@ -303,7 +313,7 @@ function NetworkPage() {
                     {showInactive ? 'Nenhum membro na rede' : 'Nenhum membro ativo'}
                   </h3>
                   <p className="text-gray-500">
-                    {showInactive 
+                    {showInactive
                       ? 'Comece a indicar pessoas para construir sua rede MLM.'
                       : 'Nenhum membro ativo no período selecionado.'
                     }
@@ -317,20 +327,18 @@ function NetworkPage() {
                         <div className="flex-1">
                           <div className="flex items-center space-x-3">
                             <h3 className="text-white font-medium">{member.email}</h3>
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                              member.level === 1
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${member.level === 1
                                 ? 'bg-blue-600 text-white'
                                 : member.level === 2
-                                ? 'bg-green-600 text-white'
-                                : 'bg-purple-600 text-white'
-                            }`}>
+                                  ? 'bg-green-600 text-white'
+                                  : 'bg-purple-600 text-white'
+                              }`}>
                               Nível {member.level}
                             </span>
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                              member.is_active_this_month
+                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${member.is_active_this_month
                                 ? 'bg-green-900 text-green-300'
                                 : 'bg-red-900 text-red-300'
-                            }`}>
+                              }`}>
                               {member.is_active_this_month ? 'Ativo' : 'Inativo'}
                             </span>
                           </div>
@@ -338,11 +346,11 @@ function NetworkPage() {
                             CPF: {member.cpf} • {member.total_purchases} compras
                           </p>
                           <p className="text-gray-500 text-xs mt-1">
-                            Entrou em {formatDate(member.created_at)} • 
+                            Entrou em {formatDate(member.created_at)} •
                             Última compra: {member.last_purchase_date ? formatDate(member.last_purchase_date) : 'Nunca'}
                           </p>
                         </div>
-                        
+
                         <div className="text-right">
                           <Target className="w-5 h-5 text-gray-500" />
                         </div>
