@@ -108,7 +108,7 @@ function NetworkPage() {
         console.log('[NETWORK] Fetched preference from API:', {
           preference: data.preference,
           preference_raw: data.preference_raw,
-          preference_normalized: data.preference_normalized,
+          trace: data.trace
         })
         setPreference(data.preference);
         try {
@@ -328,16 +328,16 @@ function NetworkPage() {
                           <div className="flex items-center space-x-3">
                             <h3 className="text-white font-medium">{member.email}</h3>
                             <span className={`px-2 py-1 text-xs font-semibold rounded-full ${member.level === 1
-                                ? 'bg-blue-600 text-white'
-                                : member.level === 2
-                                  ? 'bg-green-600 text-white'
-                                  : 'bg-purple-600 text-white'
+                              ? 'bg-blue-600 text-white'
+                              : member.level === 2
+                                ? 'bg-green-600 text-white'
+                                : 'bg-purple-600 text-white'
                               }`}>
                               Nível {member.level}
                             </span>
                             <span className={`px-2 py-1 text-xs font-semibold rounded-full ${member.is_active_this_month
-                                ? 'bg-green-900 text-green-300'
-                                : 'bg-red-900 text-red-300'
+                              ? 'bg-green-900 text-green-300'
+                              : 'bg-red-900 text-red-300'
                               }`}>
                               {member.is_active_this_month ? 'Ativo' : 'Inativo'}
                             </span>

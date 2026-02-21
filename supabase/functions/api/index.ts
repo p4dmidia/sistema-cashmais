@@ -3178,9 +3178,14 @@ app.get('/api/affiliate/network/preference', async (c) => {
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
 
-  if (!token) return c.json({ preference: 'auto', error: 'Token não encontrado' })
+  const trace: any = { at: new Date().toISOString() }
+
+  if (!token) return c.json({ preference: 'auto', error: 'Token não encontrado', trace })
+
   try {
     const supabase = createSupabase()
+
+    // 1. Resolver Sessão
     const { data: sessionData, error: sessErr } = await supabase
       .from('affiliate_sessions')
       .select('affiliate_id')
@@ -3188,34 +3193,56 @@ app.get('/api/affiliate/network/preference', async (c) => {
       .gt('expires_at', new Date().toISOString())
       .maybeSingle()
 
+    trace.session_status = sessErr ? 'error' : (sessionData ? 'found' : 'missing')
     if (sessErr || !sessionData) {
-      console.error('[API_PREFERENCE] Sessão inválida ou expirada:', token)
-      return c.json({ preference: 'auto', error: 'Sessão inválida' })
+      return c.json({ preference: 'auto', error: 'Sessão inválida', trace })
     }
 
     const affiliateId = (sessionData as any).affiliate_id
-    console.log('[API_PREFERENCE] Buscando para affiliateId:', affiliateId)
+    trace.affiliate_id = affiliateId
 
-    // Buscamos o ID do perfil primeiro para garantir consistência com o PUT
-    const { data: aff } = await supabase.from('affiliates').select('id, cpf').eq('id', affiliateId).maybeSingle()
-    if (!aff) {
-      console.error('[API_PREFERENCE] Afiliado não encontrado no DB:', affiliateId)
-      return c.json({ preference: 'auto', error: 'Afiliado não encontrado' })
+    // 2. Resolver Perfil (BIGINT)
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('id, mocha_user_id')
+      .eq('mocha_user_id', `affiliate_${affiliateId}`)
+      .maybeSingle()
+
+    trace.profile_status = profile ? 'found' : 'missing'
+    if (!profile) {
+      return c.json({ preference: 'auto', error: 'Perfil não encontrado', trace })
     }
 
-    const pref = await getSponsorPreference(supabase, aff.id as any)
+    const profileId = (profile as any).id
+    trace.profile_id = profileId
+    trace.mocha_id_checked = (profile as any).mocha_user_id
+
+    // 3. Buscar Preferência
+    const { data: settings } = await supabase
+      .from('user_settings')
+      .select('leg_preference, updated_at')
+      .eq('user_id', profileId)
+      .maybeSingle()
+
+    trace.settings_status = settings ? 'found' : 'missing'
+    const rawPref = (settings as any)?.leg_preference
+    trace.db_raw = rawPref
+    trace.db_updated_at = (settings as any)?.updated_at
+
+    const pref = normalizeLegPreference(rawPref)
     const apiPref = pref === 'automatic' ? 'auto' : pref
 
-    console.log('[API_PREFERENCE] Resultado final:', { affiliateId, pref, apiPref })
+    trace.final_api = apiPref
 
     return c.json({
+      success: true,
       preference: apiPref,
-      preference_raw: pref,
-      preference_source: 'db'
+      preference_raw: rawPref,
+      trace
     })
   } catch (e) {
-    console.error('[API_PREFERENCE] Erro exceção:', e)
-    return c.json({ preference: 'auto', error: String(e) })
+    console.error('[API_PREFERENCE_GET] Catch:', e)
+    return c.json({ preference: 'auto', error: String(e), trace })
   }
 })
 
@@ -3261,47 +3288,54 @@ app.put('/api/affiliate/network/preference', async (c) => {
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const body = await c.req.json()
+    const prefToSave = normalizeLegPreference(body.preference)
     const supabase = createSupabase()
+
+    // 1. Validar Sessão
     const { data: sessionData } = await supabase
       .from('affiliate_sessions')
-      .select('affiliate_id, affiliates!inner(id, cpf)')
+      .select('affiliate_id, affiliates!inner(cpf)')
       .eq('session_token', String(token))
       .gt('expires_at', new Date().toISOString())
-      .eq('affiliates.is_active', true)
       .maybeSingle()
 
-    if (!sessionData) return c.json({ error: 'Sessão expirada' }, 401)
+    if (!sessionData) return c.json({ error: 'Sessão inválida' }, 401)
+
     const affiliateId = (sessionData as any).affiliate_id
     const affiliateCpf = (sessionData as any).affiliates?.cpf || ''
 
-    const pref = normalizeLegPreference(body.preference)
-    console.log('[API_PUT_PREFERENCE] Preferência normalizada para salvar:', pref)
+    // 2. Garantir Perfil (BIGINT)
+    const profileId = await ensureUserProfileExists(supabase, affiliateId, affiliateCpf)
+    if (!profileId) return c.json({ error: 'Perfil não encontrado' }, 500)
 
-    // Garante que o perfil existe
-    let profileId = await ensureUserProfileExists(supabase, affiliateId, affiliateCpf)
-    console.log('[API_PUT_PREFERENCE] Profile ID resolvido:', profileId)
-
-    if (!profileId) {
-      return c.json({ error: 'Perfil do usuário não encontrado' }, 500)
-    }
-
+    // 3. Upsert
     const { error: upErr } = await supabase
       .from('user_settings')
       .upsert({
         user_id: profileId,
-        leg_preference: pref,
+        leg_preference: prefToSave,
         updated_at: new Date().toISOString()
       }, { onConflict: 'user_id' })
 
-    if (upErr) {
-      console.error('[API_PREFERENCE_PUT] Error updating settings:', upErr)
-      return c.json({ error: 'Erro ao salvar preferência' }, 500)
-    }
+    if (upErr) return c.json({ error: 'Erro ao salvar: ' + upErr.message }, 500)
 
-    return c.json({ success: true })
+    // 4. Double check / Verify saved value
+    const { data: verify } = await supabase
+      .from('user_settings')
+      .select('leg_preference')
+      .eq('user_id', profileId)
+      .maybeSingle()
+
+    console.log('[API_PUT_PREF] Processed:', { affiliateId, profileId, saved: prefToSave, verified: (verify as any)?.leg_preference })
+
+    return c.json({
+      success: true,
+      preference: prefToSave === 'automatic' ? 'auto' : prefToSave,
+      verified: (verify as any)?.leg_preference
+    })
   } catch (e) {
-    console.error('[API_PREFERENCE_PUT] Catch Error:', e)
-    return c.json({ error: 'Erro interno do servidor' }, 500)
+    console.error('[API_PREFERENCE_PUT] Catch:', e)
+    return c.json({ error: 'Erro interno' }, 500)
   }
 })
 
