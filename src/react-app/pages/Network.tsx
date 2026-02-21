@@ -102,27 +102,34 @@ function NetworkPage() {
   const fetchNetworkPreference = async () => {
     try {
       const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
-      const response = await authenticatedFetch('/api/affiliate/network/preference');
+      // Adicionando timestamp para evitar cache e garantir o estado mais recente do DB
+      const response = await authenticatedFetch(`/api/affiliate/network/preference?t=${Date.now()}`);
       if (response.ok) {
         const data = await response.json();
-        console.log('[NETWORK] Fetched preference from API:', {
-          preference: data.preference,
-          preference_raw: data.preference_raw,
-          trace: data.trace
-        })
-        setPreference(data.preference);
+        console.log('[NETWORK] API Preference Data:', data);
+
+        if (data.preference) {
+          console.log('[NETWORK] Setting preference state to:', data.preference);
+          setPreference(data.preference);
+        } else {
+          console.warn('[NETWORK] Preference missing in response:', data);
+        }
+
         try {
-          const prev = await authenticatedFetch('/api/affiliate/network/placement-preview')
+          const prevUrl = `/api/affiliate/network/placement-preview?t=${Date.now()}`;
+          const prev = await authenticatedFetch(prevUrl);
           if (prev.ok) {
-            const pv = await prev.json()
-            console.log('[NETWORK] Placement preview:', pv)
+            const pv = await prev.json();
+            console.log('[NETWORK] Placement preview data:', pv);
           }
         } catch (e) {
-          console.log('[NETWORK] Placement preview error:', e)
+          console.error('[NETWORK] Error fetching placement preview:', e);
         }
+      } else {
+        console.error('[NETWORK] Preference API returned error status:', response.status);
       }
     } catch (error) {
-      console.error('Error fetching network preference:', error);
+      console.error('[NETWORK] Error in fetchNetworkPreference:', error);
     }
   };
 

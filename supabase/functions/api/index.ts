@@ -3179,65 +3179,32 @@ app.get('/api/affiliate/network/preference', async (c) => {
   const token = xSession || cookieToken || bearerToken
 
   const trace: any = { at: new Date().toISOString() }
-
-  if (!token) return c.json({ preference: 'auto', error: 'Token não encontrado', trace })
+  if (!token) return c.json({ preference: 'auto', error: 'No token', trace })
 
   try {
     const supabase = createSupabase()
-
-    // 1. Resolver Sessão
-    const { data: sessionData, error: sessErr } = await supabase
+    const { data: sessionData } = await supabase
       .from('affiliate_sessions')
       .select('affiliate_id')
       .eq('session_token', String(token))
       .gt('expires_at', new Date().toISOString())
       .maybeSingle()
 
-    trace.session_status = sessErr ? 'error' : (sessionData ? 'found' : 'missing')
-    if (sessErr || !sessionData) {
-      return c.json({ preference: 'auto', error: 'Sessão inválida', trace })
-    }
+    if (!sessionData) return c.json({ preference: 'auto', error: 'Invalid session', trace })
 
     const affiliateId = (sessionData as any).affiliate_id
     trace.affiliate_id = affiliateId
 
-    // 2. Resolver Perfil (BIGINT)
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('id, mocha_user_id')
-      .eq('mocha_user_id', `affiliate_${affiliateId}`)
-      .maybeSingle()
-
-    trace.profile_status = profile ? 'found' : 'missing'
-    if (!profile) {
-      return c.json({ preference: 'auto', error: 'Perfil não encontrado', trace })
-    }
-
-    const profileId = (profile as any).id
-    trace.profile_id = profileId
-    trace.mocha_id_checked = (profile as any).mocha_user_id
-
-    // 3. Buscar Preferência
-    const { data: settings } = await supabase
-      .from('user_settings')
-      .select('leg_preference, updated_at')
-      .eq('user_id', profileId)
-      .maybeSingle()
-
-    trace.settings_status = settings ? 'found' : 'missing'
-    const rawPref = (settings as any)?.leg_preference
-    trace.db_raw = rawPref
-    trace.db_updated_at = (settings as any)?.updated_at
-
-    const pref = normalizeLegPreference(rawPref)
+    // Usar a mesma lógica do placement-preview por consistência total
+    const pref = await getSponsorPreference(supabase, affiliateId)
     const apiPref = pref === 'automatic' ? 'auto' : pref
 
-    trace.final_api = apiPref
+    trace.final = apiPref
+    console.log('[API_PREFERENCE_GET] Final:', { affiliateId, apiPref })
 
     return c.json({
-      success: true,
       preference: apiPref,
-      preference_raw: rawPref,
+      preference_raw: pref,
       trace
     })
   } catch (e) {
