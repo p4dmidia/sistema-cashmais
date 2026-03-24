@@ -1,24 +1,21 @@
 import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { mochaPlugins } from "@getmocha/vite-plugins";
 
-export default defineConfig(({ mode }) => {
-  const isNetlify = process.env.NETLIFY === "true";
-  const plugins = isNetlify ? [react()] : [...mochaPlugins(process.env as any), react()];
+export default defineConfig(() => {
   return {
-    plugins,
+    plugins: [react()],
     server: {
       allowedHosts: true,
       proxy: {
         "/api": {
-          target: "https://brxolhltjkorlkyutvyi.supabase.co/functions/v1",
+          target: "https://jxupizzwrnivhnaexrmb.supabase.co/functions/v1",
           changeOrigin: true,
           secure: false,
           rewrite: (path) => path,
         },
         "/affiliate": {
-          target: "https://brxolhltjkorlkyutvyi.supabase.co/functions/v1/api",
+          target: "https://jxupizzwrnivhnaexrmb.supabase.co/functions/v1/api",
           changeOrigin: true,
           secure: false,
         },
@@ -36,9 +33,6 @@ export default defineConfig(({ mode }) => {
       alias: {
         "@": path.resolve(__dirname, "./src"),
       },
-    },
-    optimizeDeps: {
-      include: ["@getmocha/users-service/react", "react", "react-dom"],
     },
   };
 });
