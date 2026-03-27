@@ -40,6 +40,15 @@ function getCookieOptions(c: any, maxAge: number) {
   }
 }
 
+function getAuthToken(c: any, sessionName: string) {
+  const xSession = c.req.header('x-session-token');
+  const cookieToken = getCookie(c, sessionName);
+  const authHeader = c.req.header('authorization');
+  const bearerToken = authHeader?.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : null;
+  
+  return xSession || cookieToken || bearerToken || null;
+}
+
 async function releaseBlockedIfQualified(client: any, affiliateId: number) {
   const { count } = await client
     .from('affiliates')
@@ -242,9 +251,126 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
 }))
+// CORREÇÃO DE ROTEAMENTO DEFINITIVA: Regex relaxada para captura total
+const affiliateRegisterRegex = /.*affiliate\/register/;
+const companyRegisterRegex = /.*empresa\/registrar/;
 
-app.get('/health', (c) => c.json({ ok: true }))
-app.get('/api/health', (c) => c.json({ ok: true }))
+app.get('/health', (c) => c.json({ ok: true, version: 'v15-auth-robust' }))
+app.get('/api/health', (c) => c.json({ ok: true, version: 'v15-auth-robust' }))
+
+const CompanyRegisterSchema = z.object({
+  razao_social: z.string().min(1),
+  nome_fantasia: z.string().min(1),
+  cnpj: z.string().min(14),
+  email: z.string().email(),
+  telefone: z.string().min(10),
+  responsavel: z.string().min(1),
+  senha: z.string().min(6),
+  endereco: z.string().optional(),
+  site_instagram: z.string().optional(),
+})
+
+app.all('/api/empresa/registrar', async (c: any) => {
+  console.log('[COMPANY_REGISTER] Matched /api/empresa/registrar')
+  return await handleCompanyRegister(c)
+})
+app.all('/empresa/registrar', async (c: any) => {
+  console.log('[COMPANY_REGISTER] Matched /empresa/registrar')
+  return await handleCompanyRegister(c)
+})
+
+async function handleCompanyRegister(c: any) {
+  try {
+    const body = await c.req.json()
+    const parsed = CompanyRegisterSchema.safeParse(body)
+    if (!parsed.success) return c.json({ error: 'Dados inválidos', details: parsed.error.format() }, 400)
+    
+    const data = parsed.data
+    const supabase = createSupabase()
+    const cleanCnpj = String(data.cnpj).replace(/\D/g, '')
+    
+    if (cleanCnpj.length !== 14 || /^([0-9])\1{13}$/.test(cleanCnpj)) {
+      return c.json({ error: 'CNPJ inválido' }, 400)
+    }
+
+    const { data: existingEmail } = await supabase.from('companies').select('id').eq('email', data.email).maybeSingle()
+    if (existingEmail) return c.json({ error: 'Email já cadastrado' }, 409)
+    
+    const { data: existingCnpj } = await supabase.from('companies').select('id').eq('cnpj', cleanCnpj).maybeSingle()
+    if (existingCnpj) return c.json({ error: 'CNPJ já cadastrado' }, 409)
+
+    const passwordHash = await bcrypt.hash(data.senha, 10)
+    const { data: newCompany, error: companyError } = await supabase
+      .from('companies')
+      .insert({
+        razao_social: data.razao_social,
+        nome_fantasia: data.nome_fantasia,
+        cnpj: cleanCnpj,
+        email: data.email,
+        telefone: String(data.telefone).replace(/\D/g, ''),
+        responsavel: data.responsavel,
+        senha_hash: passwordHash,
+        endereco: data.endereco || '',
+        site_instagram: data.site_instagram || '',
+        is_active: true
+      })
+      .select()
+      .maybeSingle()
+
+    if (companyError || !newCompany) {
+      return c.json({ error: 'Erro ao cadastrar empresa', details: companyError?.message }, 500)
+    }
+
+    await supabase.from('company_cashback_config').insert({ company_id: (newCompany as any).id, cashback_percentage: 5.0 })
+    return c.json({ success: true, message: 'Empresa cadastrada!', id: (newCompany as any).id })
+  } catch (e) {
+    return c.json({ error: 'Erro interno', details: (e as any).message }, 500)
+  }
+}
+
+app.all('/api/affiliate/register', async (c: any) => {
+  return await handleAffiliateRegister(c)
+})
+app.all('/affiliate/register', async (c: any) => {
+  return await handleAffiliateRegister(c)
+})
+
+async function handleAffiliateRegister(c: any) {
+  try {
+    const body = await c.req.json()
+    const parsed = z.object({
+      full_name: z.string().min(1),
+      cpf: z.string().min(11),
+      email: z.string().email(),
+      whatsapp: z.string().nullable().optional(),
+      password: z.string().min(6),
+      referral_code: z.string().nullable().optional(),
+    }).safeParse(body)
+    
+    if (!parsed.success) {
+       return c.json({ error: 'Dados inválidos', field_errors: parsed.error.flatten().fieldErrors }, 400)
+    }
+    
+    const client = createSupabase();
+    const { data: result, error: rpcError } = await client.rpc('register_affiliate_v2', {
+      p_full_name: parsed.data.full_name,
+      p_cpf: parsed.data.cpf,
+      p_email: parsed.data.email,
+      p_password_hash: parsed.data.password,
+      p_whatsapp: parsed.data.whatsapp || null,
+      p_referral_code: parsed.data.referral_code || null
+    });
+
+    if (rpcError) return c.json({ error: 'Erro ao cadastrar afiliado', details: rpcError.message }, 500);
+    return c.json({ success: true, data: result });
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500);
+  }
+}
+
+
+
+
 
 const AdminLoginSchema = z.object({
   username: z.string().min(1),
@@ -286,9 +412,18 @@ app.post('/admin/login', async (c) => {
 app.post('/api/admin/login', async (c) => {
   try {
     const body = await c.req.json()
+    console.log('[ADMIN_LOGIN] Request body arrived:', JSON.stringify({ ...body, password: '***' }))
     const parsed = AdminLoginSchema.safeParse(body)
     if (!parsed.success) return c.json({ error: 'Dados inválidos' }, 400)
     const { username, password } = parsed.data
+    
+    // SANITY CHECK
+    const testHash = await bcrypt.hash('admin123', 12)
+    const testOk = await bcrypt.compare('admin123', testHash)
+    console.log(`[ADMIN_LOGIN] SANITY CHECK: ${testOk ? 'PASSED' : 'FAILED'} | Local Generated Hash: ${testHash}`)
+    
+    console.log(`[ADMIN_LOGIN] Attempting login for: [${username}] | Pass length: ${password?.length}`)
+    
     const supabase = createSupabase()
     const { data: adminUser, error } = await supabase
       .schema('public')
@@ -296,31 +431,51 @@ app.post('/api/admin/login', async (c) => {
       .select('id, username, email, full_name, password_hash, is_active')
       .eq('username', username)
       .eq('is_active', true)
-      .single()
+      .maybeSingle()
+      
     if (error || !adminUser) {
-      console.log('[ADMIN_LOGIN] admin_users query error:', error)
-      return c.json({ error: 'Usuário não encontrado', details: (error as any)?.message || (error as any)?.description || JSON.stringify(error) }, 404)
+      console.log('[ADMIN_LOGIN] User not found or DB error:', error || 'User missing')
+      return c.json({ error: 'Usuário não encontrado' }, 404)
     }
+    
     const ok = await bcrypt.compare(password, (adminUser as any).password_hash)
-    if (!ok) return c.json({ error: 'Credenciais inválidas' }, 401)
+    console.log(`[ADMIN_LOGIN] Bcrypt result: ${ok} | Pass used: ${password} | Hash in DB: ${adminUser.password_hash}`)
+    
+    if (!ok) {
+      return c.json({ error: 'Credenciais inválidas' }, 401)
+    }
+    
     const sessionToken = crypto.randomUUID()
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     const { error: sessErr } = await supabase
       .schema('public')
       .from('admin_sessions')
       .insert({ admin_user_id: (adminUser as any).id, session_token: sessionToken, expires_at: expiresAt })
+    
     if (sessErr) {
       console.log('[ADMIN_LOGIN] admin_sessions insert error:', sessErr)
-      return c.json({ error: 'Erro interno do servidor', details: (sessErr as any)?.message || (sessErr as any)?.description || JSON.stringify(sessErr) }, 500)
+      return c.json({ error: 'Erro interno do servidor' }, 500)
     }
+    
     setCookie(c, 'admin_session', sessionToken, getCookieOptions(c, 24 * 60 * 60))
     await supabase
       .schema('public')
       .from('admin_audit_logs')
       .insert({ admin_user_id: (adminUser as any).id, action: 'LOGIN', entity_type: 'admin_session' })
-    return c.json({ success: true, token: sessionToken, admin: { id: (adminUser as any).id, username: (adminUser as any).username, email: (adminUser as any).email, full_name: (adminUser as any).full_name } })
+      
+    return c.json({ 
+      success: true, 
+      token: sessionToken, 
+      admin: { 
+        id: (adminUser as any).id, 
+        username: (adminUser as any).username, 
+        email: (adminUser as any).email, 
+        full_name: (adminUser as any).full_name 
+      } 
+    })
   } catch (e) {
-    return c.json({ error: (e as any)?.message || 'Erro interno do servidor', stack: (e as any)?.stack || '', details: (e as any)?.description || '' }, 500)
+    console.error('[ADMIN_LOGIN] Critical Exception:', e)
+    return c.json({ error: (e as any)?.message || 'Erro interno do servidor' }, 500)
   }
 })
 
@@ -345,7 +500,7 @@ app.post('/api/admin/create', async (c) => {
 
 app.get('/admin/me', async (c) => {
   try {
-    const token = getCookie(c, 'admin_session')
+    const token = getAuthToken(c, 'admin_session')
     if (!token) return c.json({ error: 'Não autenticado' }, 401)
     const supabase = createSupabase()
     const { data: session } = await supabase
@@ -363,7 +518,7 @@ app.get('/admin/me', async (c) => {
 
 app.get('/api/admin/me', async (c) => {
   try {
-    const cookieToken = getCookie(c, 'admin_session')
+    const cookieToken = getAuthToken(c, 'admin_session')
     const authHeader = c.req.header('authorization') || ''
     const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
     const token = cookieToken || bearerToken
@@ -384,7 +539,7 @@ app.get('/api/admin/me', async (c) => {
 
 app.post('/admin/logout', async (c) => {
   try {
-    const token = getCookie(c, 'admin_session')
+    const token = getAuthToken(c, 'admin_session')
     const supabase = createSupabase()
     if (token) await supabase.from('admin_sessions').delete().eq('session_token', token)
     setCookie(c, 'admin_session', '', getCookieOptions(c, 0))
@@ -396,7 +551,7 @@ app.post('/admin/logout', async (c) => {
 
 app.post('/api/admin/logout', async (c) => {
   try {
-    const token = getCookie(c, 'admin_session')
+    const token = getAuthToken(c, 'admin_session')
     const supabase = createSupabase()
     if (token) await supabase.from('admin_sessions').delete().eq('session_token', token)
     setCookie(c, 'admin_session', '', getCookieOptions(c, 0))
@@ -728,7 +883,7 @@ app.get('/api/debug-vars', async (c) => {
 })
 app.post('/api/admin/invoices/generate', async (c) => {
   // 1. Verifica Permissão (Admin)
-  const token = getCookie(c, 'admin_session')
+  const token = getAuthToken(c, 'admin_session')
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const body = await c.req.json()
@@ -946,7 +1101,7 @@ app.get('/api/admin/reports/purchases', async (c) => {
 
 app.get('/api/admin/debug/cashier/diagnose', async (c) => {
   try {
-    const token = getCookie(c, 'admin_session')
+    const token = getAuthToken(c, 'admin_session')
     if (!token) return c.json({ error: 'Não autorizado' }, 401)
     const supabase = createSupabase()
     const { data: adminSess } = await supabase
@@ -1490,223 +1645,13 @@ app.post('/api/affiliate/login', async (c) => {
   }
 })
 
-app.post('/api/affiliate/register', async (c) => {
-  try {
-    const body = await c.req.json()
-    const parsed = z.object({
-      full_name: z.string().min(1),
-      cpf: z.string().min(11),
-      email: z.string().email(),
-      whatsapp: z.string().nullable().optional(),
-      password: z.string().min(6),
-      referral_code: z.string().nullable().optional(),
-    }).safeParse(body)
-    if (!parsed.success) return c.json({ error: 'Dados inválidos', field_errors: parsed.error.flatten().fieldErrors }, 400)
-    const cleanCpf = parsed.data.cpf.replace(/\D/g, '')
-    if (!validateCPF(cleanCpf)) return c.json({ error: 'CPF inválido', field: 'cpf' }, 400)
-    const supabase = createSupabase()
-    const { data: existingCpf } = await supabase.from('affiliates').select('id').eq('cpf', cleanCpf).single()
-    if (existingCpf) return c.json({ error: 'CPF já está cadastrado', field: 'cpf' }, 409)
-    const { data: existingEmail } = await supabase.from('affiliates').select('id').eq('email', parsed.data.email).single()
-    if (existingEmail) return c.json({ error: 'E-mail já está cadastrado', field: 'email' }, 409)
-    let sponsorId: number | null = null
-    if (parsed.data.referral_code && parsed.data.referral_code.trim().length > 0) {
-      const refCode = parsed.data.referral_code.trim().toUpperCase()
-      const { data: sponsor } = await supabase
-        .from('affiliates')
-        .select('id')
-        .eq('referral_code', refCode)
-        .eq('is_active', true)
-        .single()
-      sponsorId = (sponsor as any)?.id ?? null
-    }
-    const debugLogs: string[] = []
-    const passwordHash = await bcrypt.hash(parsed.data.password, 12)
-    const nowIso = new Date().toISOString()
-    // Generate unique referral_code before insert to satisfy NOT NULL/UNIQUE constraints
-    let referralCode = ''
-    for (let i = 0; i < 5; i++) {
-      referralCode = ('CM' + crypto.randomUUID().replace(/-/g, '').slice(0, 8)).toUpperCase()
-      const { data: exists } = await supabase.from('affiliates').select('id').eq('referral_code', referralCode).maybeSingle()
-      if (!exists) break
-    }
-    let finalSponsorId: number | null = sponsorId
-    let selectedPref: 'automatic' | 'left' | 'center' | 'right' = 'automatic'
-    if (sponsorId) {
-      selectedPref = await getSponsorPreference(supabase, sponsorId)
-      debugLogs.push(`1. Preferência do Pai ${sponsorId}: ${selectedPref}`)
-      finalSponsorId = await findPlacementTarget(supabase, sponsorId, selectedPref)
-      debugLogs.push(`2. ID Final de Posicionamento: ${finalSponsorId}`)
-      if (finalSponsorId !== sponsorId) {
-        debugLogs.push(`3. O sistema desceu níveis (Drill-down)`)
-      }
-    }
-    // --- CORREÇÃO DE SLOT: INÍCIO ---
-    // 1. Definição Blindada do Slot (Padrão 0 para evitar NULL)
-    let positionSlot: number = 0
+// app.post('/api/affiliate/register' moved to top for debugging
 
-    if (finalSponsorId) {
-      const map: Record<string, number> = { 'center': 1, 'right': 2, 'centro': 1, 'direita': 2 }
-      if (selectedPref && selectedPref !== 'automatic' && map[selectedPref] !== undefined) {
-        positionSlot = map[selectedPref]
-        console.log(`[DEBUG] Slot fixado pela preferência '${selectedPref}': ${positionSlot}`)
-      } else {
-        try {
-          const slots = await getChildrenBySlot(supabase, finalSponsorId)
-          for (let i = 0; i < 3; i++) {
-            if (slots[i] === undefined) {
-              positionSlot = i
-              console.log(`[DEBUG] Slot automático encontrado: ${i}`)
-              break
-            }
-          }
-        } catch (err) {
-          console.error('[DEBUG] Erro ao calcular slot automático, usando fallback 0:', err)
-          positionSlot = 0
-        }
-      }
-    }
+// old implementation removed
 
-    console.log(`>>> CHAMANDO RPC register_affiliate_v2 com SLOT: ${positionSlot}`)
-    const { data: rpcData, error: rpcError } = await supabase
-      .rpc('register_affiliate_v2', {
-        p_full_name: parsed.data.full_name.trim(),
-        p_cpf: cleanCpf,
-        p_email: parsed.data.email.trim(),
-        p_phone: parsed.data.whatsapp ? String(parsed.data.whatsapp).replace(/\D/g, '') : null,
-        p_password_hash: passwordHash,
-        p_sponsor_id: finalSponsorId,
-        p_referral_code: referralCode,
-        p_position_slot: positionSlot
-      })
-    if (rpcError) {
-      console.error('>>> ERRO CRÍTICO NA RPC:', rpcError)
-      return c.json({ error: 'Erro ao cadastrar via RPC', details: rpcError }, 500)
-    }
-    const newAffiliate: any = {
-      id: (rpcData as any)?.id,
-      full_name: parsed.data.full_name.trim(),
-      email: parsed.data.email.trim(),
-      cpf: cleanCpf,
-      referral_code: referralCode,
-      position_slot: positionSlot
-    }
-    if (!(newAffiliate as any).id) {
-      let resolvedId: string | null = null
-      for (let attempt = 0; attempt < 3 && !resolvedId; attempt++) {
-        const { data: byRef } = await supabase
-          .from('affiliates')
-          .select('id')
-          .eq('referral_code', referralCode)
-          .maybeSingle()
-        if ((byRef as any)?.id) {
-          resolvedId = String((byRef as any).id)
-          break
-        }
-        await new Promise((r) => setTimeout(r, 200))
-      }
-      if (!resolvedId) {
-        const { data: byCpf } = await supabase
-          .from('affiliates')
-          .select('id')
-          .eq('cpf', cleanCpf)
-          .maybeSingle()
-        if ((byCpf as any)?.id) resolvedId = String((byCpf as any).id)
-      }
-      if (!resolvedId) {
-        const { data: byEmail } = await supabase
-          .from('affiliates')
-          .select('id')
-          .eq('email', parsed.data.email.trim())
-          .maybeSingle()
-        if ((byEmail as any)?.id) resolvedId = String((byEmail as any).id)
-      }
-      if (!resolvedId) {
-        return c.json({ error: 'Erro interno do servidor', details: 'ID do afiliado não encontrado após registro' }, 500)
-      }
-      (newAffiliate as any).id = resolvedId
-    }
-    const { data: verifyRow } = await supabase
-      .from('affiliates')
-      .select('id, position_slot, sponsor_id, created_at')
-      .eq('id', (newAffiliate as any).id)
-      .maybeSingle()
-    const verifiedSlot = (verifyRow as any)?.position_slot ?? null
-    debugLogs.push(`VERIFY_AFTER_RPC id=${(newAffiliate as any).id} slot=${verifiedSlot}`)
-    if (verifiedSlot === null) {
-      const { error: fixErr } = await supabase
-        .from('affiliates')
-        .update({ position_slot: positionSlot })
-        .eq('id', (newAffiliate as any).id)
-      debugLogs.push(`FIX_UPDATE slot=${positionSlot} err=${fixErr ? String(fixErr) : 'none'}`)
-    }
-    // Ensure referral_code and sponsor_id are set
-    const { error: rcErr } = await supabase
-      .from('affiliates')
-      .update({ referral_code: referralCode })
-      .eq('id', (newAffiliate as any).id)
-    if (rcErr) debugLogs.push(`REFERRAL_CODE_UPDATE_ERR=${String(rcErr)}`)
-    if (finalSponsorId) {
-      const { error: spErr } = await supabase
-        .from('affiliates')
-        .update({ sponsor_id: finalSponsorId })
-        .eq('id', (newAffiliate as any).id)
-      if (spErr) debugLogs.push(`SPONSOR_UPDATE_ERR=${String(spErr)}`)
-    }
-    const profileId = await ensureProfileExists(supabase, cleanCpf, String((newAffiliate as any).id))
-    if (!profileId) return c.json({ error: 'Erro interno do servidor' }, 500)
-    await supabase.from('user_profiles').update({ password_hash: passwordHash, updated_at: nowIso }).eq('id', profileId)
-    if (profileId) {
-      try {
-        const { data: existingCoupon } = await supabase
-          .from('customer_coupons')
-          .select('id')
-          .eq('coupon_code', cleanCpf)
-          .maybeSingle()
-        const payload: any = { coupon_code: cleanCpf, user_id: profileId, cpf: cleanCpf, is_active: true }
-        const { error: upErr } = await supabase
-          .from('customer_coupons')
-          .upsert(payload, { onConflict: 'coupon_code' })
-        if (upErr) {
-          console.log('[REGISTER] COUPON_UPSERT_ERROR:', upErr)
-          debugLogs.push(`COUPON_UPSERT_ERROR=${(upErr as any)?.message || (upErr as any)?.code || 'unknown'}`)
-        } else {
-          const { data: verifyCoupon } = await supabase
-            .from('customer_coupons')
-            .select('id')
-            .eq('coupon_code', cleanCpf)
-            .maybeSingle()
-          if (!verifyCoupon) {
-            debugLogs.push('COUPON_VERIFY_FAILED')
-          }
-        }
-      } catch (couponErr) {
-        console.log('[REGISTER] COUPON_EXCEPTION:', couponErr)
-        debugLogs.push(`COUPON_EXCEPTION=${String(couponErr)}`)
-      }
-    }
-    if (finalSponsorId) {
-      await releaseBlockedIfQualified(supabase, finalSponsorId as number)
-    }
-    const sessionToken = crypto.randomUUID() + '-' + Date.now()
-    const expiresAt = getSessionExpiration()
-    const { error: regSessErr } = await supabase
-      .from('affiliate_sessions')
-      .insert({ affiliate_id: String((newAffiliate as any).id), session_token: String(sessionToken), expires_at: expiresAt.toISOString() })
-    if (regSessErr) {
-      console.error('Erro ao salvar sessão no banco:', regSessErr)
-      return c.json({ error: 'Erro ao criar sessão do afiliado', details: regSessErr }, 500)
-    }
-    setCookie(c, 'affiliate_session', sessionToken, getCookieOptions(c, 30 * 24 * 60 * 60))
-    debugLogs.push(`REGISTER_DONE affiliate=${(newAffiliate as any).id}`)
-    return c.json({ success: true, token: sessionToken, affiliate: { id: (newAffiliate as any).id, full_name: (newAffiliate as any).full_name, email: (newAffiliate as any).email, referral_code: referralCode, customer_coupon: cleanCpf }, debug_info: debugLogs })
-  } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
-  }
-})
 
 app.get('/affiliate/me', async (c) => {
-  const token = getCookie(c, 'affiliate_session')
+  const token = getAuthToken(c, 'affiliate_session')
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
     const supabase = createSupabase()
@@ -1728,7 +1673,7 @@ app.get('/affiliate/me', async (c) => {
 
 app.get('/api/affiliate/me', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const token = xSession || cookieToken
   console.log('[AFFILIATE_ME] token source:', xSession ? 'x-session-token' : (cookieToken ? 'cookie' : 'none'), 'token=', token)
   if (!token) return c.json({ error: 'Token não enviado pelo navegador' }, 401)
@@ -1775,7 +1720,7 @@ app.get('/api/affiliate/me', async (c) => {
 
 app.post('/affiliate/logout', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -1791,7 +1736,7 @@ app.post('/affiliate/logout', async (c) => {
 
 app.post('/api/affiliate/logout', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -1807,7 +1752,7 @@ app.post('/api/affiliate/logout', async (c) => {
 
 app.get('/api/users/balance', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -1909,7 +1854,7 @@ app.get('/api/users/balance', async (c) => {
 
 app.get('/api/withdrawals', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -1952,7 +1897,7 @@ app.get('/api/withdrawals', async (c) => {
 
 app.post('/api/withdrawals/request', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -2003,7 +1948,7 @@ app.post('/api/withdrawals/request', async (c) => {
 })
 app.post('/api/withdrawals', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -2081,7 +2026,7 @@ app.post('/api/withdrawals', async (c) => {
 })
 app.get('/api/affiliate/settings', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -2131,7 +2076,7 @@ app.get('/api/affiliate/settings', async (c) => {
 
 app.post('/api/affiliate/settings', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -2200,7 +2145,7 @@ app.post('/api/affiliate/settings', async (c) => {
 
 app.get('/api/transactions', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -2312,7 +2257,7 @@ app.post('/api/empresa/login', async (c) => {
 })
 
 app.get('/api/empresa/me', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2329,7 +2274,7 @@ app.get('/api/empresa/me', async (c) => {
 })
 
 app.post('/api/empresa/logout', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   try { if (token) { const supabase = createSupabase(); await supabase.from('company_sessions').delete().eq('session_token', token) } } catch { }
   setCookie(c, 'company_session', '', getCookieOptions(c, 0))
   return c.json({ success: true })
@@ -2379,7 +2324,7 @@ app.post('/api/caixa/login', async (c) => {
 })
 
 app.get('/api/caixa/me', async (c) => {
-  const token = getCookie(c, 'cashier_session')
+  const token = getAuthToken(c, 'cashier_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2396,7 +2341,7 @@ app.get('/api/caixa/me', async (c) => {
 })
 
 app.post('/api/caixa/compra', async (c) => {
-  const token = getCookie(c, 'cashier_session')
+  const token = getAuthToken(c, 'cashier_session')
   if (!token) return c.json({ error: 'Não autorizado', error_code: 'NO_SESSION' }, 401)
   try {
     const body = await c.req.json()
@@ -2558,14 +2503,14 @@ app.post('/api/caixa/compra', async (c) => {
 })
 
 app.post('/api/caixa/logout', async (c) => {
-  const token = getCookie(c, 'cashier_session')
+  const token = getAuthToken(c, 'cashier_session')
   try { if (token) { const supabase = createSupabase(); await supabase.from('cashier_sessions').delete().eq('session_token', token) } } catch { }
   setCookie(c, 'cashier_session', '', getCookieOptions(c, 0))
   return c.json({ success: true })
 })
 
 app.get('/api/caixa/debug/diagnose', async (c) => {
-  const token = getCookie(c, 'cashier_session')
+  const token = getAuthToken(c, 'cashier_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2607,7 +2552,7 @@ app.get('/api/caixa/debug/diagnose', async (c) => {
 })
 
 app.post('/api/caixa/debug/repair-coupon', async (c) => {
-  const token = getCookie(c, 'cashier_session')
+  const token = getAuthToken(c, 'cashier_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2678,7 +2623,7 @@ app.post('/api/caixa/debug/repair-coupon', async (c) => {
 })
 
 app.post('/api/empresa/caixas', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const body = await c.req.json()
@@ -2732,7 +2677,7 @@ app.post('/api/empresa/caixas', async (c) => {
 })
 
 app.put('/api/empresa/caixas/:id', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2768,7 +2713,7 @@ app.put('/api/empresa/caixas/:id', async (c) => {
 })
 
 app.patch('/api/empresa/caixas/:id/toggle', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2803,7 +2748,7 @@ app.patch('/api/empresa/caixas/:id/toggle', async (c) => {
 })
 
 app.delete('/api/empresa/caixas/:id', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2837,7 +2782,7 @@ app.delete('/api/empresa/caixas/:id', async (c) => {
 })
 
 app.put('/api/empresa/cashback', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2863,7 +2808,7 @@ app.put('/api/empresa/cashback', async (c) => {
 })
 
 app.get('/api/empresa/caixas', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2886,7 +2831,7 @@ app.get('/api/empresa/caixas', async (c) => {
 })
 
 app.get('/api/empresa/relatorio', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2920,7 +2865,7 @@ app.get('/api/empresa/relatorio', async (c) => {
 })
 
 app.get('/api/empresa/estatisticas', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -2964,7 +2909,7 @@ app.get('/api/empresa/estatisticas', async (c) => {
 })
 
 app.get('/api/empresa/dados-mensais', async (c) => {
-  const token = getCookie(c, 'company_session')
+  const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
@@ -3004,62 +2949,12 @@ app.get('/api/empresa/dados-mensais', async (c) => {
   }
 })
 
-const CompanyRegisterSchema = z.object({
-  razao_social: z.string().min(1),
-  nome_fantasia: z.string().min(1),
-  cnpj: z.string().min(14),
-  email: z.string().email(),
-  telefone: z.string().min(10),
-  responsavel: z.string().min(1),
-  senha: z.string().min(6),
-  endereco: z.string().optional(),
-  site_instagram: z.string().optional(),
-})
 
-app.post('/api/empresa/registrar', async (c) => {
-  try {
-    const data = CompanyRegisterSchema.parse(await c.req.json())
-    const supabase = createSupabase()
-    const cleanCnpj = String(data.cnpj).replace(/\D/g, '')
-    if (cleanCnpj.length !== 14 || /^([0-9])\1{13}$/.test(cleanCnpj)) return c.json({ error: 'CNPJ inválido' }, 400)
-    const { data: existingEmail } = await supabase.from('companies').select('id').eq('email', data.email).maybeSingle()
-    if (existingEmail) return c.json({ error: 'Email já cadastrado' }, 409)
-    const { data: existingCnpj } = await supabase.from('companies').select('id').eq('cnpj', cleanCnpj).maybeSingle()
-    if (existingCnpj) return c.json({ error: 'CNPJ já cadastrado' }, 409)
-    const passwordHash = await bcrypt.hash(data.senha, 10)
-    const nowIso = new Date().toISOString()
-    const { data: newCompany, error: companyError } = await supabase
-      .from('companies')
-      .insert({
-        razao_social: data.razao_social,
-        nome_fantasia: data.nome_fantasia,
-        cnpj: cleanCnpj,
-        email: data.email,
-        telefone: String(data.telefone).replace(/\D/g, ''),
-        responsavel: data.responsavel,
-        senha_hash: passwordHash,
-        endereco: data.endereco || '',
-        site_instagram: data.site_instagram || '',
-        is_active: true,
-        created_at: nowIso,
-        updated_at: nowIso,
-      })
-      .select()
-      .single()
-    if (companyError || !newCompany) return c.json({ error: 'Erro interno do servidor' }, 500)
-    const { error: configError } = await supabase
-      .from('company_cashback_config')
-      .insert({ company_id: (newCompany as any).id, cashback_percentage: 5.0 })
-    if (configError) { }
-    return c.json({ success: true, message: 'Empresa cadastrada com sucesso!' })
-  } catch (error) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
-  }
-})
+
 
 app.get('/api/network/members', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -3105,7 +3000,7 @@ app.get('/api/network/members', async (c) => {
 
 app.get('/api/network/stats', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -3173,7 +3068,7 @@ app.get('/api/network/stats', async (c) => {
 
 app.get('/api/affiliate/network/preference', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -3215,7 +3110,7 @@ app.get('/api/affiliate/network/preference', async (c) => {
 
 app.get('/api/affiliate/network/placement-preview', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -3247,7 +3142,7 @@ app.get('/api/affiliate/network/placement-preview', async (c) => {
 
 app.put('/api/affiliate/network/preference', async (c) => {
   const xSession = c.req.header('x-session-token') || ''
-  const cookieToken = getCookie(c, 'affiliate_session')
+  const cookieToken = getAuthToken(c, 'affiliate_session')
   const authHeader = c.req.header('authorization') || ''
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : ''
   const token = xSession || cookieToken || bearerToken
@@ -3396,5 +3291,19 @@ app.get('/api/affiliate/network/tree', async (c) => {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 })
+
+
+app.notFound((c: any) => {
+  return c.json({ 
+    error: 'Not found by Hono Catch-all', 
+    version: 'v15-auth-robust',
+    path: c.req.path,
+    method: c.req.method,
+    url: c.req.url,
+    info: 'If this version is v15, then all protected routes now use getAuthToken (Header + Cookie support).'
+  }, 404)
+})
+
+
 
 Deno.serve(app.fetch)

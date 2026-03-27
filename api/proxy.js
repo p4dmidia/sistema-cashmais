@@ -4,6 +4,7 @@ export default async function handler(req, res) {
       process.env.SUPABASE_EDGE_URL ||
       process.env.SUPABASE_URL ||
       process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      process.env.VITE_SUPABASE_URL ||
       ''
     if (!base) {
       return res.status(500).json({ error: 'SUPABASE_EDGE_URL/SUPABASE_URL não definido' })
@@ -16,11 +17,13 @@ export default async function handler(req, res) {
       process.env.VITE_SUPABASE_ANON_KEY ||
       ''
     const clientX = req.headers['x-session-token'] || ''
+    const cookie = req.headers['cookie'] || ''
     const headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       ...(apikey ? { apikey, Authorization: `Bearer ${apikey}` } : {}),
       ...(clientX ? { 'x-session-token': clientX } : {}),
+      ...(cookie ? { 'Cookie': cookie } : {}),
     }
     const init = {
       method: req.method,
