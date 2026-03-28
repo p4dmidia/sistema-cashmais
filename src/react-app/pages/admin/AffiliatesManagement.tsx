@@ -74,6 +74,7 @@ export default function AffiliatesManagement() {
     totalPages: 0,
   });
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const navigate = useNavigate();
@@ -103,9 +104,9 @@ export default function AffiliatesManagement() {
   }, [pagination.page, search]);
 
   useEffect(() => {
-    // Apenas carrega dados quando a página ou a busca mudam, sem intervalo automático
+    // Carrega dados quando a página ou o termo "debouced" muda
     loadAffiliatesData();
-  }, [pagination.page, search]);
+  }, [pagination.page, debouncedSearch]);
 
   const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
@@ -118,7 +119,7 @@ export default function AffiliatesManagement() {
         authenticatedFetch(`/api/admin/affiliates?${new URLSearchParams({
           page: pagination.page.toString(),
           limit: pagination.limit.toString(),
-          ...(search && { search }),
+          ...(debouncedSearch && { search: debouncedSearch }),
         })}`)
       ]);
 
@@ -260,16 +261,15 @@ export default function AffiliatesManagement() {
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setSearch(value);
-    setPagination(prev => ({ ...prev, page: 1 }));
+    setSearch(value); // O input atualiza instantaneamente para digitação fluída
     
-    // Debounce correto: limpa o timer anterior antes de criar um novo
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
     searchTimeoutRef.current = setTimeout(() => {
-      // O useEffect já vai disparar o loadAffiliatesData pois 'search' mudou
+      setDebouncedSearch(value); // Só atualiza o termo da API após 500ms
+      setPagination(prev => ({ ...prev, page: 1 }));
     }, 500); 
   };
 

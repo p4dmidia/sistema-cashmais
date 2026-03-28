@@ -1242,7 +1242,7 @@ app.get('/api/admin/affiliates', async (c) => {
       .select('id, full_name, email, cpf, phone, is_active, is_verified, referral_code, sponsor_id, created_at, last_access_at', { count: 'exact' })
       .order('created_at', { ascending: false })
     if (search) {
-      const s = `%${search}%`;
+      const s = `"%${search}%"`;
       q = q.or(`full_name.ilike.${s},email.ilike.${s},cpf.ilike.${s}`);
     }
     const { data: rows, count } = await q.range(offset, offset + limit - 1)
