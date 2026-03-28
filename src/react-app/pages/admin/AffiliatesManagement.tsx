@@ -99,9 +99,7 @@ export default function AffiliatesManagement() {
   const [editFormData, setEditFormData] = useState<EditFormData>({ full_name: '', email: '', whatsapp: '' });
   const [editLoading, setEditLoading] = useState(false);
 
-  useEffect(() => {
-    loadAffiliatesData();
-  }, [pagination.page, search]);
+  // O useEffect abaixo já lida com a carga inicial e mudanças de página/busca
 
   useEffect(() => {
     // Carrega dados quando a página ou o termo "debouced" muda
@@ -268,9 +266,9 @@ export default function AffiliatesManagement() {
     }
 
     searchTimeoutRef.current = setTimeout(() => {
-      setDebouncedSearch(value); // Só atualiza o termo da API após 500ms
+      setDebouncedSearch(value); // Só atualiza o termo da API após 300ms (mais rápido)
       setPagination(prev => ({ ...prev, page: 1 }));
-    }, 500); 
+    }, 300); 
   };
 
   const formatCurrency = (value: number) => {
