@@ -103,13 +103,11 @@ export default function AffiliatesManagement() {
   }, [pagination.page, search]);
 
   useEffect(() => {
-    // Reload data every 30 seconds like dashboard
-    const interval = setInterval(() => {
-      loadAffiliatesData();
-    }, 30000);
-    
-    return () => clearInterval(interval);
+    // Apenas carrega dados quando a página ou a busca mudam, sem intervalo automático
+    loadAffiliatesData();
   }, [pagination.page, search]);
+
+  const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
   const loadAffiliatesData = async () => {
     setIsLoading(true);
@@ -261,12 +259,18 @@ export default function AffiliatesManagement() {
   };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearch(e.target.value);
+    const value = e.target.value;
+    setSearch(value);
     setPagination(prev => ({ ...prev, page: 1 }));
-    // Debounce search to avoid too many API calls
-    setTimeout(() => {
-      loadAffiliatesData();
-    }, 300);
+    
+    // Debounce correto: limpa o timer anterior antes de criar um novo
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    searchTimeoutRef.current = setTimeout(() => {
+      // O useEffect já vai disparar o loadAffiliatesData pois 'search' mudou
+    }, 500); 
   };
 
   const formatCurrency = (value: number) => {
@@ -379,9 +383,18 @@ export default function AffiliatesManagement() {
       <div className="pl-64">
         <div className="p-8">
           {/* Header */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Gestão de Afiliados</h1>
-            <p className="text-gray-400">Gerencie afiliados, visualize estatísticas e realize ações administrativas</p>
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-white mb-2">Gestão de Afiliados</h1>
+              <p className="text-gray-400">Gerencie afiliados, visualize estatísticas e realize ações administrativas</p>
+            </div>
+            <button
+              onClick={() => loadAffiliatesData()}
+              className="flex items-center space-x-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-200"
+            >
+              <Activity className={`h-4 w-4 ${isLoading ? 'animate-spin text-green-400' : ''}`} />
+              <span>{isLoading ? 'Atualizando...' : 'Atualizar Dados'}</span>
+            </button>
           </div>
 
           {/* Global Statistics */}

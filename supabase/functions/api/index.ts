@@ -1241,7 +1241,10 @@ app.get('/api/admin/affiliates', async (c) => {
       .from('affiliates')
       .select('id, full_name, email, cpf, phone, is_active, is_verified, referral_code, sponsor_id, created_at, last_access_at', { count: 'exact' })
       .order('created_at', { ascending: false })
-    if (search) q = q.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,cpf.ilike.%${search}%`)
+    if (search) {
+      const s = `%${search}%`;
+      q = q.or(`full_name.ilike.${s},email.ilike.${s},cpf.ilike.${s}`);
+    }
     const { data: rows, count } = await q.range(offset, offset + limit - 1)
     const items = [] as any[]
     for (const a of rows || []) {
@@ -1294,11 +1297,18 @@ app.patch('/api/admin/affiliates/:id', async (c) => {
     if ((body as any).full_name) update.full_name = (body as any).full_name
     if ((body as any).email) update.email = (body as any).email
     if ((body as any).whatsapp) update.phone = String((body as any).whatsapp).replace(/\D/g, '')
-    update.updated_at = new Date().toISOString()
-    const { data: exists } = await supabase.from('affiliates').select('id').eq('id', id).single()
+    const numId = parseInt(id)
+    if (isNaN(numId)) return c.json({ error: 'ID inválido' }, 400)
+
+    const { data: exists } = await supabase.from('affiliates').select('id').eq('id', numId).single()
     if (!exists) return c.json({ error: 'Afiliado não encontrado' }, 404)
-    const { error } = await supabase.from('affiliates').update(update).eq('id', id)
-    if (error) return c.json({ error: 'Erro interno do servidor' }, 500)
+    
+    // Removendo updated_at por segurança (caso a coluna não exista) e focando nos dados enviados
+    const { error } = await supabase.from('affiliates').update(update).eq('id', numId)
+    if (error) {
+      console.error('[ADMIN_AFFILIATES_UPDATE] Error:', error)
+      return c.json({ error: 'Erro ao atualizar no banco de dados' }, 500)
+    }
     return c.json({ success: true })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
