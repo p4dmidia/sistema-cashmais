@@ -48,14 +48,29 @@ export default function CompanyLogin() {
         credentials: 'include',
       });
 
+      console.log(`[COMPANY_LOGIN] Endpoint: ${endpoint} Status: ${response.status}`);
+
       let data: any = null;
       try {
-        data = await response.json();
-      } catch {
+        const text = await response.text();
+        console.log(`[COMPANY_LOGIN] Response body: ${text}`);
+        data = JSON.parse(text);
+      } catch (err) {
+        console.error('[COMPANY_LOGIN] Failed to parse JSON:', err);
         data = null;
       }
 
       if (response.ok) {
+        console.log('[COMPANY_LOGIN] Login successful, data:', data);
+        if (data?.token) {
+          if (isCompany) {
+            localStorage.setItem('company_token', data.token);
+            console.log('[COMPANY_LOGIN] Saved company_token');
+          } else {
+            localStorage.setItem('cashier_token', data.token);
+            console.log('[COMPANY_LOGIN] Saved cashier_token');
+          }
+        }
         if (isCompany) {
           navigate('/empresa/dashboard');
         } else {
@@ -69,8 +84,11 @@ export default function CompanyLogin() {
         (response.status === 401
           ? (isCompany ? 'Email/CNPJ ou senha inválidos' : 'CPF ou senha inválidos')
           : `Erro ao fazer login (código ${response.status})`);
+      
+      console.error('[COMPANY_LOGIN] Login failed:', statusMessage, data);
       setError(statusMessage);
     } catch (err) {
+      console.error('[COMPANY_LOGIN] Connection error:', err);
       setError('Erro de conexão. Tente novamente.');
     } finally {
       setLoading(false);

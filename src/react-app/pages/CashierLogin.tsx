@@ -32,6 +32,9 @@ export default function CashierLogin() {
       }
 
       if (response.ok) {
+        if (data?.token) {
+          localStorage.setItem('cashier_token', data.token);
+        }
         navigate('/empresa/caixa');
         return;
       }

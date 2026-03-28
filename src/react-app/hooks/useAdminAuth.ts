@@ -123,13 +123,14 @@ export function useAdminAuth() {
 
   const logout = async () => {
     try {
-      await fetch('/api/admin/logout', {
-        method: 'POST',
-        credentials: 'include',
+      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
+      await authenticatedFetch('/api/admin/logout', {
+        method: 'POST'
       });
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      localStorage.removeItem('admin_token');
       setState({
         user: null,
         isLoading: false,

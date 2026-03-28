@@ -44,9 +44,16 @@ function getAuthToken(c: any, sessionName: string) {
   const xSession = c.req.header('x-session-token');
   const cookieToken = getCookie(c, sessionName);
   const authHeader = c.req.header('authorization');
-  const bearerToken = authHeader?.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : null;
+  let bearerToken = authHeader?.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : null;
   
-  return xSession || cookieToken || bearerToken || null;
+  // Ignore tokens that look like Supabase JWTs (Anon Keys)
+  if (bearerToken && (bearerToken.length > 100 || bearerToken.startsWith('eyJ'))) {
+    bearerToken = null;
+  }
+
+  const token = xSession || cookieToken || bearerToken || null;
+  console.log(`[AUTH_DEBUG] sessionName=${sessionName} xSession=${xSession ? 'YES' : 'NO'} cookie=${cookieToken ? 'YES' : 'NO'} bearer=${bearerToken ? 'YES' : 'NO'} token_found=${token ? 'YES' : 'NO'}`);
+  return token;
 }
 
 async function releaseBlockedIfQualified(client: any, affiliateId: number) {
@@ -247,7 +254,7 @@ async function distributeNetworkCommissionsSupabase(client: any, purchaseId: num
 
 app.use('*', cors({
   origin: (origin) => origin || '*',
-  allowHeaders: ['Authorization', 'Content-Type', 'X-Client-Info', 'Cookie'],
+  allowHeaders: ['Authorization', 'Content-Type', 'X-Client-Info', 'Cookie', 'X-Session-Token', 'x-session-token'],
   allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
 }))
@@ -255,8 +262,24 @@ app.use('*', cors({
 const affiliateRegisterRegex = /.*affiliate\/register/;
 const companyRegisterRegex = /.*empresa\/registrar/;
 
-app.get('/health', (c) => c.json({ ok: true, version: 'v15-auth-robust' }))
-app.get('/api/health', (c) => c.json({ ok: true, version: 'v15-auth-robust' }))
+app.get('/health', (c) => c.json({ ok: true, version: 'v20-header-fix' }))
+app.get('/api/health', (c) => c.json({ ok: true, version: 'v20-header-fix' }))
+app.get('/api/auth/diag', (c) => {
+  const headers: Record<string, string> = {}
+  c.req.raw.headers.forEach((v, k) => {
+    if (k.toLowerCase().includes('key') || k.toLowerCase().includes('auth') || k.toLowerCase().includes('cookie')) {
+      headers[k] = v.substring(0, 10) + '...'
+    } else {
+      headers[k] = v
+    }
+  })
+  return c.json({
+    ok: true,
+    version: 'v20-header-fix',
+    info: 'Diagnostics for authentication headers and cookies.',
+    headers
+  })
+})
 
 const CompanyRegisterSchema = z.object({
   razao_social: z.string().min(1),
@@ -403,7 +426,7 @@ app.post('/admin/login', async (c) => {
     await supabase
       .from('admin_audit_logs')
       .insert({ admin_user_id: (adminUser as any).id, action: 'LOGIN', entity_type: 'admin_session' })
-    return c.json({ success: true, admin: { id: (adminUser as any).id, username: (adminUser as any).username, email: (adminUser as any).email, full_name: (adminUser as any).full_name } })
+    return c.json({ success: true, token: sessionToken, admin: { id: (adminUser as any).id, username: (adminUser as any).username, email: (adminUser as any).email, full_name: (adminUser as any).full_name } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor', details: (e as any)?.message || (e as any)?.description || JSON.stringify(e) }, 500)
   }
@@ -1638,8 +1661,8 @@ app.post('/api/affiliate/login', async (c) => {
       console.error('Erro ao salvar sessão no banco:', insErr2)
       return c.json({ error: 'Erro ao criar sessão do afiliado', details: insErr2 }, 500)
     }
-    setCookie(c, 'affiliate_session', sessionToken, getCookieOptions(c, 30 * 24 * 60 * 60))
-    return c.json({ success: true, token: sessionToken, affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
+    setCookie(c, 'affiliate_session', String(sessionToken), getCookieOptions(c, 30 * 24 * 60 * 60))
+    return c.json({ success: true, token: String(sessionToken), affiliate: { id: (authRow as any).affiliate_id, full_name: (authRow as any).full_name, email: (authRow as any).email, referral_code: (authRow as any).referral_code, customer_coupon: (authRow as any).cpf } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
@@ -2230,10 +2253,14 @@ app.get('/api/transactions', async (c) => {
 app.post('/api/empresa/login', async (c) => {
   try {
     const body = await c.req.json()
+    console.log('[COMPANY_LOGIN] Request body:', JSON.stringify({ ...body, senha: '***' }))
     const supabase = createSupabase()
     let email = ''
     let senha = ''
-    if ((body as any).email) { email = (body as any).email; senha = (body as any).senha }
+    if ((body as any).email) { 
+      email = (body as any).email; 
+      senha = (body as any).senha 
+    }
     else if ((body as any).cnpj) {
       const cleanCnpj = String((body as any).cnpj).replace(/\D/g, '')
       let { data: companyByCnpj } = await supabase.from('companies').select('email').eq('cnpj', cleanCnpj).eq('is_active', true).single()
@@ -2252,25 +2279,33 @@ app.post('/api/empresa/login', async (c) => {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
     await supabase.from('company_sessions').insert({ company_id: (company as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
     setCookie(c, 'company_session', sessionToken, getCookieOptions(c, 24 * 60 * 60))
-    return c.json({ success: true, company: { id: (company as any).id, razao_social: (company as any).razao_social, nome_fantasia: (company as any).nome_fantasia, email: (company as any).email, role: 'company' } })
+    return c.json({ success: true, token: sessionToken, company: { id: (company as any).id, razao_social: (company as any).razao_social, nome_fantasia: (company as any).nome_fantasia, email: (company as any).email, role: 'company' } })
   } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
 })
 
 app.get('/api/empresa/me', async (c) => {
   const token = getAuthToken(c, 'company_session')
-  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  console.log(`[COMPANY_ME] Attempting auth with token: ${token ? 'PROVIDED' : 'MISSING'}`)
+  if (!token) return c.json({ error: 'Não autorizado (Token ausente)' }, 401)
   try {
     const supabase = createSupabase()
-    const { data: session } = await supabase
+    const { data: session, error: sessError } = await supabase
       .from('company_sessions')
       .select('*, companies!inner(id, razao_social, nome_fantasia, email)')
       .eq('session_token', token)
       .gt('expires_at', new Date().toISOString())
       .single()
-    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    
+    if (sessError || !session) {
+      console.log(`[COMPANY_ME] Session lookup failed: ${sessError?.message || 'Not found or expired'}`)
+      return c.json({ error: 'Não autorizado (Sessão inválida)', debug_info: sessError?.message }, 401)
+    }
     const comp = (session as any).companies
     return c.json({ id: comp.id, razao_social: comp.razao_social, nome_fantasia: comp.nome_fantasia, email: comp.email, role: 'company' })
-  } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
+  } catch (e) { 
+    console.error(`[COMPANY_ME] Catch error:`, e)
+    return c.json({ error: 'Erro interno do servidor', details: (e as any).message }, 500) 
+  }
 })
 
 app.post('/api/empresa/logout', async (c) => {
@@ -2319,7 +2354,7 @@ app.post('/api/caixa/login', async (c) => {
     const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000)
     await supabase.from('cashier_sessions').insert({ cashier_id: (cashier as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
     setCookie(c, 'cashier_session', sessionToken, getCookieOptions(c, 8 * 60 * 60))
-    return c.json({ success: true, cashier: { id: (cashier as any).id, name: (cashier as any).name, cpf: (cashier as any).cpf, company_name: (cashier as any).companies.nome_fantasia, role: 'cashier' } })
+    return c.json({ success: true, token: sessionToken, cashier: { id: (cashier as any).id, name: (cashier as any).name, cpf: (cashier as any).cpf, company_name: (cashier as any).companies.nome_fantasia, role: 'cashier' } })
   } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
 })
 
@@ -3296,11 +3331,11 @@ app.get('/api/affiliate/network/tree', async (c) => {
 app.notFound((c: any) => {
   return c.json({ 
     error: 'Not found by Hono Catch-all', 
-    version: 'v15-auth-robust',
+    version: 'v20-header-fix',
     path: c.req.path,
     method: c.req.method,
     url: c.req.url,
-    info: 'If this version is v15, then all protected routes now use getAuthToken (Header + Cookie support).'
+    info: 'If you see 401 on /me, it means the token was NOT FOUND or is INVALID in the database.'
   }, 404)
 })
 

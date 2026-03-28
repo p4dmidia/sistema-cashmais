@@ -53,17 +53,12 @@ export function useCompanyAuth() {
       
       console.log('[COMPANY_AUTH] Cookies detected:', { hasCompanyCookie, hasCashierCookie });
 
-      // Try company auth first if we have company cookie
-      if (hasCompanyCookie) {
+      // Try company auth first if we have company cookie or local token
+      const companyToken = localStorage.getItem('company_token');
+      if (companyToken || hasCompanyCookie) {
         try {
           console.log('[COMPANY_AUTH] Attempting company auth...');
-          const headers: Record<string, string> = {};
-          const anon = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
-          if (anon) headers['Authorization'] = `Bearer ${anon}`;
-          const response = await fetch('/api/empresa/me', {
-            credentials: 'include',
-            headers,
-          });
+          const response = await authenticatedFetch('/api/empresa/me');
 
           console.log('[COMPANY_AUTH] Company auth response status:', response.status);
 
@@ -79,40 +74,37 @@ export function useCompanyAuth() {
             return;
           } else if (response.status === 401) {
             console.log('[COMPANY_AUTH] Company session expired');
+            if (companyToken) localStorage.removeItem('company_token');
           }
         } catch (companyError) {
           console.log('[COMPANY_AUTH] Company auth request failed:', companyError);
         }
       }
 
-      // Try cashier auth if we have cashier cookie and company auth failed
-      if (hasCashierCookie) {
+      // Try cashier auth if we have cashier cookie/token and company auth failed
+      const cashierToken = localStorage.getItem('cashier_token');
+      if (cashierToken || hasCashierCookie) {
         try {
           console.log('[COMPANY_AUTH] Attempting cashier auth...');
-          const headers2: Record<string, string> = {};
-          const anon2 = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY as string | undefined;
-          if (anon2) headers2['Authorization'] = `Bearer ${anon2}`;
-          const cashierResponse = await fetch('/api/caixa/me', {
-            credentials: 'include',
-            headers: headers2,
-          });
+          const response = await authenticatedFetch('/api/caixa/me');
 
-          console.log('[COMPANY_AUTH] Cashier auth response status:', cashierResponse.status);
+          console.log('[COMPANY_AUTH] Cashier auth response status:', response.status);
 
-          if (cashierResponse.ok) {
-            const cashierData = await cashierResponse.json();
-            console.log('[COMPANY_AUTH] Cashier auth successful, data:', cashierData);
+          if (response.ok) {
+            const data = await response.json();
+            console.log('[COMPANY_AUTH] Cashier auth successful, data:', data);
             setUser({
               role: 'cashier',
-              companyId: cashierData.company_id,
-              userId: cashierData.user_id,
-              cashierId: cashierData.id
+              companyId: data.company_id,
+              userId: data.user_id,
+              cashierId: data.id
             });
             setLoading(false);
             setChecking(false);
             return;
-          } else if (cashierResponse.status === 401) {
+          } else if (response.status === 401) {
             console.log('[COMPANY_AUTH] Cashier session expired');
+            if (cashierToken) localStorage.removeItem('cashier_token');
           }
         } catch (cashierError) {
           console.log('[COMPANY_AUTH] Cashier auth request failed:', cashierError);
@@ -133,19 +125,19 @@ export function useCompanyAuth() {
   const logout = async () => {
     try {
       if (user?.role === 'company') {
-        await fetch('/api/company/logout', {
-          method: 'POST',
-          credentials: 'include',
+        await authenticatedFetch('/api/empresa/logout', {
+          method: 'POST'
         });
       } else if (user?.role === 'cashier') {
-        await fetch('/api/cashier/logout', {
-          method: 'POST',
-          credentials: 'include',
+        await authenticatedFetch('/api/caixa/logout', {
+          method: 'POST'
         });
       }
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      localStorage.removeItem('company_token');
+      localStorage.removeItem('cashier_token');
       setUser(null);
       navigate('/empresa/login');
     }
@@ -223,15 +215,33 @@ export function useAffiliateAuth() {
 export function setupAuthInterceptor() {
   const originalFetch = window.fetch;
   
-  window.fetch = async (input: RequestInfo, init?: RequestInit) => {
-    let url = typeof input === 'string' ? input : (input as Request).url;
-    const headers = new Headers(init?.headers || {});
-    const affToken = localStorage.getItem('affiliate_token');
-    if (url.startsWith('/api') && affToken && !headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${affToken}`);
-    }
-    const response = await originalFetch(input, { ...(init || {}), headers });
+  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url);
+    
+    // Only intercept /api calls
+    if (url.includes('/api/')) {
+      const headers = new Headers(init?.headers || {});
+      
+      const affToken = localStorage.getItem('affiliate_token');
+      const adminToken = localStorage.getItem('admin_token');
+      const companyToken = localStorage.getItem('company_token');
+      const cashierToken = localStorage.getItem('cashier_token');
+      
+      let token = affToken;
+      if (url.includes('/api/admin')) token = adminToken;
+      else if (url.includes('/api/empresa')) token = companyToken;
+      else if (url.includes('/api/caixa')) token = cashierToken;
+      
+      if (!token) token = affToken || adminToken || companyToken || cashierToken;
 
-    return response;
+      if (token && !headers.has('x-session-token')) {
+        headers.set('x-session-token', token);
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+      
+      return originalFetch(input, { ...(init || {}), headers });
+    }
+
+    return originalFetch(input, init);
   };
 }
