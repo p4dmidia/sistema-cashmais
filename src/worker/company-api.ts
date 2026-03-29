@@ -17,7 +17,13 @@ const CompanyRegisterSchema = z.object({
   telefone: z.string().min(10),
   responsavel: z.string().min(1),
   senha: z.string().min(6),
-  endereco: z.string().optional(),
+  address_street: z.string().optional(),
+  address_number: z.string().optional(),
+  address_complement: z.string().optional(),
+  address_district: z.string().optional(),
+  address_city: z.string().optional(),
+  address_state: z.string().optional(),
+  address_zip: z.string().optional(),
   site_instagram: z.string().optional(),
 });
 
@@ -78,8 +84,12 @@ app.post('/api/empresa/registrar', async (c) => {
 
     // Insert company
     const result = await c.env.DB.prepare(`
-      INSERT INTO companies (razao_social, nome_fantasia, cnpj, email, telefone, responsavel, senha_hash, endereco, site_instagram)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO companies (
+        razao_social, nome_fantasia, cnpj, email, telefone, responsavel, senha_hash, 
+        address_street, address_number, address_complement, address_district, 
+        address_city, address_state, address_zip, site_instagram
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       data.razao_social,
       data.nome_fantasia,
@@ -88,7 +98,13 @@ app.post('/api/empresa/registrar', async (c) => {
       data.telefone,
       data.responsavel,
       passwordHash,
-      data.endereco || '',
+      data.address_street || '',
+      data.address_number || '',
+      data.address_complement || '',
+      data.address_district || '',
+      data.address_city || '',
+      data.address_state || '',
+      data.address_zip || '',
       data.site_instagram || ''
     ).run();
 
@@ -332,29 +348,25 @@ app.post('/api/empresa/caixas', async (c) => {
     }
 
     // Prevent CPF already linked to another company
-    const globalExisting = await c.env.DB.prepare(`
+    const existingCashier = await c.env.DB.prepare(`
       SELECT company_id FROM company_cashiers WHERE cpf = ?
     `).bind(cleanCpf).first();
-    if (globalExisting && (globalExisting as any).company_id !== session.id) {
+    if (existingCashier && (existingCashier as any).company_id !== session.id) {
       return c.json({ error: 'CPF já vinculado a outra empresa' }, 409);
     }
 
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    let existingProfile = await c.env.DB.prepare(`
+    const existingProfile = await c.env.DB.prepare(`
       SELECT id FROM user_profiles WHERE cpf = ?
     `).bind(cleanCpf).first();
 
-    let userProfileId: number;
-    if (existingProfile && (existingProfile as any).id) {
-      userProfileId = (existingProfile as any).id as number;
-    } else {
-    const userProfileResult = await c.env.DB.prepare(`
-      INSERT INTO user_profiles (mocha_user_id, cpf, role, is_active)
-      VALUES (?, ?, 'cashier', 1)
-    `).bind(`cashier_${cleanCpf}_${Date.now()}`, cleanCpf).run();
-    userProfileId = userProfileResult.meta.last_row_id as number;
+    if (!existingProfile) {
+      await c.env.DB.prepare(`
+        INSERT INTO user_profiles (mocha_user_id, cpf, role, is_active)
+        VALUES (?, ?, 'cashier', 1)
+      `).bind(`cashier_${cleanCpf}_${Date.now()}`, cleanCpf).run();
     }
 
     // Supabase-only creation (no local DB write)
@@ -370,12 +382,12 @@ app.post('/api/empresa/caixas', async (c) => {
       return c.json({ error: 'CPF já cadastrado para esta empresa' }, 400);
     }
     // Prevent CPF linked to another company
-    const { data: globalExisting } = await supabase
+    const { data: globalExistingSup } = await supabase
       .from('company_cashiers')
       .select('company_id')
       .eq('cpf', cleanCpf)
       .single();
-    if (globalExisting && globalExisting.company_id !== session.id) {
+    if (globalExistingSup && globalExistingSup.company_id !== session.id) {
       return c.json({ error: 'CPF já vinculado a outra empresa' }, 409);
     }
 

@@ -10,7 +10,13 @@ export async function registerCompany(data: {
   telefone: string;
   responsavel: string;
   senha: string;
-  endereco?: string;
+  address_street?: string;
+  address_number?: string;
+  address_complement?: string;
+  address_district?: string;
+  address_city?: string;
+  address_state?: string;
+  address_zip?: string;
   site_instagram?: string;
 }) {
   try {
@@ -39,7 +45,13 @@ export async function registerCompany(data: {
         telefone: data.telefone,
         responsavel: data.responsavel,
         senha_hash: passwordHash,
-        endereco: data.endereco || '',
+        address_street: data.address_street || '',
+        address_number: data.address_number || '',
+        address_complement: data.address_complement || '',
+        address_district: data.address_district || '',
+        address_city: data.address_city || '',
+        address_state: data.address_state || '',
+        address_zip: data.address_zip || '',
         site_instagram: data.site_instagram || '',
         is_active: true
       })
@@ -595,14 +607,14 @@ export async function getCompanyStatistics(companyId: number) {
 
     return {
       total: {
-        sales_count: totalStats?.count || 0,
-        sales_value: totalStats?.sum?.purchase_value || 0,
-        cashback_generated: totalStats?.sum?.cashback_generated || 0
+        sales_count: (totalStats as any)?.count || 0,
+        sales_value: (totalStats as any)?.sum?.purchase_value || 0,
+        cashback_generated: (totalStats as any)?.sum?.cashback_generated || 0
       },
       monthly: {
-        sales_count: monthlyStats?.count || 0,
-        sales_value: monthlyStats?.sum?.purchase_value || 0,
-        cashback_generated: monthlyStats?.sum?.cashback_generated || 0
+        sales_count: (monthlyStats as any)?.count || 0,
+        sales_value: (monthlyStats as any)?.sum?.purchase_value || 0,
+        cashback_generated: (monthlyStats as any)?.sum?.cashback_generated || 0
       },
       cashback_percentage: cashbackConfig?.cashback_percentage || 5.0
     };
@@ -630,10 +642,10 @@ export async function getCompanyMonthlyData(companyId: number) {
 
     // Format the data for better display
     const formattedData = (monthlyData || []).map(row => ({
-      month: new Date(row.purchase_date + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
-      sales_count: row.count,
-      sales_value: row.sum?.purchase_value || 0,
-      cashback_generated: row.sum?.cashback_generated || 0
+      month: new Date((row as any).purchase_date + '-01').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
+      sales_count: (row as any).count,
+      sales_value: (row as any).sum?.purchase_value || 0,
+      cashback_generated: (row as any).sum?.cashback_generated || 0
     }));
 
     return { monthly_data: formattedData };

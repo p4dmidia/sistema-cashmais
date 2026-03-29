@@ -16,7 +16,13 @@ const CompanyRegisterSchema = z.object({
   telefone: z.string().min(10),
   responsavel: z.string().min(1),
   senha: z.string().min(6),
-  endereco: z.string().optional(),
+  address_street: z.string().optional(),
+  address_number: z.string().optional(),
+  address_complement: z.string().optional(),
+  address_district: z.string().optional(),
+  address_city: z.string().optional(),
+  address_state: z.string().optional(),
+  address_zip: z.string().optional(),
   site_instagram: z.string().optional(),
 });
 
@@ -119,7 +125,13 @@ app.post('/api/empresa/registrar', async (c) => {
         telefone: data.telefone,
         responsavel: data.responsavel,
         senha_hash: passwordHash,
-        endereco: data.endereco || '',
+        address_street: data.address_street || '',
+        address_number: data.address_number || '',
+        address_complement: data.address_complement || '',
+        address_district: data.address_district || '',
+        address_city: data.address_city || '',
+        address_state: data.address_state || '',
+        address_zip: data.address_zip || '',
         site_instagram: data.site_instagram || '',
         is_active: true
       })
@@ -458,6 +470,10 @@ app.post('/api/empresa/caixas', async (c) => {
       userProfile = createdProfile;
     }
 
+    if (!userProfile) {
+      return c.json({ error: 'Erro ao obter perfil de usuário' }, 500);
+    }
+
     // Create cashier
     const { error: cashierError } = await supabase
       .from('company_cashiers')
@@ -531,7 +547,7 @@ app.post('/api/caixa/compra', async (c) => {
     }
 
     // Find customer by CPF in affiliates table first
-    let { data: customer, error: customerError } = await supabase
+    let { data: customer } = await supabase
       .from('affiliates')
       .select('id, cpf, full_name, is_active')
       .eq('cpf', cleanCpf)

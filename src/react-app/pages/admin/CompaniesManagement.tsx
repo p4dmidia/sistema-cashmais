@@ -31,6 +31,13 @@ interface Company {
   cashback_percentage: number;
   total_purchases: number;
   total_cashback_generated: number;
+  address_street?: string;
+  address_number?: string;
+  address_complement?: string;
+  address_district?: string;
+  address_city?: string;
+  address_state?: string;
+  address_zip?: string;
   created_at: string;
 }
 
@@ -52,9 +59,13 @@ export default function CompaniesManagement() {
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [toggleLoading, setToggleLoading] = useState<number | null>(null);
+  const [viewData, setViewData] = useState<any | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
-  const [viewData, setViewData] = useState<any | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState<Partial<Company>>({});
+  const [editLoading, setEditLoading] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
 
   useEffect(() => {
     fetchCompanies();
@@ -136,6 +147,64 @@ export default function CompaniesManagement() {
       alert('Erro de conexão');
     } finally {
       setViewLoading(false);
+    }
+  };
+
+  const handleEditCompany = (company: Company) => {
+    setEditFormData(company);
+    setEditOpen(true);
+  };
+
+  const handleUpdateCompany = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditLoading(true);
+    try {
+      const response = await fetch(`/api/admin/companies/${editFormData.id}/update`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editFormData),
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        await fetchCompanies();
+        setEditOpen(false);
+      } else {
+        const err = await response.json();
+        alert(err.error || 'Erro ao atualizar empresa');
+      }
+    } catch (error) {
+      console.error('Failed to update company:', error);
+      alert('Erro de conexão');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleEditCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEditFormData(prev => ({ ...prev, address_zip: value }));
+    
+    const cep = value.replace(/\D/g, '');
+    if (cep.length === 8) {
+      setCepLoading(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await response.json();
+        if (!data.erro) {
+          setEditFormData(prev => ({
+            ...prev,
+            address_street: data.logradouro,
+            address_district: data.bairro,
+            address_city: data.localidade,
+            address_state: data.uf
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch CEP:', err);
+      } finally {
+        setCepLoading(false);
+      }
     }
   };
 
@@ -353,31 +422,40 @@ export default function CompaniesManagement() {
                             {company.is_active ? 'Ativa' : 'Inativa'}
                           </span>
                         </td>
-                        <td className="py-3">
-                          <div className="flex items-center space-x-2">
-                          <button
-                              onClick={() => handleToggleStatus(company.id, company.is_active)}
-                              disabled={toggleLoading === company.id}
-                              className={`${
-                                company.is_active
-                                  ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border-red-500/30'
-                                  : 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border-green-500/30'
-                              } border px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 disabled:opacity-50`}
-                            >
-                              {toggleLoading === company.id ? (
-                                <div className="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
-                              ) : company.is_active ? (
-                                <XCircle className="h-3 w-3" />
-                              ) : (
-                                <CheckCircle className="h-3 w-3" />
-                              )}
+                        <td className="py-3 text-right pr-4">
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                               onClick={() => handleToggleStatus(company.id, company.is_active)}
+                               disabled={toggleLoading === company.id}
+                               className={`${
+                                 company.is_active
+                                   ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border-red-500/30'
+                                   : 'bg-green-500/20 text-green-400 hover:bg-green-500/30 border-green-500/30'
+                               } border px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 disabled:opacity-50`}
+                               title={company.is_active ? 'Inativar' : 'Ativar'}
+                             >
+                               {toggleLoading === company.id ? (
+                                 <div className="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
+                               ) : company.is_active ? (
+                                 <XCircle className="h-3 w-3" />
+                               ) : (
+                                 <CheckCircle className="h-3 w-3" />
+                               )}
                             </button>
                             <button
-                              onClick={() => handleViewCompany(company.id)}
-                              disabled={viewLoading}
-                              className="bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 disabled:opacity-50"
-                            >
-                              <Eye className="h-3 w-3" />
+                               onClick={() => handleViewCompany(company.id)}
+                               disabled={viewLoading}
+                               className="bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 disabled:opacity-50"
+                               title="Visualizar"
+                             >
+                               <Eye className="h-3 w-3" />
+                            </button>
+                            <button
+                               onClick={() => handleEditCompany(company)}
+                               className="bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30 px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200"
+                               title="Editar Endereço/Perfil"
+                             >
+                               <Settings className="h-3 w-3" />
                             </button>
                           </div>
                         </td>
@@ -507,6 +585,173 @@ export default function CompaniesManagement() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+    )}
+    {/* Edit Company Modal */}
+    {editOpen && (
+      <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="w-full max-w-2xl bg-[#001144]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-6 overflow-y-auto max-h-[90vh]">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-semibold text-white">Editar Empresa</h3>
+            <button
+              onClick={() => { setEditOpen(false); setEditFormData({}); }}
+              className="text-gray-400 hover:text-white"
+            >
+              <XCircle className="h-5 w-5" />
+            </button>
+          </div>
+
+          <form onSubmit={handleUpdateCompany} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-400 mb-1">Razão Social</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.razao_social || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, razao_social: e.target.value }))}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Nome Fantasia</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.nome_fantasia || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, nome_fantasia: e.target.value }))}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Email (CNPJ login)</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.email || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Responsável</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.responsavel || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, responsavel: e.target.value }))}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Telefone</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.telefone || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, telefone: e.target.value }))}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              <div className="md:col-span-2 border-t border-white/10 pt-4 mt-2">
+                <h4 className="text-white font-medium mb-4 text-sm uppercase tracking-wider">Endereço (Gatway de Pagamento)</h4>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">CEP</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    maxLength={9}
+                    value={editFormData.address_zip || ''}
+                    onChange={handleEditCepChange}
+                    className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                  {cepLoading && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Estado (UF)</label>
+                <input
+                  type="text"
+                  required
+                  maxLength={2}
+                  value={editFormData.address_state || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, address_state: e.target.value }))}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-400 mb-1">Cidade</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.address_city || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, address_city: e.target.value }))}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-400 mb-1">Logradouro</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.address_street || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, address_street: e.target.value }))}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Número</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.address_number || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, address_number: e.target.value }))}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Bairro</label>
+                <input
+                  type="text"
+                  required
+                  value={editFormData.address_district || ''}
+                  onChange={(e) => setEditFormData(prev => ({ ...prev, address_district: e.target.value }))}
+                  className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-6 border-t border-white/10">
+              <button
+                type="button"
+                onClick={() => { setEditOpen(false); setEditFormData({}); }}
+                className="flex-1 py-2 px-4 border border-white/10 text-gray-300 rounded-lg hover:bg-white/5 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={editLoading}
+                className="flex-1 py-2 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
+              >
+                {editLoading ? 'Salvando...' : 'Salvar Alterações'}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     )}

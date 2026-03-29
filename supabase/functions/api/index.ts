@@ -289,7 +289,13 @@ const CompanyRegisterSchema = z.object({
   telefone: z.string().min(10),
   responsavel: z.string().min(1),
   senha: z.string().min(6),
-  endereco: z.string().optional(),
+  address_street: z.string().min(1),
+  address_number: z.string().min(1),
+  address_complement: z.string().optional(),
+  address_district: z.string().min(1),
+  address_city: z.string().min(1),
+  address_state: z.string().min(2),
+  address_zip: z.string().min(8),
   site_instagram: z.string().optional(),
 })
 
@@ -333,7 +339,13 @@ async function handleCompanyRegister(c: any) {
         telefone: String(data.telefone).replace(/\D/g, ''),
         responsavel: data.responsavel,
         senha_hash: passwordHash,
-        endereco: data.endereco || '',
+        address_street: data.address_street,
+        address_number: data.address_number,
+        address_complement: data.address_complement || '',
+        address_district: data.address_district,
+        address_city: data.address_city,
+        address_state: data.address_state,
+        address_zip: String(data.address_zip).replace(/\D/g, ''),
         site_instagram: data.site_instagram || '',
         is_active: true
       })
@@ -704,7 +716,7 @@ app.get('/api/admin/companies/:id', async (c) => {
     const supabase = createSupabase()
     const { data: company } = await supabase
       .from('companies')
-      .select('id, nome_fantasia, razao_social, cnpj, email, telefone, responsavel, is_active, created_at')
+      .select('id, nome_fantasia, razao_social, cnpj, email, telefone, responsavel, is_active, created_at, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip')
       .eq('id', id)
       .single()
     if (!company) return c.json({ error: 'Empresa não encontrada' }, 404)
@@ -759,6 +771,41 @@ app.get('/api/admin/companies/:id', async (c) => {
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
+})
+
+app.patch('/api/admin/companies/:id/update', async (c) => {
+  try {
+    const id = Number(c.req.param('id'))
+    const supabase = createSupabase()
+    const { data: comp } = await supabase.from('companies').select('id').eq('id', id).single()
+    if (!comp) return c.json({ error: 'Empresa não encontrada' }, 404)
+    
+    const body = await c.req.json()
+    const updateData: any = {}
+    
+    const fields = [
+      'nome_fantasia', 'razao_social', 'telefone', 'responsavel', 'site_instagram', 
+      'address_street', 'address_number', 'address_complement', 'address_district', 
+      'address_city', 'address_state', 'address_zip'
+    ]
+    
+    fields.forEach(f => {
+      if (body[f] !== undefined) updateData[f] = body[f]
+    })
+
+    if (updateData.telefone) updateData.telefone = String(updateData.telefone).replace(/\D/g, '')
+    if (updateData.address_zip) updateData.address_zip = String(updateData.address_zip).replace(/\D/g, '')
+
+    if (Object.keys(updateData).length === 0) return c.json({ error: 'Nenhum dado para atualizar' }, 400)
+
+    const { error } = await supabase
+      .from('companies')
+      .update({ ...updateData, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      
+    if (error) return c.json({ error: 'Erro ao atualizar empresa', details: error.message }, 500)
+    return c.json({ success: true })
+  } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
 })
 
 app.patch('/api/admin/companies/:id/toggle-status', async (c) => {
@@ -2289,7 +2336,22 @@ app.post('/api/empresa/login', async (c) => {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
     await supabase.from('company_sessions').insert({ company_id: (company as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
     setCookie(c, 'company_session', sessionToken, getCookieOptions(c, 24 * 60 * 60))
-    return c.json({ success: true, token: sessionToken, company: { id: (company as any).id, razao_social: (company as any).razao_social, nome_fantasia: (company as any).nome_fantasia, email: (company as any).email, role: 'company' } })
+    return c.json({ 
+      success: true, 
+      token: sessionToken, 
+      company: { 
+        id: (company as any).id, 
+        razao_social: (company as any).razao_social, 
+        nome_fantasia: (company as any).nome_fantasia, 
+        email: (company as any).email, 
+        address_street: (company as any).address_street,
+        address_number: (company as any).address_number,
+        address_city: (company as any).address_city,
+        address_state: (company as any).address_state,
+        address_zip: (company as any).address_zip,
+        role: 'company' 
+      } 
+    })
   } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
 })
 
@@ -2301,7 +2363,7 @@ app.get('/api/empresa/me', async (c) => {
     const supabase = createSupabase()
     const { data: session, error: sessError } = await supabase
       .from('company_sessions')
-      .select('*, companies!inner(id, razao_social, nome_fantasia, email)')
+      .select('*, companies!inner(id, razao_social, nome_fantasia, email, telefone, responsavel, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip)')
       .eq('session_token', token)
       .gt('expires_at', new Date().toISOString())
       .single()
@@ -2311,11 +2373,67 @@ app.get('/api/empresa/me', async (c) => {
       return c.json({ error: 'Não autorizado (Sessão inválida)', debug_info: sessError?.message }, 401)
     }
     const comp = (session as any).companies
-    return c.json({ id: comp.id, razao_social: comp.razao_social, nome_fantasia: comp.nome_fantasia, email: comp.email, role: 'company' })
+    return c.json({ 
+      id: comp.id, 
+      razao_social: comp.razao_social, 
+      nome_fantasia: comp.nome_fantasia, 
+      email: comp.email, 
+      telefone: comp.telefone,
+      responsavel: comp.responsavel,
+      address_street: comp.address_street,
+      address_number: comp.address_number,
+      address_complement: comp.address_complement,
+      address_district: comp.address_district,
+      address_city: comp.address_city,
+      address_state: comp.address_state,
+      address_zip: comp.address_zip,
+      role: 'company' 
+    })
   } catch (e) { 
     console.error(`[COMPANY_ME] Catch error:`, e)
     return c.json({ error: 'Erro interno do servidor', details: (e as any).message }, 500) 
   }
+})
+
+app.put('/api/empresa/perfil', async (c) => {
+  const token = getAuthToken(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+    
+    const body = await c.req.json()
+    const updateData: any = {}
+    
+    const fields = [
+      'nome_fantasia', 'razao_social', 'telefone', 'responsavel', 'site_instagram', 
+      'address_street', 'address_number', 'address_complement', 'address_district', 
+      'address_city', 'address_state', 'address_zip'
+    ]
+    
+    fields.forEach(f => {
+      if (body[f] !== undefined) updateData[f] = body[f]
+    })
+
+    if (updateData.telefone) updateData.telefone = String(updateData.telefone).replace(/\D/g, '')
+    if (updateData.address_zip) updateData.address_zip = String(updateData.address_zip).replace(/\D/g, '')
+
+    if (Object.keys(updateData).length === 0) return c.json({ error: 'Nenhum dado para atualizar' }, 400)
+
+    const { error } = await supabase
+      .from('companies')
+      .update({ ...updateData, updated_at: new Date().toISOString() })
+      .eq('id', (session as any).companies.id)
+      
+    if (error) return c.json({ error: 'Erro ao atualizar perfil', details: error.message }, 500)
+    return c.json({ success: true, message: 'Perfil atualizado com sucesso' })
+  } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
 })
 
 app.post('/api/empresa/logout', async (c) => {

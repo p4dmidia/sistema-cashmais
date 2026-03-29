@@ -10,6 +10,15 @@ interface Company {
   razao_social: string;
   nome_fantasia: string;
   email: string;
+  telefone?: string;
+  responsavel?: string;
+  address_street?: string;
+  address_number?: string;
+  address_complement?: string;
+  address_district?: string;
+  address_city?: string;
+  address_state?: string;
+  address_zip?: string;
   role: string;
 }
 
@@ -74,6 +83,9 @@ export default function CompanyDashboard() {
   const [editingCashier, setEditingCashier] = useState<{ id: number; name: string; password: string } | null>(null);
   const [deletingCashierId, setDeletingCashierId] = useState<number | null>(null);
   const [newCashbackPercentage, setNewCashbackPercentage] = useState('');
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [profileFormData, setProfileFormData] = useState<Partial<Company>>({});
+  const [cepLoading, setCepLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
@@ -91,12 +103,65 @@ export default function CompanyDashboard() {
       const response = await fetch('/api/empresa/me', { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
-        setCompany(data.company);
+        setCompany(data); // The endpoint now returns the company object directly or flattened
       } else {
         navigate('/empresa/login');
       }
-    } catch (error) {
+    } catch (e) {
+      console.error(`[COMPANY_ME] Catch error:`, e)
       navigate('/empresa/login');
+    }
+  };
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch('/api/empresa/perfil', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(profileFormData),
+        credentials: 'include',
+      });
+      if (response.ok) {
+        await checkAuth(); // Refresh company data
+        setShowEditProfile(false);
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Erro ao atualizar perfil');
+      }
+    } catch (err) {
+      setError('Erro de conexão');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleProfileCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setProfileFormData(prev => ({ ...prev, address_zip: value }));
+    
+    const cep = value.replace(/\D/g, '');
+    if (cep.length === 8) {
+      setCepLoading(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await response.json();
+        if (!data.erro) {
+          setProfileFormData(prev => ({
+            ...prev,
+            address_street: data.logradouro,
+            address_district: data.bairro,
+            address_city: data.localidade,
+            address_state: data.uf
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch CEP:', err);
+      } finally {
+        setCepLoading(false);
+      }
     }
   };
 
@@ -1126,6 +1191,60 @@ export default function CompanyDashboard() {
             </div>
 
             <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-white font-medium">Informações da Empresa</h3>
+                <button
+                  onClick={() => {
+                    if (company) {
+                      setProfileFormData(company);
+                      setShowEditProfile(true);
+                    }
+                  }}
+                  className="text-[#70ff00] hover:text-[#50cc00] text-sm flex items-center gap-1"
+                >
+                  <Edit2 className="h-4 w-4" />
+                  Editar Perfil
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-400">Razão Social</p>
+                  <p className="text-white">{company?.razao_social}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400">CNPJ</p>
+                  <p className="text-white">{company?.email}</p> 
+                </div>
+                <div>
+                  <p className="text-gray-400">Responsável</p>
+                  <p className="text-white">{company?.responsavel || 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400">Telefone</p>
+                  <p className="text-white">{company?.telefone || 'Não informado'}</p>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-white/10">
+                <h4 className="text-white font-medium mb-3">Endereço</h4>
+                {company?.address_street ? (
+                  <div className="text-sm text-gray-300">
+                    <p>{company.address_street}, {company.address_number}</p>
+                    {company.address_complement && <p>{company.address_complement}</p>}
+                    <p>{company.address_district}</p>
+                    <p>{company.address_city} - {company.address_state}</p>
+                    <p>CEP: {company.address_zip}</p>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-amber-400 bg-amber-400/10 p-3 rounded-lg border border-amber-400/20">
+                    <AlertCircle className="h-5 w-5" />
+                    <p className="text-sm">Endereço incompleto. Isso impedirá a geração de boletos de comissão.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 p-6">
               <h3 className="text-white font-medium mb-4">Regras do Sistema</h3>
               <div className="space-y-3 text-sm text-gray-300">
                 <div className="flex items-start space-x-3">
@@ -1396,6 +1515,175 @@ export default function CompanyDashboard() {
                     className="flex-1 py-2 px-4 bg-gradient-to-r from-[#70ff00] to-[#50cc00] text-white rounded-lg hover:from-[#50cc00] hover:to-[#70ff00] transition-all duration-200"
                   >
                     Criar Caixa
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        {/* Edit Profile Modal */}
+        {showEditProfile && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 max-w-2xl w-full mx-4 overflow-y-auto max-h-[90vh]">
+              <h3 className="text-xl font-semibold text-white mb-6">Editar Perfil da Empresa</h3>
+              
+              <form onSubmit={handleUpdateProfile} className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-1">Nome Fantasia</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileFormData.nome_fantasia || ''}
+                      onChange={(e) => setProfileFormData(prev => ({ ...prev, nome_fantasia: e.target.value }))}
+                      className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-1">Razão Social</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileFormData.razao_social || ''}
+                      onChange={(e) => setProfileFormData(prev => ({ ...prev, razao_social: e.target.value }))}
+                      className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-1">Responsável</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileFormData.responsavel || ''}
+                      onChange={(e) => setProfileFormData(prev => ({ ...prev, responsavel: e.target.value }))}
+                      className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-1">Telefone</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileFormData.telefone || ''}
+                      onChange={(e) => setProfileFormData(prev => ({ ...prev, telefone: e.target.value }))}
+                      className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2 border-t border-white/10 pt-4 mt-2">
+                    <h4 className="text-white font-medium mb-4">Endereço</h4>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-1">CEP</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        required
+                        maxLength={9}
+                        value={profileFormData.address_zip || ''}
+                        onChange={handleProfileCepChange}
+                        className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                      />
+                      {cepLoading && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-1">Estado (UF)</label>
+                    <input
+                      type="text"
+                      required
+                      maxLength={2}
+                      value={profileFormData.address_state || ''}
+                      onChange={(e) => setProfileFormData(prev => ({ ...prev, address_state: e.target.value }))}
+                      className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-200 mb-1">Cidade</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileFormData.address_city || ''}
+                      onChange={(e) => setProfileFormData(prev => ({ ...prev, address_city: e.target.value }))}
+                      className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-200 mb-1">Logradouro</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileFormData.address_street || ''}
+                      onChange={(e) => setProfileFormData(prev => ({ ...prev, address_street: e.target.value }))}
+                      className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-1">Número</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileFormData.address_number || ''}
+                      onChange={(e) => setProfileFormData(prev => ({ ...prev, address_number: e.target.value }))}
+                      className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-1">Bairro</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileFormData.address_district || ''}
+                      onChange={(e) => setProfileFormData(prev => ({ ...prev, address_district: e.target.value }))}
+                      className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-200 mb-1">Complemento</label>
+                    <input
+                      type="text"
+                      value={profileFormData.address_complement || ''}
+                      onChange={(e) => setProfileFormData(prev => ({ ...prev, address_complement: e.target.value }))}
+                      className="w-full px-3 py-2 border border-white/20 rounded-lg bg-white/5 text-white focus:outline-none focus:ring-2 focus:ring-[#70ff00]"
+                    />
+                  </div>
+                </div>
+
+                {error && (
+                  <div className="flex items-center space-x-2 text-red-400 bg-red-900/20 p-3 rounded-lg border border-red-800/50">
+                    <AlertCircle className="h-5 w-5" />
+                    <span className="text-sm">{error}</span>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-4 border-t border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEditProfile(false);
+                      setProfileFormData({});
+                      setError('');
+                    }}
+                    className="flex-1 py-2 px-4 border border-white/20 text-gray-300 rounded-lg hover:bg-white/10 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 py-2 px-4 bg-gradient-to-r from-[#70ff00] to-[#50cc00] text-white rounded-lg hover:from-[#50cc00] hover:to-[#70ff00] transition-all duration-200"
+                  >
+                    Salvar Alterações
                   </button>
                 </div>
               </form>

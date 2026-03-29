@@ -11,13 +11,47 @@ export default function CompanyRegister() {
     telefone: '',
     responsavel: '',
     senha: '',
-    endereco: '',
+    address_zip: '',
+    address_street: '',
+    address_number: '',
+    address_complement: '',
+    address_district: '',
+    address_city: '',
+    address_state: '',
     site_instagram: ''
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cepLoading, setCepLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const navigate = useNavigate();
+
+  const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFormData(prev => ({ ...prev, address_zip: value }));
+    
+    const cep = value.replace(/\D/g, '');
+    if (cep.length === 8) {
+      setCepLoading(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await response.json();
+        if (!data.erro) {
+          setFormData(prev => ({
+            ...prev,
+            address_street: data.logradouro,
+            address_district: data.bairro,
+            address_city: data.localidade,
+            address_state: data.uf
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to fetch CEP:', err);
+      } finally {
+        setCepLoading(false);
+      }
+    }
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
@@ -183,20 +217,120 @@ export default function CompanyRegister() {
                 />
               </div>
 
-              <div className="md:col-span-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2 border-t border-white/10 pt-6 mt-2">
+                <h3 className="text-lg font-medium text-white mb-4">Endereço da Empresa</h3>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-200 mb-2">
-                  Endereço (Opcional)
+                  CEP *
+                </label>
+                <div className="relative">
+                  <input
+                    name="address_zip"
+                    type="text"
+                    required
+                    maxLength={9}
+                    value={formData.address_zip}
+                    onChange={handleCepChange}
+                    placeholder="00000-000"
+                    className="w-full px-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                  />
+                  {cepLoading && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="md:col-span-1">
+                <label className="block text-sm font-medium text-gray-200 mb-2">
+                  Estado (UF) *
                 </label>
                 <input
-                  name="endereco"
+                  name="address_state"
                   type="text"
-                  value={formData.endereco}
+                  required
+                  maxLength={2}
+                  value={formData.address_state}
+                  onChange={handleChange}
+                  placeholder="SP"
+                  className="w-full px-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-200 mb-2">
+                  Cidade *
+                </label>
+                <input
+                  name="address_city"
+                  type="text"
+                  required
+                  value={formData.address_city}
                   onChange={handleChange}
                   className="w-full px-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
                 />
               </div>
 
               <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-200 mb-2">
+                  Logradouro (Rua/Avenida) *
+                </label>
+                <input
+                  name="address_street"
+                  type="text"
+                  required
+                  value={formData.address_street}
+                  onChange={handleChange}
+                  className="w-full px-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-200 mb-2">
+                  Número *
+                </label>
+                <input
+                  name="address_number"
+                  type="text"
+                  required
+                  value={formData.address_number}
+                  onChange={handleChange}
+                  className="w-full px-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-200 mb-2">
+                  Bairro *
+                </label>
+                <input
+                  name="address_district"
+                  type="text"
+                  required
+                  value={formData.address_district}
+                  onChange={handleChange}
+                  className="w-full px-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-200 mb-2">
+                  Complemento (Opcional)
+                </label>
+                <input
+                  name="address_complement"
+                  type="text"
+                  value={formData.address_complement}
+                  onChange={handleChange}
+                  className="w-full px-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                />
+              </div>
+
+              <div className="md:col-span-2 border-t border-white/10 pt-6 mt-2">
                 <label className="block text-sm font-medium text-gray-200 mb-2">
                   Site/Instagram (Opcional)
                 </label>
