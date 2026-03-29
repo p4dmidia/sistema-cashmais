@@ -774,6 +774,13 @@ app.get('/api/admin/companies/:id', async (c) => {
 })
 
 app.patch('/api/admin/companies/:id/update', async (c) => {
+  return await handleAdminCompanyUpdate(c)
+})
+app.patch('/admin/companies/:id/update', async (c) => {
+  return await handleAdminCompanyUpdate(c)
+})
+
+async function handleAdminCompanyUpdate(c: any) {
   try {
     const id = Number(c.req.param('id'))
     const supabase = createSupabase()
@@ -806,9 +813,16 @@ app.patch('/api/admin/companies/:id/update', async (c) => {
     if (error) return c.json({ error: 'Erro ao atualizar empresa', details: error.message }, 500)
     return c.json({ success: true })
   } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
-})
+}
 
 app.patch('/api/admin/companies/:id/toggle-status', async (c) => {
+  return await handleAdminCompanyToggleStatus(c)
+})
+app.patch('/admin/companies/:id/toggle-status', async (c) => {
+  return await handleAdminCompanyToggleStatus(c)
+})
+
+async function handleAdminCompanyToggleStatus(c: any) {
   try {
     const id = Number(c.req.param('id'))
     const supabase = createSupabase()
@@ -837,7 +851,7 @@ app.patch('/api/admin/companies/:id/toggle-status', async (c) => {
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
-})
+}
 
 app.get('/admin/withdrawals', async (c) => {
   try {
@@ -2396,6 +2410,13 @@ app.get('/api/empresa/me', async (c) => {
 })
 
 app.put('/api/empresa/perfil', async (c) => {
+  return await handleCompanyProfileUpdate(c)
+})
+app.put('/empresa/perfil', async (c) => {
+  return await handleCompanyProfileUpdate(c)
+})
+
+async function handleCompanyProfileUpdate(c: any) {
   const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
@@ -2434,7 +2455,7 @@ app.put('/api/empresa/perfil', async (c) => {
     if (error) return c.json({ error: 'Erro ao atualizar perfil', details: error.message }, 500)
     return c.json({ success: true, message: 'Perfil atualizado com sucesso' })
   } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
-})
+}
 
 app.post('/api/empresa/logout', async (c) => {
   const token = getAuthToken(c, 'company_session')
