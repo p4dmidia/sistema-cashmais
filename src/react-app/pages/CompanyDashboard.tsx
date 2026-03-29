@@ -10,6 +10,7 @@ interface Company {
   razao_social: string;
   nome_fantasia: string;
   email: string;
+  cnpj: string;
   telefone?: string;
   responsavel?: string;
   address_street?: string;
@@ -1213,6 +1214,10 @@ export default function CompanyDashboard() {
                 </div>
                 <div>
                   <p className="text-gray-400">CNPJ</p>
+                  <p className="text-white">{company?.cnpj}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400">Email (Login)</p>
                   <p className="text-white">{company?.email}</p> 
                 </div>
                 <div>
