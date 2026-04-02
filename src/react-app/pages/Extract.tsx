@@ -199,26 +199,34 @@ function ExtractPage() {
           ) : (
             <div className="divide-y divide-gray-700">
               {filteredTransactions.map((transaction) => (
-                <div key={transaction.id} className="p-6 hover:bg-gray-700/30 transition-colors">
-                  <div className="flex items-center justify-between">
+                <div key={transaction.id} className="p-5 sm:p-6 hover:bg-gray-700/30 transition-colors">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex-1">
-                      <h3 className="text-white font-medium">{transaction.company_name}</h3>
-                      <p className="text-gray-400 text-sm mt-1">
-                        {formatDate(transaction.transaction_date)} • Nível {transaction.level_earned}
-                      </p>
+                      <h3 className="text-white font-medium text-base sm:text-lg">{transaction.company_name}</h3>
+                      <div className="flex flex-wrap items-center gap-2 mt-1">
+                         <span className="text-gray-400 text-xs sm:text-sm">
+                          {formatDate(transaction.transaction_date)}
+                        </span>
+                        <span className="w-1 h-1 bg-gray-600 rounded-full hidden sm:block"></span>
+                        <span className="px-2 py-0.5 bg-white/5 text-gray-400 text-[10px] sm:text-xs rounded border border-white/10 uppercase tracking-wider">
+                          Nível {transaction.level_earned}
+                        </span>
+                      </div>
                     </div>
                     
-                    <div className="text-right">
-                      <div className="flex items-center space-x-4">
-                        <div>
-                          <p className="text-gray-400 text-sm">Compra</p>
-                          <p className="text-white font-medium">{formatCurrency(transaction.purchase_value)}</p>
-                        </div>
-                        <TrendingDown className="w-4 h-4 text-gray-500" />
-                        <div>
-                          <p className="text-green-400 text-sm">Cashback</p>
-                          <p className="text-green-400 font-bold">{formatCurrency(transaction.cashback_value)}</p>
-                        </div>
+                    <div className="flex items-center justify-between sm:justify-end sm:space-x-8 border-t sm:border-t-0 border-white/5 pt-3 sm:pt-0">
+                      <div className="text-left sm:text-right">
+                        <p className="text-gray-500 text-[10px] sm:text-xs uppercase font-bold tracking-widest">Compra</p>
+                        <p className="text-gray-300 font-medium text-sm sm:text-base">{formatCurrency(transaction.purchase_value)}</p>
+                      </div>
+                      
+                      <div className="hidden sm:block">
+                         <TrendingDown className="w-4 h-4 text-gray-600" />
+                      </div>
+                      
+                      <div className="text-right">
+                        <p className="text-[#70ff00] text-[10px] sm:text-xs uppercase font-bold tracking-widest">Cashback</p>
+                        <p className="text-[#70ff00] font-bold text-base sm:text-lg">{formatCurrency(transaction.cashback_value)}</p>
                       </div>
                     </div>
                   </div>

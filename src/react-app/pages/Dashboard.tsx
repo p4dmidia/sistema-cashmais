@@ -31,7 +31,6 @@ function Dashboard() {
   const [networkStats, setNetworkStats] = useState<NetworkStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [copyMessage, setCopyMessage] = useState<string>('');
-  const [couponCopyMessage, setCouponCopyMessage] = useState<string>('');
 
   useEffect(() => {
     console.log('[DASHBOARD] useEffect triggered:', { authLoading, hasUser: !!affiliateUser });
@@ -144,8 +143,8 @@ ${referralLink}
     
     try {
       await navigator.clipboard.writeText(coupon);
-      setCouponCopyMessage('Cupom copiado com sucesso!');
-      setTimeout(() => setCouponCopyMessage(''), 3000);
+      setCopyMessage('Cupom copiado com sucesso!');
+      setTimeout(() => setCopyMessage(''), 3000);
     } catch (error) {
       // Fallback for browsers that don't support clipboard API
       const textArea = document.createElement('textarea');
@@ -155,8 +154,8 @@ ${referralLink}
       document.execCommand('copy');
       document.body.removeChild(textArea);
       
-      setCouponCopyMessage('Cupom copiado com sucesso!');
-      setTimeout(() => setCouponCopyMessage(''), 3000);
+      setCopyMessage('Cupom copiado com sucesso!');
+      setTimeout(() => setCopyMessage(''), 3000);
     }
   };
 
@@ -207,26 +206,26 @@ ${referralLink}
             Ganhe comissões através da rede MLM
           </p>
           
-          {/* Referral Code Section */}
-          <div className="mt-4 p-4 bg-[#70ff00]/10 border border-[#70ff00]/30 rounded-xl">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[#70ff00] text-sm">
-                <strong>Seu código de indicação:</strong> {affiliateUser?.referral_code}
+            {/* Referral Code Section */}
+            <div className="mt-6 p-5 bg-[#70ff00]/10 border border-[#70ff00]/30 rounded-2xl">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                <div>
+                  <p className="text-[#70ff00] text-xs uppercase font-bold tracking-wider mb-1 opacity-70">Seu código de indicação</p>
+                  <p className="text-white text-xl font-mono font-bold tracking-tight">{affiliateUser?.referral_code}</p>
+                </div>
+                <button
+                  onClick={() => copyReferralLink(affiliateUser?.referral_code || '')}
+                  className="w-full sm:w-auto px-5 py-2.5 bg-[#70ff00] text-[#001144] rounded-xl text-sm font-bold hover:bg-[#50cc00] transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#70ff00]/20"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                  Copiar Link
+                </button>
+              </div>
+              <p className="text-[#70ff00]/70 text-xs mb-4">
+                Ganhe comissões recorrentes de até 10 níveis indicando novos membros.
               </p>
-              <button
-                onClick={() => copyReferralLink(affiliateUser?.referral_code || '')}
-                className="px-3 py-1 bg-[#70ff00] text-[#001144] rounded-lg text-xs font-medium hover:bg-[#50cc00] transition-colors flex items-center gap-1"
-              >
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"></path>
-                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"></path>
-                </svg>
-                Copiar Link
-              </button>
-            </div>
-            <p className="text-[#70ff00]/80 text-xs">
-              Compartilhe este código para ganhar comissões quando alguém se cadastrar
-            </p>
             
             {/* Sharing Options */}
             <div className="flex gap-2 mt-3">
@@ -260,31 +259,27 @@ ${referralLink}
           </div>
           
           {/* Customer Coupon Section */}
-          <div className="mt-4 p-4 bg-blue-600/10 border border-blue-500/30 rounded-xl">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-blue-400 text-sm">
-                <strong>Seu cupom para compras:</strong> {affiliateUser?.customer_coupon || affiliateUser?.cpf || 'Carregando...'}
-              </p>
+          <div className="mt-4 p-5 bg-blue-600/10 border border-blue-500/30 rounded-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+              <div>
+                <p className="text-blue-400 text-xs uppercase font-bold tracking-wider mb-1 opacity-70">Seu cupom para compras (CPF)</p>
+                <p className="text-white text-xl font-mono font-bold tracking-tight">
+                  {affiliateUser?.customer_coupon || affiliateUser?.cpf || 'Carregando...'}
+                </p>
+              </div>
               <button
                 onClick={() => copyCustomerCoupon(affiliateUser?.customer_coupon || affiliateUser?.cpf || '')}
-                className="px-3 py-1 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors flex items-center gap-1"
+                className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
               >
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"></path>
-                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"></path>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                 </svg>
-                Copiar
+                Copiar Cupom
               </button>
             </div>
-            <p className="text-blue-400/80 text-xs">
-              💳 Mostre este cupom (seu CPF) no estabelecimento para receber cashback nas suas compras
+            <p className="text-blue-400/70 text-xs">
+              💳 Apresente este código nos estabelecimentos parceiros para registrar seu cashback.
             </p>
-            
-            {couponCopyMessage && (
-              <div className="mt-2 p-2 bg-green-600/20 border border-green-500/30 rounded-lg">
-                <p className="text-green-300 text-xs text-center">{couponCopyMessage}</p>
-              </div>
-            )}
           </div>
         </div>
 
@@ -295,7 +290,7 @@ ${referralLink}
               <h3 className="text-white font-medium">Disponível p/ Saque</h3>
               <Wallet className="w-5 h-5 text-[#70ff00]" />
             </div>
-            <p className="text-3xl font-bold text-white">
+            <p className="text-2xl sm:text-3xl font-bold text-white">
               R$ {balance ? balance.available_balance.toFixed(2) : '0,00'}
             </p>
             <p className="text-sm text-[#70ff00]/80 mt-2">Valor líquido</p>
@@ -401,27 +396,6 @@ ${referralLink}
             </div>
           </div>
           
-          {/* Customer Coupon Section */}
-          <div className="mt-4 p-4 bg-blue-600/10 border border-blue-500/30 rounded-xl">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-blue-400 text-sm">
-                <strong>Seu cupom para compras:</strong> {affiliateUser?.customer_coupon || affiliateUser?.cpf || 'Carregando...'}
-              </p>
-              <button
-                onClick={() => copyCustomerCoupon(affiliateUser?.customer_coupon || affiliateUser?.cpf || '')}
-                className="px-3 py-1 bg-blue-500 text-white rounded-lg text-xs font-medium hover:bg-blue-600 transition-colors flex items-center gap-1"
-              >
-                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M8 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z"></path>
-                  <path d="M6 3a2 2 0 00-2 2v11a2 2 0 002 2h8a2 2 0 002-2V5a2 2 0 00-2-2 3 3 0 01-3 3H9a3 3 0 01-3-3z"></path>
-                </svg>
-                Copiar
-              </button>
-            </div>
-            <p className="text-blue-400/80 text-xs">
-              💳 Mostre este cupom (seu CPF) no estabelecimento para receber cashback nas suas compras
-            </p>
-          </div>
         </div>
       </div>
     </Layout>

@@ -428,36 +428,40 @@ function WithdrawalPage() {
           ) : (
             <div className="divide-y divide-gray-700">
               {withdrawals.map((withdrawal) => (
-                <div key={withdrawal.id} className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-3 mb-2">
-                        {getStatusIcon(withdrawal.status)}
-                        <span className={`font-medium ${getStatusColor(withdrawal.status)}`}>
-                          {getStatusText(withdrawal.status)}
-                        </span>
-                        <span className="text-gray-500 text-sm">
+                <div key={withdrawal.id} className="p-5 sm:p-6 hover:bg-gray-700/10 transition-colors">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex-1 space-y-3 sm:space-y-1">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center space-x-2">
+                          {getStatusIcon(withdrawal.status)}
+                          <span className={`font-bold text-sm uppercase tracking-wider ${getStatusColor(withdrawal.status)}`}>
+                            {getStatusText(withdrawal.status)}
+                          </span>
+                        </div>
+                        <span className="text-gray-500 text-xs sm:text-sm">
                           Solicitado em {formatDate(withdrawal.created_at)}
                         </span>
                       </div>
-                      <p className="text-gray-400 text-sm">
-                        PIX: {withdrawal.pix_key}
+                      
+                      <div className="flex flex-col sm:flex-row sm:items-center text-gray-400 text-sm gap-2 sm:gap-4">
+                        <div className="flex items-center">
+                          <span className="text-gray-600 mr-2 text-xs uppercase font-bold">PIX:</span>
+                          <span className="font-mono text-gray-300">{withdrawal.pix_key}</span>
+                        </div>
                         {withdrawal.processed_at && (
-                          <span className="ml-4">
-                            Processado em {formatDate(withdrawal.processed_at)}
-                          </span>
+                          <div className="flex items-center">
+                             <span className="w-1 h-1 bg-gray-600 rounded-full mx-2 hidden sm:block"></span>
+                             <span className="text-gray-600 mr-2 text-xs uppercase font-bold">Processado:</span>
+                             <span className="text-gray-300">{formatDate(withdrawal.processed_at)}</span>
+                          </div>
                         )}
-                      </p>
+                      </div>
                     </div>
                     
-                    <div className="text-right">
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-4">
-                          <div>
-                            <p className="text-green-400 text-sm">Valor Sacado</p>
-                            <p className="text-green-400 font-bold">{formatCurrency(withdrawal.amount_requested)}</p>
-                          </div>
-                        </div>
+                    <div className="flex items-center justify-between sm:justify-end border-t sm:border-t-0 border-white/5 pt-3 sm:pt-0">
+                      <div className="sm:text-right">
+                        <p className="text-gray-500 text-[10px] uppercase font-bold tracking-widest">Valor Solicitado</p>
+                        <p className="text-white font-bold text-xl">{formatCurrency(withdrawal.amount_requested)}</p>
                       </div>
                     </div>
                   </div>

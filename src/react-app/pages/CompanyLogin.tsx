@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Building2, CreditCard, Lock, AlertCircle, Users } from 'lucide-react';
+import { Building2, CreditCard, Lock, AlertCircle, Users, Eye, EyeOff } from 'lucide-react';
 
 export default function CompanyLogin() {
   const [identifier, setIdentifier] = useState('');
   const [senha, setSenha] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   // Detecta tipo de identificador: email empresa, CNPJ empresa ou CPF caixa
@@ -152,16 +153,27 @@ export default function CompanyLogin() {
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                       <Lock className="h-5 w-5 text-gray-400" />
                     </div>
-                  <input
-                    id="senha"
-                    type="password"
-                    required
-                    value={senha}
-                    onChange={(e) => setSenha(e.target.value)}
-                    autoComplete="current-password"
-                    className="appearance-none relative block w-full pl-10 pr-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
-                    placeholder="Sua senha"
-                  />
+                    <input
+                      id="senha"
+                      type={showPassword ? "text" : "password"}
+                      required
+                      value={senha}
+                      onChange={(e) => setSenha(e.target.value)}
+                      autoComplete="current-password"
+                      className="appearance-none relative block w-full pl-10 pr-10 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                      placeholder="Sua senha"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white transition-colors"
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-5 w-5" />
+                      ) : (
+                        <Eye className="h-5 w-5" />
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>
