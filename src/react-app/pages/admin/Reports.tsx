@@ -26,6 +26,13 @@ interface PurchaseRow {
   companies?: { nome_fantasia: string };
 }
 
+interface GlobalTotals {
+  total_purchase_value: number;
+  total_cashback_generated: number;
+  cashmais_revenue: number;
+  affiliate_cashback: number;
+}
+
 interface Pagination { page: number; limit: number; total: number; totalPages: number }
 
 export default function Reports() {
@@ -36,6 +43,12 @@ export default function Reports() {
   const [customEnd, setCustomEnd] = useState<string>('');
   const [purchases, setPurchases] = useState<PurchaseRow[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ page: 1, limit: 20, total: 0, totalPages: 0 });
+  const [totals, setTotals] = useState<GlobalTotals>({
+    total_purchase_value: 0,
+    total_cashback_generated: 0,
+    cashmais_revenue: 0,
+    affiliate_cashback: 0
+  });
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selected, setSelected] = useState<Record<number, boolean>>({});
 
@@ -72,6 +85,7 @@ export default function Reports() {
         const data = await res.json();
         setPurchases(data.purchases || []);
         setPagination(data.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 });
+        if (data.totals) setTotals(data.totals);
       }
     } catch (e) {
       console.error('Failed to load purchases', e);
@@ -80,11 +94,7 @@ export default function Reports() {
     }
   };
 
-  const totals = useMemo(() => {
-    const totalPurchase = purchases.reduce((sum, r) => sum + Number(r.purchase_value || 0), 0);
-    const totalCashback = purchases.reduce((sum, r) => sum + Number(r.cashback_generated || 0), 0);
-    return { totalPurchase, totalCashback };
-  }, [purchases]);
+  // Removido o cálculo local de totais para usar os totais globais do servidor
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('pt-BR');
@@ -169,7 +179,7 @@ export default function Reports() {
     doc.setFontSize(11);
     const subtitle = `Filtro: ${companyId ? 'Empresa ' + (companies.find(c => c.id === Number(companyId))?.nome_fantasia || companyId) : 'Todas'} | Intervalo: ${range}`;
     doc.text(subtitle, 40, 62);
-    doc.text(`Total Compras: ${formatCurrency(totals.totalPurchase)} | Total Cashback: ${formatCurrency(totals.totalCashback)}`, 40, 80);
+    doc.text(`Total Compras: ${formatCurrency(totals.total_purchase_value)} | Total Cashback: ${formatCurrency(totals.total_cashback_generated)}`, 40, 80);
 
     const rows = purchases.map(r => [
       r.companies?.nome_fantasia || r.company_id,
@@ -294,6 +304,40 @@ export default function Reports() {
             <p className="text-gray-400">Visualize vendas e cashbacks com filtros e emissão de PDFs</p>
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-400">Moeda Gerada em Vendas</h3>
+                <Building2 className="h-5 w-5 text-blue-400" />
+              </div>
+              <p className="text-2xl font-bold text-white">{formatCurrency(totals.total_purchase_value)}</p>
+            </div>
+            
+            <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-400">Cashback Total</h3>
+                <CreditCard className="h-5 w-5 text-green-400" />
+              </div>
+              <p className="text-2xl font-bold text-white">{formatCurrency(totals.total_cashback_generated)}</p>
+            </div>
+
+            <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-400">Faturamento Cashmais (30%)</h3>
+                <Shield className="h-5 w-5 text-purple-400" />
+              </div>
+              <p className="text-2xl font-bold text-white">{formatCurrency(totals.cashmais_revenue)}</p>
+            </div>
+
+            <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-medium text-gray-400">Cashback Afiliados (70%)</h3>
+                <Users className="h-5 w-5 text-orange-400" />
+              </div>
+              <p className="text-2xl font-bold text-white">{formatCurrency(totals.affiliate_cashback)}</p>
+            </div>
+          </div>
+
           <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6 mb-8">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <div>
@@ -347,8 +391,8 @@ export default function Reports() {
               <h2 className="text-xl font-semibold text-white">Resultados</h2>
               <div className="flex items-center space-x-4 text-sm text-gray-400">
                 <span>Total: {pagination.total}</span>
-                <span>Compras: {formatCurrency(totals.totalPurchase)}</span>
-                <span>Cashback: {formatCurrency(totals.totalCashback)}</span>
+                <span>Compras: {formatCurrency(totals.total_purchase_value)}</span>
+                <span>Cashback: {formatCurrency(totals.total_cashback_generated)}</span>
               </div>
             </div>
 

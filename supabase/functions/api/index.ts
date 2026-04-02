@@ -1316,12 +1316,14 @@ app.get('/api/admin/reports/purchases', async (c) => {
     if (fromDate) query = query.gte('purchase_date', fromDate)
     if (toDate) query = query.lte('purchase_date', toDate)
     const { data: rows, count } = await query.range(offset, offset + limit - 1)
-    let sumQuery = supabase.from('company_purchases').select('sum(purchase_value), sum(cashback_generated)').order('purchase_date', { ascending: false })
-    if (companyId) sumQuery = sumQuery.eq('company_id', Number(companyId))
-    if (fromDate) sumQuery = sumQuery.gte('purchase_date', fromDate)
-    if (toDate) sumQuery = sumQuery.lte('purchase_date', toDate)
-    const { data: sumRow } = await sumQuery.single()
-    return c.json({ purchases: rows || [], totals: { total_purchase_value: (sumRow as any)?.sum?.purchase_value || 0, total_cashback_generated: (sumRow as any)?.sum?.cashback_generated || 0 }, pagination: { page, limit, total: count || 0, totalPages: Math.ceil((count || 0) / limit) } })
+    let totalStatsQuery = supabase.from('company_purchases').select('purchase_value, cashback_generated')
+    if (companyId) totalStatsQuery = totalStatsQuery.eq('company_id', Number(companyId))
+    if (fromDate) totalStatsQuery = totalStatsQuery.gte('purchase_date', fromDate)
+    if (toDate) totalStatsQuery = totalStatsQuery.lte('purchase_date', toDate)
+    const { data: allMatching } = await totalStatsQuery
+    const tPv = (allMatching || []).reduce((s: number, r: any) => s + Number(r.purchase_value || 0), 0)
+    const tCg = (allMatching || []).reduce((s: number, r: any) => s + Number(r.cashback_generated || 0), 0)
+    return c.json({ purchases: rows || [], totals: { total_purchase_value: tPv, total_cashback_generated: tCg, cashmais_revenue: tCg * 0.30, affiliate_cashback: tCg * 0.70 }, pagination: { page, limit, total: count || 0, totalPages: Math.ceil((count || 0) / limit) } })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
