@@ -912,10 +912,14 @@ app.get('/api/admin/withdrawals', async (c) => {
 
 async function handleAdminWithdrawals(c: any) {
   try {
-    const status = c.req.query('status') || 'pending'
+    const rawStatus = c.req.query('status') || '';
+    const status = (rawStatus.trim() || 'pending').toLowerCase();
     const page = parseInt(c.req.query('page') || '1')
     const limit = parseInt(c.req.query('limit') || '20')
     const offset = (page - 1) * limit
+    
+    console.log(`[ADMIN_WITHDRAWALS_DEBUG] Status recebido: "${rawStatus}", Status processado: "${status}", Page: ${page}`);
+    
     const supabase = createSupabase()
     
     // Change: User left join (remove !inner) so records appear even if profile is missing

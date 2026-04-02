@@ -9,8 +9,9 @@ export default async function handler(req, res) {
     if (!base) {
       return res.status(500).json({ error: 'SUPABASE_EDGE_URL/SUPABASE_URL não definido' })
     }
-    const path = (req.query?.path || '').toString()
-    const url = `${base.replace(/\/$/, '')}/functions/v1/api${path ? '/' + path : ''}`
+    const { path, ...queryParams } = req.query || {};
+    const queryString = new URLSearchParams(queryParams).toString();
+    const url = `${base.replace(/\/$/, '')}/functions/v1/api${path ? '/' + path : ''}${queryString ? '?' + queryString : ''}`;
     const apikey =
       process.env.SUPABASE_ANON_KEY ||
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
