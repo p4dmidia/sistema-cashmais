@@ -903,66 +903,104 @@ async function handleAdminCompanyToggleStatus(c: any) {
 }
 
 app.get('/admin/withdrawals', async (c) => {
-  try {
-    const status = c.req.query('status') || 'pending'
-    const page = parseInt(c.req.query('page') || '1')
-    const limit = parseInt(c.req.query('limit') || '20')
-    const offset = (page - 1) * limit
-    const supabase = createSupabase()
-    const { data: rows, count } = await supabase
-      .from('withdrawals')
-      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at, affiliate_id, affiliates(full_name,cpf,email)', { count: 'exact' })
-      .eq('status', status)
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
-    const items = (rows || []).map((w: any) => ({ id: w.id, amount_requested: Number(w.amount_requested || 0), fee_amount: Number(w.fee_amount || 0), net_amount: Number(w.net_amount || 0), status: w.status, pix_key: w.pix_key || '', created_at: w.created_at, full_name: w.affiliates?.full_name || 'N/A', cpf: w.affiliates?.cpf || 'N/A', email: w.affiliates?.email || 'N/A' }))
-    return c.json({ withdrawals: items, pagination: { page, limit, total: count || 0, totalPages: Math.ceil((count || 0) / limit) } })
-  } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
-  }
+  return await handleAdminWithdrawals(c)
 })
 
 app.get('/api/admin/withdrawals', async (c) => {
+  return await handleAdminWithdrawals(c)
+})
+
+async function handleAdminWithdrawals(c: any) {
   try {
     const status = c.req.query('status') || 'pending'
     const page = parseInt(c.req.query('page') || '1')
     const limit = parseInt(c.req.query('limit') || '20')
     const offset = (page - 1) * limit
     const supabase = createSupabase()
-    const { data: rows, count } = await supabase
+    
+    // Change: User left join (remove !inner) so records appear even if profile is missing
+    const { data: rows, count, error: countErr } = await supabase
       .from('withdrawals')
-      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at, affiliate_id, affiliates(full_name,cpf,email)', { count: 'exact' })
+      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at, user_profiles(mocha_user_id)', { count: 'exact' })
       .eq('status', status)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
-    const items = (rows || []).map((w: any) => ({ id: w.id, amount_requested: Number(w.amount_requested || 0), fee_amount: Number(w.fee_amount || 0), net_amount: Number(w.net_amount || 0), status: w.status, pix_key: w.pix_key || '', created_at: w.created_at, full_name: w.affiliates?.full_name || 'N/A', cpf: w.affiliates?.cpf || 'N/A', email: w.affiliates?.email || 'N/A' }))
-    return c.json({ withdrawals: items, pagination: { page, limit, total: count || 0, totalPages: Math.ceil((count || 0) / limit) } })
+      
+    if (countErr) {
+      console.error('[ADMIN_WITHDRAWALS] Fetch error:', countErr)
+      return c.json({ error: 'Erro ao buscar saques' }, 500)
+    }
+
+    // Optimization: Collect all affiliate IDs first
+    const items = [] as any[];
+    const rowsWithProfile = (rows || []).map(w => {
+      const mochaUserId = (w as any).user_profiles?.mocha_user_id;
+      let affId: number | null = null;
+      if (mochaUserId && mochaUserId.startsWith('affiliate_')) {
+        affId = Number(mochaUserId.split('_')[1]);
+      }
+      return { ...w, affId };
+    });
+
+    const activeAffIds = rowsWithProfile
+      .map(r => r.affId)
+      .filter((id): id is number => id !== null && !isNaN(id));
+
+    // Batch fetch affiliate data
+    const affiliateMap = new Map<number, any>();
+    if (activeAffIds.length > 0) {
+      const { data: affiliates } = await supabase
+        .from('affiliates')
+        .select('id, full_name, cpf, email')
+        .in('id', activeAffIds);
+      
+      (affiliates || []).forEach(a => affiliateMap.set(a.id, a));
+    }
+
+    for (const w of rowsWithProfile) {
+      const aff = w.affId ? affiliateMap.get(w.affId) : null;
+      const affiliateInfo = aff || { full_name: 'N/A', cpf: 'N/A', email: 'N/A' };
+      
+      items.push({ 
+        id: (w as any).id, 
+        amount_requested: Number((w as any).amount_requested || 0), 
+        fee_amount: Number((w as any).fee_amount || 0), 
+        net_amount: Number((w as any).net_amount || 0), 
+        status: (w as any).status, 
+        pix_key: (w as any).pix_key || '', 
+        created_at: (w as any).created_at, 
+        full_name: affiliateInfo.full_name, 
+        cpf: affiliateInfo.cpf, 
+        email: affiliateInfo.email 
+      });
+    }
+
+    return c.json({ 
+      withdrawals: items, 
+      pagination: { 
+        page, 
+        limit, 
+        total: count || 0, 
+        totalPages: Math.ceil((count || 0) / limit) 
+      } 
+    })
   } catch (e) {
+    console.error('[ADMIN_WITHDRAWALS] Unexpected error:', e)
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
-})
+}
 
 const UpdateWithdrawalSchema = z.object({ status: z.enum(['approved', 'rejected']), notes: z.string().optional() })
 
 app.patch('/admin/withdrawals/:id', async (c) => {
-  try {
-    const id = Number(c.req.param('id'))
-    const body = await c.req.json()
-    const parsed = UpdateWithdrawalSchema.safeParse(body)
-    if (!parsed.success) return c.json({ error: 'Dados inválidos', details: parsed.error.errors }, 400)
-    const supabase = createSupabase()
-    const { data: withdrawal } = await supabase.from('withdrawals').select('*').eq('id', id).single()
-    if (!withdrawal) return c.json({ error: 'Saque não encontrado' }, 404)
-    if ((withdrawal as any).status !== 'pending') return c.json({ error: 'Saque já foi processado' }, 400)
-    const { error: updErr } = await supabase.from('withdrawals').update({ status: parsed.data.status, processed_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq('id', id)
-    if (updErr) return c.json({ error: 'Erro interno do servidor' }, 500)
-    return c.json({ success: true, message: `Saque ${parsed.data.status === 'approved' ? 'aprovado' : 'rejeitado'} com sucesso` })
-  } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
-  }
+  return await handleUpdateWithdrawal(c)
 })
 
 app.patch('/api/admin/withdrawals/:id', async (c) => {
+  return await handleUpdateWithdrawal(c)
+})
+
+async function handleUpdateWithdrawal(c: any) {
   try {
     const id = Number(c.req.param('id'))
     const body = await c.req.json()
@@ -978,7 +1016,7 @@ app.patch('/api/admin/withdrawals/:id', async (c) => {
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
-})
+}
 
 app.get('/admin/reports/companies', async (c) => {
   try {

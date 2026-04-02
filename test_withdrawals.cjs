@@ -6,7 +6,7 @@ const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SU
 async function test() {
   const { data, error } = await supabase
       .from('withdrawals')
-      .select('*');
+      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at, user_profiles!inner(mocha_user_id)');
       
   console.log("Result:", JSON.stringify({ data, error }, null, 2));
 }

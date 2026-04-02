@@ -316,32 +316,47 @@ adminApi.get("/api/admin/withdrawals", requireAdminAuth, async (c) => {
     const offset = (page - 1) * limit;
     const supabase = createSupabaseClient(c);
 
-    let query = supabase
+    // Change: Use left join (remove !inner)
+    const { data: rows, error: listError, count: totalCountValue } = await supabase
       .from('withdrawals')
-      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at, user_profiles!inner(mocha_user_id)', { count: 'exact' })
+      .select('id, amount_requested, fee_amount, net_amount, status, pix_key, created_at, user_profiles(mocha_user_id)', { count: 'exact' })
       .eq('status', status)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
-    const { data: rows, error: listError, count: totalCountValue } = await query.range(offset, offset + limit - 1);
     if (listError) {
+      console.error('[ADMIN_API] Fetch withdrawals error:', listError);
       return c.json({ error: 'Erro interno do servidor' }, 500);
     }
 
     const enhancedWithdrawals = [] as any[];
-    for (const w of rows || []) {
-      let affiliateInfo = { full_name: 'N/A', cpf: 'N/A', email: 'N/A' };
-      const mochaUserId = (w as any).user_profiles?.mocha_user_id;
-      
+    const rowsWithProfile = (rows || []).map((w: any) => {
+      const mochaUserId = w.user_profiles?.mocha_user_id;
+      let affId: number | null = null;
       if (mochaUserId && mochaUserId.startsWith('affiliate_')) {
-        const affId = mochaUserId.split('_')[1];
-        const { data: aff } = await supabase
-          .from('affiliates')
-          .select('full_name, cpf, email')
-          .eq('id', Number(affId))
-          .single();
-          
-        if (aff) affiliateInfo = aff;
+        affId = Number(mochaUserId.split('_')[1]);
       }
+      return { ...w, affId };
+    });
+
+    const activeAffIds = rowsWithProfile
+      .map(r => r.affId)
+      .filter((id): id is number => id !== null && !isNaN(id));
+
+    // Batch fetch affiliate data
+    const affiliateMap = new Map<number, any>();
+    if (activeAffIds.length > 0) {
+      const { data: affiliates } = await supabase
+        .from('affiliates')
+        .select('id, full_name, cpf, email')
+        .in('id', activeAffIds);
+      
+      (affiliates || []).forEach(a => affiliateMap.set(a.id, a));
+    }
+
+    for (const w of rowsWithProfile) {
+      const aff = w.affId ? affiliateMap.get(w.affId) : null;
+      const affiliateInfo = aff || { full_name: 'N/A', cpf: 'N/A', email: 'N/A' };
       
       enhancedWithdrawals.push({
         id: (w as any).id,
