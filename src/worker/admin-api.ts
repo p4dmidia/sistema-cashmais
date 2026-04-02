@@ -187,6 +187,30 @@ adminApi.get("/api/admin/dashboard/stats", requireAdminAuth, async (c) => {
       });
     }
 
+    const { data: approvedWithdrawals } = await supabase
+      .from('withdrawals')
+      .select('net_amount')
+      .eq('status', 'approved')
+      .gte('created_at', monthStart)
+      .lt('created_at', nextMonthStart);
+    const approvedAmount = (approvedWithdrawals || []).reduce((sum: number, w: any) => sum + Number(w.net_amount || 0), 0);
+
+    let affiliatesCommissionsMonth = approvedAmount;
+    let companyReceivableMonth = 0;
+    try {
+      const { data: distRows } = await supabase
+        .from('commission_distributions')
+        .select('commission_amount, level, affiliate_id, created_at')
+        .gte('created_at', monthStart)
+        .lt('created_at', nextMonthStart);
+      for (const r of distRows || []) {
+        const amt = Number((r as any).commission_amount || 0);
+        const lvl = Number((r as any).level || 0);
+        const aid = String((r as any).affiliate_id || '');
+        if (lvl === 999 || aid === '0') companyReceivableMonth += amt;
+      }
+    } catch { }
+
     return c.json({
       stats: {
         totalAffiliates,
@@ -195,7 +219,9 @@ adminApi.get("/api/admin/dashboard/stats", requireAdminAuth, async (c) => {
           count: pendingCount,
           totalAmount: pendingAmount
         },
-        cashbackThisMonth
+        cashbackThisMonth,
+        affiliatesCommissionsMonth,
+        companyReceivableMonth
       },
       recentPurchases: enhancedPurchases
     });

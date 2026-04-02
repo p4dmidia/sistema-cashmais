@@ -221,32 +221,37 @@ async function updateEarningsSupabase(client: any, userId: number, commissionAmo
 }
 
 async function distributeNetworkCommissionsSupabase(client: any, purchaseId: number, customerType: 'affiliate' | 'user', customerId: number, baseCashback: number) {
-  if (customerType !== 'affiliate') return
-  const { data: customer } = await client
-    .from('affiliates')
-    .select('id, sponsor_id')
-    .eq('id', customerId)
-    .eq('is_active', true)
-    .single()
-  if (!customer) return
   const settings = await getCommissionSettingsSupabase(client)
   const totalDistributable = baseCashback * 0.70
   let totalDistributed = 0
-  let currentAffiliateId: number | null = customerId
-  let currentLevel = 0
-  while (currentAffiliateId && currentLevel < 10) {
-    const settingsLevel = currentLevel === 0 ? 1 : currentLevel
-    const lvl = settings.find((s: any) => s.level === settingsLevel) || { level: settingsLevel, percentage: 10 }
-    const qualifies = currentLevel <= 1 ? true : await hasMinimumReferralsSupabase(client, currentAffiliateId)
-    const amount = totalDistributable * ((lvl.percentage as number) / 100)
-    totalDistributed += amount
-    await recordCommissionSupabase(client, purchaseId, currentAffiliateId, currentLevel, amount, lvl.percentage as number, baseCashback, !qualifies)
-    const profile = await getOrCreateAffiliateProfileSupabase(client, currentAffiliateId)
-    if (profile?.id) await updateEarningsSupabase(client, profile.id, amount, !qualifies)
-    currentAffiliateId = currentLevel === 0 ? (customer as any).sponsor_id : await getAffiliateSponsorSupabase(client, currentAffiliateId)
-    currentLevel++
-    if (!currentAffiliateId) break
+
+  if (customerType === 'affiliate') {
+    const { data: customer } = await client
+      .from('affiliates')
+      .select('id, sponsor_id')
+      .eq('id', customerId)
+      .eq('is_active', true)
+      .single()
+    
+    if (customer) {
+      let currentAffiliateId: number | null = customerId
+      let currentLevel = 0
+      while (currentAffiliateId && currentLevel < 10) {
+        const settingsLevel = currentLevel === 0 ? 1 : currentLevel
+        const lvl = settings.find((s: any) => s.level === settingsLevel) || { level: settingsLevel, percentage: 10 }
+        const qualifies = currentLevel <= 1 ? true : await hasMinimumReferralsSupabase(client, currentAffiliateId)
+        const amount = totalDistributable * ((lvl.percentage as number) / 100)
+        totalDistributed += amount
+        await recordCommissionSupabase(client, purchaseId, currentAffiliateId, currentLevel, amount, lvl.percentage as number, baseCashback, !qualifies)
+        const profile = await getOrCreateAffiliateProfileSupabase(client, currentAffiliateId)
+        if (profile?.id) await updateEarningsSupabase(client, profile.id, amount, !qualifies)
+        currentAffiliateId = currentLevel === 0 ? (customer as any).sponsor_id : await getAffiliateSponsorSupabase(client, currentAffiliateId)
+        currentLevel++
+        if (!currentAffiliateId) break
+      }
+    }
   }
+
   const undistributed = totalDistributable - totalDistributed
   const finalCashmaisShare = baseCashback * 0.30 + undistributed
   await client.from('commission_distributions').insert({ purchase_id: purchaseId, affiliate_id: 0, level: 999, commission_amount: finalCashmaisShare, commission_percentage: 0, base_cashback: baseCashback, created_at: new Date().toISOString() })
@@ -660,7 +665,24 @@ app.get('/admin/dashboard/stats', async (c) => {
       .gte('purchase_date', `${year}-${month}-01`)
       .lt('purchase_date', new Date(year, now.getMonth() + 1, 1).toISOString().split('T')[0])
     const cashbackThisMonth = (cbRows || []).reduce((s: number, r: any) => s + Number(r.cashback_generated || 0), 0)
-    return c.json({ stats: { totalAffiliates: totalAffiliates || 0, totalCompanies: totalCompanies || 0, pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount }, cashbackThisMonth } })
+
+    const { data: approvedWithdrawals } = await supabase
+      .from('withdrawals')
+      .select('net_amount')
+      .eq('status', 'approved')
+      .gte('created_at', `${year}-${month}-01`)
+      .lt('created_at', new Date(year, now.getMonth() + 1, 1).toISOString().split('T')[0])
+    const approvedAmount = (approvedWithdrawals || []).reduce((s: number, w: any) => s + Number(w.net_amount || 0), 0)
+
+    return c.json({ 
+      stats: { 
+        totalAffiliates: totalAffiliates || 0, 
+        totalCompanies: totalCompanies || 0, 
+        pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount }, 
+        cashbackThisMonth,
+        affiliatesCommissionsMonth: approvedAmount 
+      } 
+    })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
@@ -685,7 +707,16 @@ app.get('/api/admin/dashboard/stats', async (c) => {
       .order('purchase_date', { ascending: false })
     const cashbackThisMonth = (pRows || []).reduce((s: number, r: any) => s + Number(r.cashback_generated || 0), 0)
     const recentPurchases = (pRows || []).slice(0, 10).map((r: any) => ({ id: r.id, company_name: r.companies?.nome_fantasia || '', customer_cpf: r.customer_coupon || '', purchase_value: Number(r.purchase_value || 0), cashback_generated: Number(r.cashback_generated || 0), purchase_date: r.purchase_date }))
-    let affiliatesCommissionsMonth = 0
+
+    const { data: approvedWithdrawals } = await supabase
+      .from('withdrawals')
+      .select('net_amount')
+      .eq('status', 'approved')
+      .gte('created_at', startMonth)
+      .lt('created_at', nextMonth)
+    const approvedAmount = (approvedWithdrawals || []).reduce((s: number, w: any) => s + Number(w.net_amount || 0), 0)
+
+    let affiliatesCommissionsMonth = approvedAmount
     let companyReceivableMonth = 0
     try {
       const { data: distRows } = await supabase
@@ -698,12 +729,22 @@ app.get('/api/admin/dashboard/stats', async (c) => {
         const lvl = Number((r as any).level || 0)
         const aid = String((r as any).affiliate_id || '')
         if (lvl === 999 || aid === '0') companyReceivableMonth += amt
-        else affiliatesCommissionsMonth += amt
+        // else affiliatesCommissionsMonth += amt // We use approved withdrawals for 'Repasse' now
       }
     } catch { }
-    return c.json({ stats: { totalAffiliates: totalAffiliates || 0, totalCompanies: totalCompanies || 0, pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount }, cashbackThisMonth, affiliatesCommissionsMonth, companyReceivableMonth }, recentPurchases })
+
+    return c.json({ 
+      stats: { 
+        totalAffiliates: totalAffiliates || 0, 
+        totalCompanies: totalCompanies || 0, 
+        pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount }, 
+        cashbackThisMonth, 
+        affiliatesCommissionsMonth, 
+        companyReceivableMonth 
+      }, 
+      recentPurchases 
+    })
   } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 })
 
@@ -2707,7 +2748,7 @@ app.post('/api/caixa/compra', async (c) => {
       .eq('cpf', cleanCpf)
       .eq('is_active', true)
       .single()
-    let customerType = 'affiliate'
+    let customerType: 'affiliate' | 'user' = 'affiliate'
     let customerData: any = customer
     if (!customer) {
       const { data: userData } = await supabase
