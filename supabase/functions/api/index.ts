@@ -3250,27 +3250,37 @@ app.get('/api/empresa/estatisticas', async (c) => {
       .gt('expires_at', new Date().toISOString())
       .single()
     if (!session) return c.json({ error: 'Não autorizado' }, 401)
-    const { data: rows } = await supabase
+    const companyId = (session as any).companies.id
+    
+    // Buscar estatísticas mensais (últimos registros do mês atual)
+    const now = new Date()
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    
+    const { data: monthlyRows } = await supabase
       .from('company_purchases')
-      .select('purchase_value, cashback_generated, purchase_date')
-      .eq('company_id', (session as any).companies.id)
-    const total = (rows || []).reduce((acc: any, r: any) => ({
+      .select('purchase_value, cashback_generated')
+      .eq('company_id', companyId)
+      .gte('purchase_date', monthStart)
+      
+    const monthly = (monthlyRows || []).reduce((acc: any, r: any) => ({
       sales_count: acc.sales_count + 1,
       sales_value: acc.sales_value + Number(r.purchase_value || 0),
       cashback_generated: acc.cashback_generated + Number(r.cashback_generated || 0),
     }), { sales_count: 0, sales_value: 0, cashback_generated: 0 })
-    const now = new Date()
-    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString().split('T')[0]
-    const monthly = (rows || []).reduce((acc: any, r: any) => {
-      const d = String(r.purchase_date || '')
-      if (d >= monthStart && d < nextMonthStart) {
-        acc.sales_count += 1
-        acc.sales_value += Number(r.purchase_value || 0)
-        acc.cashback_generated += Number(r.cashback_generated || 0)
-      }
-      return acc
-    }, { sales_count: 0, sales_value: 0, cashback_generated: 0 })
+
+    // Buscar últimos registros para o total (limitado a 2000 para performance/Precisão)
+    const { data: totalRows } = await supabase
+      .from('company_purchases')
+      .select('purchase_value, cashback_generated')
+      .eq('company_id', companyId)
+      .order('purchase_date', { ascending: false })
+      .limit(2000)
+
+    const total = (totalRows || []).reduce((acc: any, r: any) => ({
+      sales_count: acc.sales_count + 1,
+      sales_value: acc.sales_value + Number(r.purchase_value || 0),
+      cashback_generated: acc.cashback_generated + Number(r.cashback_generated || 0),
+    }), { sales_count: 0, sales_value: 0, cashback_generated: 0 })
     const { data: cfg } = await supabase
       .from('company_cashback_config')
       .select('cashback_percentage')

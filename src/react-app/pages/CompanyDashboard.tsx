@@ -612,32 +612,32 @@ export default function CompanyDashboard() {
         {/* Overview Tab */}
         {activeTab === 'overview' && stats && (
           <div className="space-y-8">
-            {/* Monthly Stats */}
+            {/* Summary Stats */}
             <div>
-              <h3 className="text-lg font-medium text-white mb-4">Estatísticas do Mês Atual</h3>
+              <h3 className="text-lg font-medium text-white mb-4">Panorama Geral</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 p-6">
                   <div className="flex items-center">
-                    <div className="p-3 rounded-full bg-blue-500/20 text-blue-400">
+                    <div className="p-3 rounded-full bg-purple-500/20 text-purple-400">
                       <TrendingUp className="h-6 w-6" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-300">Vendas do Mês</p>
-                      <p className="text-2xl font-bold text-white">R$ {stats.monthly.sales_value.toFixed(2)}</p>
-                      <p className="text-xs text-gray-400">{stats.monthly.sales_count} transações</p>
+                      <p className="text-sm font-medium text-gray-300">Total de Vendas</p>
+                      <p className="text-2xl font-bold text-white">R$ {stats.total.sales_value.toFixed(2)}</p>
+                      <p className="text-xs text-gray-400">{stats.total.sales_count} transações</p>
                     </div>
                   </div>
                 </div>
 
                 <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 p-6">
                   <div className="flex items-center">
-                    <div className="p-3 rounded-full bg-green-500/20 text-green-400">
+                    <div className="p-3 rounded-full bg-yellow-500/20 text-yellow-400">
                       <TrendingUp className="h-6 w-6" />
                     </div>
                     <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-300">Cashback do Mês</p>
-                      <p className="text-2xl font-bold text-white">R$ {stats.monthly.cashback_generated.toFixed(2)}</p>
-                      <p className="text-xs text-gray-400">{stats.cashback_percentage}% das vendas</p>
+                      <p className="text-sm font-medium text-gray-300">Cashback Total</p>
+                      <p className="text-2xl font-bold text-white">R$ {stats.total.cashback_generated.toFixed(2)}</p>
+                      <p className="text-xs text-gray-400">Lifetime total</p>
                     </div>
                   </div>
                 </div>
@@ -666,7 +666,7 @@ export default function CompanyDashboard() {
                 <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 p-6">
                   <h4 className="text-white font-medium mb-4">Performance Mensal (Últimos 6 Meses)</h4>
                   <div className="h-80" style={{ minWidth: 0 }}>
-                    <ResponsiveContainer width="100%" aspect={2}>
+                    <ResponsiveContainer width="100%" height={350}>
                       <BarChart data={monthlyData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
                         <XAxis 
@@ -709,7 +709,7 @@ export default function CompanyDashboard() {
                 <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 p-6">
                   <h4 className="text-white font-medium mb-4">Evolução de Vendas</h4>
                   <div className="h-64" style={{ minWidth: 0 }}>
-                    <ResponsiveContainer width="100%" aspect={2}>
+                    <ResponsiveContainer width="100%" height={256}>
                       <LineChart data={monthlyData.length > 0 ? monthlyData : [{
                         month: 'Atual',
                         sales_value: stats.monthly.sales_value,
@@ -747,7 +747,7 @@ export default function CompanyDashboard() {
                 <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 p-6">
                   <h4 className="text-white font-medium mb-4">Distribuição de Valores</h4>
                   <div className="h-64" style={{ minWidth: 0 }}>
-                    <ResponsiveContainer width="100%" aspect={2}>
+                    <ResponsiveContainer width="100%" height={256}>
                       <PieChart>
                         <Pie
                           data={[
@@ -780,37 +780,6 @@ export default function CompanyDashboard() {
               </div>
             </div>
 
-            {/* Total Stats */}
-            <div>
-              <h3 className="text-lg font-medium text-white mb-4">Estatísticas Totais</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 p-6">
-                  <div className="flex items-center">
-                    <div className="p-3 rounded-full bg-purple-500/20 text-purple-400">
-                      <TrendingUp className="h-6 w-6" />
-                    </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-300">Total de Vendas</p>
-                      <p className="text-2xl font-bold text-white">R$ {stats.total.sales_value.toFixed(2)}</p>
-                      <p className="text-xs text-gray-400">{stats.total.sales_count} transações</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 p-6">
-                  <div className="flex items-center">
-                    <div className="p-3 rounded-full bg-yellow-500/20 text-yellow-400">
-                      <TrendingUp className="h-6 w-6" />
-                    </div>
-                    <div className="ml-4">
-                      <p className="text-sm font-medium text-gray-300">Cashback Total</p>
-                      <p className="text-2xl font-bold text-white">R$ {stats.total.cashback_generated.toFixed(2)}</p>
-                      <p className="text-xs text-gray-400">Lifetime total</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
