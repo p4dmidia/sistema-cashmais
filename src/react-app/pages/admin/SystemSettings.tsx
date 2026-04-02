@@ -1,20 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router';
 import { 
-  Settings, 
   Save, 
   DollarSign,
   Users,
   CheckCircle,
   AlertTriangle,
-  LayoutDashboard,
-  CreditCard,
-  Building2,
-  Shield,
-  LogOut,
-  Printer
 } from 'lucide-react';
-import { useAdminAuth } from '../../hooks/useAdminAuth';
+import AdminLayout from '@/react-app/components/AdminLayout';
 
 interface LevelSetting {
   level: number;
@@ -38,8 +30,6 @@ export default function SystemSettings() {
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [saveMessage, setSaveMessage] = useState('');
-  const { logout } = useAdminAuth();
-  const navigate = useNavigate();
 
   useEffect(() => {
     loadCommissionSettings();
@@ -61,11 +51,6 @@ export default function SystemSettings() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/admin/login');
   };
 
   const handleLevelPercentageChange = (level: number, value: string) => {
@@ -119,80 +104,8 @@ export default function SystemSettings() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011]">
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-black/20 backdrop-blur-xl border-r border-white/10">
-        <div className="flex h-full flex-col">
-          {/* Logo */}
-          <div className="flex h-16 items-center justify-center border-b border-white/10">
-            <div className="flex items-center space-x-2">
-              <Shield className="h-8 w-8 text-green-400" />
-              <span className="text-xl font-bold text-white">Admin</span>
-            </div>
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 space-y-1 p-4">
-            <Link
-              to="/admin/dashboard"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <LayoutDashboard className="mr-3 h-5 w-5 text-gray-400" />
-              Dashboard
-            </Link>
-            <Link
-              to="/admin/withdrawals"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <CreditCard className="mr-3 h-5 w-5 text-gray-400" />
-              Saques
-            </Link>
-            <Link
-              to="/admin/affiliates"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <Users className="mr-3 h-5 w-5 text-gray-400" />
-              Afiliados
-            </Link>
-            <Link
-              to="/admin/companies"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <Building2 className="mr-3 h-5 w-5 text-gray-400" />
-              Empresas
-            </Link>
-            <Link
-              to="/admin/reports"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <Printer className="mr-3 h-5 w-5 text-gray-400" />
-              Relatórios
-            </Link>
-            <Link
-              to="/admin/settings"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 bg-green-500/20 text-green-400 shadow-lg shadow-green-500/20"
-            >
-              <Settings className="mr-3 h-5 w-5 text-green-400" />
-              Configurações
-            </Link>
-          </nav>
-
-          {/* Logout Button */}
-          <div className="p-4 border-t border-white/10">
-            <button
-              onClick={handleLogout}
-              className="w-full group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-            >
-              <LogOut className="mr-3 h-5 w-5 text-red-400" />
-              Sair
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="pl-64">
-        <div className="p-8 max-w-4xl">
+    <AdminLayout>
+      <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Configurações do Sistema</h1>
@@ -348,8 +261,7 @@ export default function SystemSettings() {
             </div>
           </div>
         )}
-        </div>
       </div>
-    </div>
+    </AdminLayout>
   );
 }

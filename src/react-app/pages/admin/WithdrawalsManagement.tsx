@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router';
 import { 
   CreditCard, 
   Check, 
@@ -8,13 +7,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
-  Users,
-  Building2,
-  LayoutDashboard,
-  Shield,
-  Settings
 } from 'lucide-react';
-import { Printer } from 'lucide-react';
+import AdminLayout from '@/react-app/components/AdminLayout';
 
 interface Withdrawal {
   id: number;
@@ -142,71 +136,9 @@ export default function WithdrawalsManagement() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011]">
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-black/20 backdrop-blur-xl border-r border-white/10">
-        <div className="flex h-full flex-col">
-          {/* Logo */}
-          <div className="flex h-16 items-center justify-center border-b border-white/10">
-            <img
-              src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png"
-              alt="CashMais"
-              className="h-20 w-auto"
-            />
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 space-y-1 p-4">
-            <Link
-              to="/admin/dashboard"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <LayoutDashboard className="mr-3 h-5 w-5 text-gray-400" />
-              Dashboard
-            </Link>
-            <Link
-              to="/admin/withdrawals"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 bg-green-500/20 text-green-400 shadow-lg shadow-green-500/20"
-            >
-              <CreditCard className="mr-3 h-5 w-5 text-green-400" />
-              Saques
-            </Link>
-            <Link
-              to="/admin/affiliates"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <Users className="mr-3 h-5 w-5 text-gray-400" />
-              Afiliados
-            </Link>
-            <Link
-              to="/admin/companies"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <Building2 className="mr-3 h-5 w-5 text-gray-400" />
-              Empresas
-            </Link>
-            <Link
-              to="/admin/reports"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <Printer className="mr-3 h-5 w-5 text-gray-400" />
-              Relatórios
-            </Link>
-            <Link
-              to="/admin/settings"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <Settings className="mr-3 h-5 w-5 text-gray-400" />
-              Configurações
-            </Link>
-          </nav>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="pl-64">
-        <div className="p-8">
-          {/* Header */}
+    <AdminLayout>
+      <div>
+        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Gestão de Saques</h1>
           <p className="text-gray-400">Gerencie solicitações de saque dos afiliados</p>
@@ -364,8 +296,7 @@ export default function WithdrawalsManagement() {
             </>
           )}
         </div>
-        </div>
       </div>
-    </div>
+    </AdminLayout>
   );
 }

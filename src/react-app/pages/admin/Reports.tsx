@@ -1,19 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router';
 import {
-  LayoutDashboard,
-  Shield,
-  Users,
-  Building2,
-  CreditCard,
-  Settings,
   Calendar,
   FileDown,
   Printer,
-  CheckSquare
+  CheckSquare,
+  Building2,
+  CreditCard,
+  Shield,
+  Users
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import AdminLayout from '@/react-app/components/AdminLayout';
 
 interface CompanyOption { id: number; nome_fantasia: string }
 interface PurchaseRow {
@@ -93,8 +91,6 @@ export default function Reports() {
       setIsLoading(false);
     }
   };
-
-  // Removido o cálculo local de totais para usar os totais globais do servidor
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleDateString('pt-BR');
@@ -259,245 +255,206 @@ export default function Reports() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011]">
-      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-black/20 backdrop-blur-xl border-r border-white/10">
-        <div className="flex h-full flex-col">
-          <div className="flex h-16 items-center justify-center border-b border-white/10">
-            <div className="flex items-center space-x-2">
-              <Shield className="h-8 w-8 text-green-400" />
-              <span className="text-xl font-bold text-white">Admin</span>
-            </div>
-          </div>
-          <nav className="flex-1 space-y-1 p-4">
-            <Link to="/admin/dashboard" className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white">
-              <LayoutDashboard className="mr-3 h-5 w-5 text-gray-400" />
-              Dashboard
-            </Link>
-            <Link to="/admin/withdrawals" className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white">
-              <CreditCard className="mr-3 h-5 w-5 text-gray-400" />
-              Saques
-            </Link>
-            <Link to="/admin/affiliates" className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white">
-              <Users className="mr-3 h-5 w-5 text-gray-400" />
-              Afiliados
-            </Link>
-            <Link to="/admin/companies" className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white">
-              <Building2 className="mr-3 h-5 w-5 text-gray-400" />
-              Empresas
-            </Link>
-            <Link to="/admin/reports" className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 bg-green-500/20 text-green-400 shadow-lg shadow-green-500/20">
-              <Printer className="mr-3 h-5 w-5 text-green-400" />
-              Relatórios
-            </Link>
-            <Link to="/admin/settings" className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white">
-              <Settings className="mr-3 h-5 w-5 text-gray-400" />
-              Configurações
-            </Link>
-          </nav>
+    <AdminLayout>
+      <div>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Relatórios de Vendas</h1>
+          <p className="text-gray-400">Visualize vendas e cashbacks com filtros e emissão de PDFs</p>
         </div>
-      </div>
 
-      <div className="pl-64">
-        <div className="p-8">
-          <div className="mb-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Relatórios de Vendas</h1>
-            <p className="text-gray-400">Visualize vendas e cashbacks com filtros e emissão de PDFs</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-400">Moeda Gerada em Vendas</h3>
+              <Building2 className="h-5 w-5 text-blue-400" />
+            </div>
+            <p className="text-2xl font-bold text-white">{formatCurrency(totals.total_purchase_value)}</p>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-gray-400">Moeda Gerada em Vendas</h3>
-                <Building2 className="h-5 w-5 text-blue-400" />
-              </div>
-              <p className="text-2xl font-bold text-white">{formatCurrency(totals.total_purchase_value)}</p>
+          
+          <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-400">Cashback Total</h3>
+              <CreditCard className="h-5 w-5 text-green-400" />
             </div>
-            
-            <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-gray-400">Cashback Total</h3>
-                <CreditCard className="h-5 w-5 text-green-400" />
-              </div>
-              <p className="text-2xl font-bold text-white">{formatCurrency(totals.total_cashback_generated)}</p>
-            </div>
-
-            <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-gray-400">Faturamento Cashmais (30%)</h3>
-                <Shield className="h-5 w-5 text-purple-400" />
-              </div>
-              <p className="text-2xl font-bold text-white">{formatCurrency(totals.cashmais_revenue)}</p>
-            </div>
-
-            <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-gray-400">Cashback Afiliados (70%)</h3>
-                <Users className="h-5 w-5 text-orange-400" />
-              </div>
-              <p className="text-2xl font-bold text-white">{formatCurrency(totals.affiliate_cashback)}</p>
-            </div>
-          </div>
-
-          <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6 mb-8">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Empresa</label>
-                <select value={companyId} onChange={e => { setCompanyId(e.target.value); setPagination(p => ({ ...p, page: 1 })); }} className="w-full bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2">
-                  <option value="">Todas</option>
-                  {companies.map(c => (
-                    <option key={c.id} value={c.id}>{c.nome_fantasia}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">Período</label>
-                <div className="flex items-center space-x-2">
-                  <Calendar className="h-5 w-5 text-gray-400" />
-                  <select value={range} onChange={e => { setRange(e.target.value); setPagination(p => ({ ...p, page: 1 })); }} className="flex-1 bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2">
-                    <option value="today">Hoje</option>
-                    <option value="yesterday">Ontem</option>
-                    <option value="7">Últimos 7 dias</option>
-                    <option value="15">Últimos 15 dias</option>
-                    <option value="30">Últimos 30 dias</option>
-                    <option value="custom">Personalizado</option>
-                  </select>
-                </div>
-              </div>
-              {range === 'custom' && (
-                <>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">Início</label>
-                    <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2" />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">Fim</label>
-                    <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2" />
-                  </div>
-                </>
-              )}
-              <div className="flex items-center space-x-2 justify-end">
-                <button onClick={generateReportPDF} className="bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200">
-                  <FileDown className="h-4 w-4 inline mr-2" /> Exportar PDF
-                </button>
-                <button onClick={generateBoletosPDF} className="bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200">
-                  <Printer className="h-4 w-4 inline mr-2" /> Emitir Boletos
-                </button>
-              </div>
-            </div>
+            <p className="text-2xl font-bold text-white">{formatCurrency(totals.total_cashback_generated)}</p>
           </div>
 
           <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-semibold text-white">Resultados</h2>
-              <div className="flex items-center space-x-4 text-sm text-gray-400">
-                <span>Total: {pagination.total}</span>
-                <span>Compras: {formatCurrency(totals.total_purchase_value)}</span>
-                <span>Cashback: {formatCurrency(totals.total_cashback_generated)}</span>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-400">Faturamento Cashmais (30%)</h3>
+              <Shield className="h-5 w-5 text-purple-400" />
+            </div>
+            <p className="text-2xl font-bold text-white">{formatCurrency(totals.cashmais_revenue)}</p>
+          </div>
+
+          <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-gray-400">Cashback Afiliados (70%)</h3>
+              <Users className="h-5 w-5 text-orange-400" />
+            </div>
+            <p className="text-2xl font-bold text-white">{formatCurrency(totals.affiliate_cashback)}</p>
+          </div>
+        </div>
+
+        <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Empresa</label>
+              <select value={companyId} onChange={e => { setCompanyId(e.target.value); setPagination(p => ({ ...p, page: 1 })); }} className="w-full bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2">
+                <option value="">Todas</option>
+                {companies.map(c => (
+                  <option key={c.id} value={c.id}>{c.nome_fantasia}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">Período</label>
+              <div className="flex items-center space-x-2">
+                <Calendar className="h-5 w-5 text-gray-400" />
+                <select value={range} onChange={e => { setRange(e.target.value); setPagination(p => ({ ...p, page: 1 })); }} className="flex-1 bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2">
+                  <option value="today">Hoje</option>
+                  <option value="yesterday">Ontem</option>
+                  <option value="7">Últimos 7 dias</option>
+                  <option value="15">Últimos 15 dias</option>
+                  <option value="30">Últimos 30 dias</option>
+                  <option value="custom">Personalizado</option>
+                </select>
               </div>
             </div>
-
-            {isLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
-              </div>
-            ) : purchases.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">Nenhum registro encontrado</div>
-            ) : (
+            {range === 'custom' && (
               <>
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-white/10">
-                        <th className="text-left text-sm font-medium text-gray-400 pb-3">Seleção</th>
-                        <th className="text-left text-sm font-medium text-gray-400 pb-3">Empresa</th>
-                        <th className="text-left text-sm font-medium text-gray-400 pb-3">Data</th>
-                        <th className="text-left text-sm font-medium text-gray-400 pb-3">Valor</th>
-                        <th className="text-left text-sm font-medium text-gray-400 pb-3">Cashback</th>
-                        <th className="text-left text-sm font-medium text-gray-400 pb-3">Cupom</th>
-                        <th className="text-left text-sm font-medium text-gray-400 pb-3">Ação</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {purchases.map(row => (
-                        <tr key={row.id} className="border-b border-white/5">
-                          <td className="py-3">
-                            <button onClick={() => toggleSelect(row.id)} className={`border px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${selected[row.id] ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'}`}>
-                              <CheckSquare className="h-3 w-3" />
-                            </button>
-                          </td>
-                          <td className="py-3 text-sm text-white">{row.companies?.nome_fantasia || row.company_id}</td>
-                          <td className="py-3 text-sm text-gray-300">{formatDate(row.purchase_date)}</td>
-                          <td className="py-3 text-sm text-white font-medium">{formatCurrency(Number(row.purchase_value || 0))}</td>
-                          <td className="py-3 text-sm text-green-400 font-medium">{formatCurrency(Number(row.cashback_generated || 0))}</td>
-                          <td className="py-3 text-sm text-gray-300 font-mono">{row.customer_coupon || '-'}</td>
-                          <td className="py-3 text-sm">
-                            <button
-                              onClick={() => openGenerateModal(row.company_id)}
-                              disabled={!totalsByCompany[row.company_id] || (totalsByCompany[row.company_id] || 0) <= 0}
-                              className="border px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              Gerar Boleto
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Início</label>
+                  <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2" />
                 </div>
-
-                {pagination.totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-6 pt-6 border-t border-white/10">
-                    <div className="text-sm text-gray-400">Página {pagination.page} de {pagination.totalPages}</div>
-                    <div className="flex items-center space-x-2">
-                      <button onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))} disabled={pagination.page === 1} className="bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200">Anterior</button>
-                      <button onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))} disabled={pagination.page === pagination.totalPages} className="bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200">Próxima</button>
-                    </div>
-                  </div>
-                )}
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Fim</label>
+                  <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2" />
+                </div>
               </>
             )}
-
-            {selectedRows.length > 0 && (
-              <div className="mt-6 flex items-center justify-between">
-                <div className="text-sm text-gray-400">Selecionados: {selectedRows.length} | Empresas: {Object.keys(groupedByCompany).length}</div>
-                <button onClick={clearSelection} className="bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg text-sm">Limpar seleção</button>
-              </div>
-            )}
+            <div className="flex items-center space-x-2 justify-end">
+              <button onClick={generateReportPDF} className="bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200">
+                <FileDown className="h-4 w-4 inline mr-2" /> Exportar PDF
+              </button>
+              <button onClick={generateBoletosPDF} className="bg-green-500/20 text-green-400 hover:bg-green-500/30 border border-green-500/30 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200">
+                <Printer className="h-4 w-4 inline mr-2" /> Emitir Boletos
+              </button>
+            </div>
           </div>
-          {showModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-              <div className="bg-black/80 border border-white/10 rounded-xl p-6 w-full max-w-md">
-                <h3 className="text-white text-lg font-semibold mb-4">Gerar Boleto</h3>
-                <p className="text-gray-300 text-sm mb-4">
-                  Empresa: {companies.find(c => c.id === modalCompanyId!)?.nome_fantasia || modalCompanyId}
-                </p>
-                <p className="text-gray-300 text-sm mb-4">
-                  Valor selecionado: {formatCurrency(totalsByCompany[modalCompanyId! || 0] || 0)}
-                </p>
-                <label className="block text-sm text-gray-400 mb-2">Vencimento</label>
-                <input
-                  type="date"
-                  value={modalDueDate}
-                  onChange={e => setModalDueDate(e.target.value)}
-                  className="w-full bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2 mb-4"
-                />
-                {modalMessage && <div className="text-sm mb-3 text-gray-200">{modalMessage}</div>}
-                {boletoLink && (
-                  <a href={boletoLink} target="_blank" rel="noreferrer" className="inline-block bg-green-500/20 text-green-400 border border-green-500/30 px-3 py-2 rounded-lg text-sm mr-2">
-                    Visualizar Boleto
-                  </a>
-                )}
-                <div className="flex items-center justify-end space-x-2">
-                  <button onClick={() => setShowModal(false)} className="bg-white/5 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg text-sm">Cancelar</button>
-                  <button onClick={submitGenerateInvoice} disabled={modalLoading} className="bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
-                    {modalLoading ? 'Gerando...' : 'Gerar'}
-                  </button>
-                </div>
+        </div>
+
+        <div className="bg-black/20 backdrop-blur-xl rounded-xl border border-white/10 p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-white">Resultados</h2>
+            <div className="flex items-center space-x-4 text-sm text-gray-400">
+              <span>Total: {pagination.total}</span>
+              <span>Compras: {formatCurrency(totals.total_purchase_value)}</span>
+              <span>Cashback: {formatCurrency(totals.total_cashback_generated)}</span>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto"></div>
+            </div>
+          ) : purchases.length === 0 ? (
+            <div className="text-center py-8 text-gray-400">Nenhum registro encontrado</div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left text-sm font-medium text-gray-400 pb-3">Seleção</th>
+                      <th className="text-left text-sm font-medium text-gray-400 pb-3">Empresa</th>
+                      <th className="text-left text-sm font-medium text-gray-400 pb-3">Data</th>
+                      <th className="text-left text-sm font-medium text-gray-400 pb-3">Valor</th>
+                      <th className="text-left text-sm font-medium text-gray-400 pb-3">Cashback</th>
+                      <th className="text-left text-sm font-medium text-gray-400 pb-3">Cupom</th>
+                      <th className="text-left text-sm font-medium text-gray-400 pb-3">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {purchases.map(row => (
+                      <tr key={row.id} className="border-b border-white/5">
+                        <td className="py-3">
+                          <button onClick={() => toggleSelect(row.id)} className={`border px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${selected[row.id] ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'}`}>
+                            <CheckSquare className="h-3 w-3" />
+                          </button>
+                        </td>
+                        <td className="py-3 text-sm text-white">{row.companies?.nome_fantasia || row.company_id}</td>
+                        <td className="py-3 text-sm text-gray-300">{formatDate(row.purchase_date)}</td>
+                        <td className="py-3 text-sm text-white font-medium">{formatCurrency(Number(row.purchase_value || 0))}</td>
+                        <td className="py-3 text-sm text-green-400 font-medium">{formatCurrency(Number(row.cashback_generated || 0))}</td>
+                        <td className="py-3 text-sm text-gray-300 font-mono">{row.customer_coupon || '-'}</td>
+                        <td className="py-3 text-sm">
+                          <button
+                            onClick={() => openGenerateModal(row.company_id)}
+                            disabled={!totalsByCompany[row.company_id] || (totalsByCompany[row.company_id] || 0) <= 0}
+                            className="border px-3 py-1 rounded-lg text-xs font-medium transition-all duration-200 bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Gerar Boleto
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
+
+              {pagination.totalPages > 1 && (
+                <div className="flex items-center justify-between mt-6 pt-6 border-t border-white/10">
+                  <div className="text-sm text-gray-400">Página {pagination.page} de {pagination.totalPages}</div>
+                  <div className="flex items-center space-x-2">
+                    <button onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))} disabled={pagination.page === 1} className="bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200">Anterior</button>
+                    <button onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))} disabled={pagination.page === pagination.totalPages} className="bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200">Próxima</button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {selectedRows.length > 0 && (
+            <div className="mt-6 flex items-center justify-between">
+              <div className="text-sm text-gray-400">Selecionados: {selectedRows.length} | Empresas: {Object.keys(groupedByCompany).length}</div>
+              <button onClick={clearSelection} className="bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg text-sm">Limpar seleção</button>
             </div>
           )}
         </div>
+        {showModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+            <div className="bg-black/80 border border-white/10 rounded-xl p-6 w-full max-w-md">
+              <h3 className="text-white text-lg font-semibold mb-4">Gerar Boleto</h3>
+              <p className="text-gray-300 text-sm mb-4">
+                Empresa: {companies.find(c => c.id === modalCompanyId!)?.nome_fantasia || modalCompanyId}
+              </p>
+              <p className="text-gray-300 text-sm mb-4">
+                Valor selecionado: {formatCurrency(totalsByCompany[modalCompanyId! || 0] || 0)}
+              </p>
+              <label className="block text-sm text-gray-400 mb-2">Vencimento</label>
+              <input
+                type="date"
+                value={modalDueDate}
+                onChange={e => setModalDueDate(e.target.value)}
+                className="w-full bg-black/20 border border-white/10 rounded-lg text-white px-3 py-2 mb-4"
+              />
+              {modalMessage && <div className="text-sm mb-3 text-gray-200">{modalMessage}</div>}
+              {boletoLink && (
+                <a href={boletoLink} target="_blank" rel="noreferrer" className="inline-block bg-green-500/20 text-green-400 border border-green-500/30 px-3 py-2 rounded-lg text-sm mr-2">
+                  Visualizar Boleto
+                </a>
+              )}
+              <div className="flex items-center justify-end space-x-2">
+                <button onClick={() => setShowModal(false)} className="bg-white/5 border border-white/10 text-gray-300 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg text-sm">Cancelar</button>
+                <button onClick={submitGenerateInvoice} disabled={modalLoading} className="bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 border border-blue-500/30 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                  {modalLoading ? 'Gerando...' : 'Gerar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </AdminLayout>
   );
 }

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router';
 import { 
   Users, 
   Search, 
@@ -17,14 +16,8 @@ import {
   Wallet,
   UserPlus,
   Activity,
-  LayoutDashboard,
-  CreditCard,
-  Building2,
-  Shield,
-  Settings,
-  LogOut
 } from 'lucide-react';
-import { Printer } from 'lucide-react';
+import AdminLayout from '@/react-app/components/AdminLayout';
 
 interface Affiliate {
   id: number;
@@ -77,20 +70,7 @@ export default function AffiliatesManagement() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
-  const navigate = useNavigate();
 
-  const handleLogout = async () => {
-    try {
-      const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
-      await authenticatedFetch('/api/admin/logout', { method: 'POST' });
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      try { localStorage.removeItem('admin_token'); } catch {}
-      navigate('/admin/login');
-    }
-  };
-  
   // Modal states
   const [editModal, setEditModal] = useState<{ open: boolean; affiliate: Affiliate | null }>({ open: false, affiliate: null });
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; affiliate: Affiliate | null }>({ open: false, affiliate: null });
@@ -297,94 +277,22 @@ export default function AffiliatesManagement() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011]">
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 z-50 w-64 bg-black/20 backdrop-blur-xl border-r border-white/10">
-        <div className="flex h-full flex-col">
-          {/* Logo */}
-          <div className="flex h-16 items-center justify-center border-b border-white/10">
-            <div className="flex items-center space-x-2">
-              <Shield className="h-8 w-8 text-green-400" />
-              <span className="text-xl font-bold text-white">Admin</span>
-            </div>
+    <AdminLayout>
+      <div>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Gestão de Afiliados</h1>
+            <p className="text-gray-400">Gerencie afiliados, visualize estatísticas e realize ações administrativas</p>
           </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 space-y-1 p-4">
-            <Link
-              to="/admin/dashboard"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <LayoutDashboard className="mr-3 h-5 w-5 text-gray-400" />
-              Dashboard
-            </Link>
-            <Link
-              to="/admin/withdrawals"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <CreditCard className="mr-3 h-5 w-5 text-gray-400" />
-              Saques
-            </Link>
-            <Link
-              to="/admin/affiliates"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 bg-green-500/20 text-green-400 shadow-lg shadow-green-500/20"
-            >
-              <Users className="mr-3 h-5 w-5 text-green-400" />
-              Afiliados
-            </Link>
-            <Link
-              to="/admin/companies"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <Building2 className="mr-3 h-5 w-5 text-gray-400" />
-              Empresas
-            </Link>
-            <Link
-              to="/admin/reports"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <Printer className="mr-3 h-5 w-5 text-gray-400" />
-              Relatórios
-            </Link>
-            <Link
-              to="/admin/settings"
-              className="group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-gray-300 hover:bg-white/5 hover:text-white"
-            >
-              <Settings className="mr-3 h-5 w-5 text-gray-400" />
-              Configurações
-            </Link>
-          </nav>
-
-          {/* Logout Button */}
-          <div className="p-4 border-t border-white/10">
-            <button
-              onClick={handleLogout}
-              className="w-full group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-            >
-              <LogOut className="mr-3 h-5 w-5 text-red-400" />
-              Sair
-            </button>
-          </div>
+          <button
+            onClick={() => loadAffiliatesData()}
+            className="flex items-center space-x-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-200"
+          >
+            <Activity className={`h-4 w-4 ${isLoading ? 'animate-spin text-green-400' : ''}`} />
+            <span>{isLoading ? 'Atualizando...' : 'Atualizar Dados'}</span>
+          </button>
         </div>
-      </div>
-
-      {/* Main content */}
-      <div className="pl-64">
-        <div className="p-8">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">Gestão de Afiliados</h1>
-              <p className="text-gray-400">Gerencie afiliados, visualize estatísticas e realize ações administrativas</p>
-            </div>
-            <button
-              onClick={() => loadAffiliatesData()}
-              className="flex items-center space-x-2 px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-gray-300 hover:text-white hover:bg-white/10 transition-all duration-200"
-            >
-              <Activity className={`h-4 w-4 ${isLoading ? 'animate-spin text-green-400' : ''}`} />
-              <span>{isLoading ? 'Atualizando...' : 'Atualizar Dados'}</span>
-            </button>
-          </div>
 
           {/* Global Statistics */}
           {globalStats && (
@@ -776,17 +684,16 @@ export default function AffiliatesManagement() {
                 </button>
                 <button
                   onClick={handleDelete}
-                  disabled={actionLoading === deleteModal.affiliate.id}
+                  disabled={actionLoading === (deleteModal.affiliate ? deleteModal.affiliate.id : null)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
                 >
-                  {actionLoading === deleteModal.affiliate.id ? 'Excluindo...' : 'Excluir'}
+                  {actionLoading === (deleteModal.affiliate ? deleteModal.affiliate.id : null) ? 'Excluindo...' : 'Excluir'}
                 </button>
               </div>
             </div>
           </div>
         )}
-        </div>
       </div>
-    </div>
+    </AdminLayout>
   );
 }
