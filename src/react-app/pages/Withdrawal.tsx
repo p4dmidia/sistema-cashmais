@@ -117,7 +117,10 @@ function WithdrawalPage() {
           'Content-Type': 'application/json',
         },
         credentials: 'include',
-        body: JSON.stringify({ amount: withdrawalAmount }),
+        body: JSON.stringify({ 
+          amount: withdrawalAmount,
+          p_current_day: new Date().getDate() // Enviamos o dia da máquina para permitir o teste do usuário
+        }),
       });
 
       if (response.ok) {
@@ -318,12 +321,22 @@ function WithdrawalPage() {
               </div>
 
           {/* Withdrawal Date Restriction - Temporarily disabled for testing */}
-          <div className="flex items-center space-x-3">
-            <CheckCircle className="w-5 h-5 text-green-500" />
-            <span className="text-green-400">
-              Saques liberados para teste
-            </span>
-          </div>
+              {/* Withdrawal Date Restriction Status */}
+              <div className="flex items-center space-x-3">
+                {[10, 15].includes(new Date().getDate()) ? (
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                ) : (
+                  <Clock className="w-5 h-5 text-yellow-500" />
+                )}
+                <span className={[10, 15].includes(new Date().getDate()) ? 'text-green-400' : 'text-yellow-400'}>
+                  {[10, 15].includes(new Date().getDate()) 
+                    ? 'Hoje é dia de saque!' 
+                    : 'Aguardando dia 10 ou 15 para saque'}
+                </span>
+                <span className="text-xs text-gray-500 ml-2">
+                  (Modo Teste: Alterar relógio do PC libera o botão)
+                </span>
+              </div>
             </div>
           )}
 
@@ -386,7 +399,7 @@ function WithdrawalPage() {
 
             <button
               type="submit"
-              disabled={submitting || !balance?.pix_key || !balance?.is_active_this_month || !amount || parseFloat(amount) <= 0}
+              disabled={submitting || !balance?.pix_key || !balance?.is_active_this_month || !amount || parseFloat(amount) <= 0 || ![10, 15].includes(new Date().getDate())}
               className="w-full flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (

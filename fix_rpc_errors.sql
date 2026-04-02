@@ -7,21 +7,38 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- 2. register_affiliate_v2
 -- Handles robust registration of affiliates
+-- 2. register_affiliate_v2
+-- Handles robust registration of affiliates with automatic sponsor resolution and code generation
 CREATE OR REPLACE FUNCTION register_affiliate_v2(
     p_full_name TEXT,
     p_cpf TEXT,
     p_email TEXT,
     p_phone TEXT,
     p_password_hash TEXT,
-    p_sponsor_id INTEGER,
-    p_referral_code TEXT,
+    p_referral_code TEXT DEFAULT NULL, -- Sponsor's code
     p_position_slot SMALLINT DEFAULT NULL
 )
 RETURNS SETOF affiliates AS $$
 DECLARE
-    new_aff_id INTEGER;
+    v_sponsor_id INTEGER;
+    v_new_aff_id INTEGER;
+    v_new_referral_code TEXT;
 BEGIN
-    -- Validation
+    -- 1. Encontrar o padrinho pelo código de indicação, se fornecido
+    IF p_referral_code IS NOT NULL AND p_referral_code <> '' THEN
+        -- Tenta pelo código de indicação primeiro
+        SELECT id INTO v_sponsor_id 
+        FROM affiliates 
+        WHERE referral_code = p_referral_code 
+        LIMIT 1;
+        
+        -- Se não achou e o código parece um ID numérico, tenta pelo ID (fallback)
+        IF v_sponsor_id IS NULL AND p_referral_code ~ '^[0-9]+$' THEN
+             SELECT id INTO v_sponsor_id FROM affiliates WHERE id = p_referral_code::INTEGER LIMIT 1;
+        END IF;
+    END IF;
+
+    -- 2. Validar CPF e Email
     IF EXISTS (SELECT 1 FROM affiliates WHERE cpf = p_cpf) THEN
         RAISE EXCEPTION 'CPF já cadastrado';
     END IF;
@@ -30,14 +47,14 @@ BEGIN
         RAISE EXCEPTION 'E-mail já cadastrado';
     END IF;
 
-    -- Slot validation
-    IF p_sponsor_id IS NOT NULL AND p_position_slot IS NOT NULL THEN
-        IF EXISTS (SELECT 1 FROM affiliates WHERE sponsor_id = p_sponsor_id AND position_slot = p_position_slot) THEN
-            RAISE EXCEPTION 'Posição já ocupada para este patrocinador';
-        END IF;
-    END IF;
+    -- 3. Gerar um novo código de indicação único para o novo afiliado
+    LOOP
+        -- Gera um código aleatório de 8 caracteres alfanuméricos
+        v_new_referral_code := UPPER(SUBSTRING(MD5(RANDOM()::TEXT), 1, 8));
+        EXIT WHEN NOT EXISTS (SELECT 1 FROM affiliates WHERE referral_code = v_new_referral_code);
+    END LOOP;
 
-    -- Insert
+    -- 4. Inserir na tabela affiliates
     INSERT INTO affiliates (
         full_name,
         cpf,
@@ -48,22 +65,26 @@ BEGIN
         referral_code,
         position_slot,
         is_active,
-        is_verified
+        is_verified,
+        created_at,
+        updated_at
     ) VALUES (
         p_full_name,
         p_cpf,
         p_email,
         p_phone,
         p_password_hash,
-        p_sponsor_id,
-        p_referral_code,
+        v_sponsor_id,
+        v_new_referral_code,
         p_position_slot,
         true,
-        false
+        false,
+        NOW(),
+        NOW()
     )
-    RETURNING id INTO new_aff_id;
+    RETURNING id INTO v_new_aff_id;
 
-    RETURN QUERY SELECT * FROM affiliates WHERE id = new_aff_id;
+    RETURN QUERY SELECT * FROM affiliates WHERE id = v_new_aff_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 

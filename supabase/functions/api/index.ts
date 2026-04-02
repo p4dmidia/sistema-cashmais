@@ -373,6 +373,8 @@ app.all('/affiliate/register', async (c: any) => {
 async function handleAffiliateRegister(c: any) {
   try {
     const body = await c.req.json()
+    console.log('[AFFILIATE_REGISTER] Request body received:', JSON.stringify({ ...body, password: '***' }))
+    
     const parsed = z.object({
       full_name: z.string().min(1),
       cpf: z.string().min(11),
@@ -383,23 +385,70 @@ async function handleAffiliateRegister(c: any) {
     }).safeParse(body)
     
     if (!parsed.success) {
+       console.log('[AFFILIATE_REGISTER] Validation failed:', parsed.error.format())
        return c.json({ error: 'Dados inválidos', field_errors: parsed.error.flatten().fieldErrors }, 400)
     }
     
     const client = createSupabase();
-    const { data: result, error: rpcError } = await client.rpc('register_affiliate_v2', {
+    
+    // 1. Criptografar a senha para o banco de dados (bcrypt)
+    // Isso garante consistência com o login_affiliate e o cadastro de empresas
+    const passwordHash = await bcrypt.hash(parsed.data.password, 10);
+    
+    // 2. Resolver o Patrocinador Raiz pelo código de indicação do link
+    console.log('[AFFILIATE_REGISTER] Resolving root sponsor...')
+    const { data: rootSponsor, error: sponsorErr } = await client
+      .from('affiliates')
+      .select('id, full_name, referral_code')
+      .eq('referral_code', parsed.data.referral_code || '')
+      .maybeSingle()
+    
+    let targetParentId: number | null = null
+    let targetSlot: number | null = null
+    
+    if (rootSponsor) {
+       console.log(`[AFFILIATE_REGISTER] Root Sponsor found: ${rootSponsor.full_name} (ID: ${rootSponsor.id})`)
+       
+       // 3. Buscar preferência e calcular posicionamento (Spillover)
+       const pref = await getSponsorPreference(client, rootSponsor.id)
+       console.log(`[AFFILIATE_REGISTER] Sponsor preference: ${pref}`)
+       
+       const placement = await findPlacementTargetAndSlot(client, rootSponsor.id, pref)
+       targetParentId = placement.parentId
+       targetSlot = placement.slot
+       console.log(`[AFFILIATE_REGISTER] Placement resolved: Parent=${targetParentId}, Slot=${targetSlot}`)
+    } else {
+       console.warn('[AFFILIATE_REGISTER] No root sponsor found. Registering as top-level.')
+       // Se não tem padrinho, o sistema pode decidir o que fazer. 
+       // Aqui vamos deixar como null e a RPC tratará como lixo/topo se permitido, ou erro se obrigatório.
+    }
+
+    // 4. Chamar a RPC V3 com o Parente Direto e Slot calculados
+    console.log('[AFFILIATE_REGISTER] Calling RPC register_affiliate_v3...')
+    const { data: result, error: rpcError } = await client.rpc('register_affiliate_v3', {
       p_full_name: parsed.data.full_name,
       p_cpf: parsed.data.cpf,
       p_email: parsed.data.email,
-      p_password_hash: parsed.data.password,
-      p_whatsapp: parsed.data.whatsapp || null,
-      p_referral_code: parsed.data.referral_code || null
+      p_password_hash: passwordHash,
+      p_phone: parsed.data.whatsapp || null,
+      p_sponsor_id: targetParentId, // Agora passa o PAI DIRETO calculado
+      p_position_slot: targetSlot   // Agora passa o SLOT exato (0, 1 ou 2)
     });
 
-    if (rpcError) return c.json({ error: 'Erro ao cadastrar afiliado', details: rpcError.message }, 500);
+    if (rpcError) {
+      console.error('[AFFILIATE_REGISTER] RPC Error:', rpcError);
+      return c.json({ 
+        error: 'Erro ao cadastrar afiliado', 
+        details: rpcError.message,
+        hint: rpcError.hint 
+      }, 500);
+    }
+    
+    console.log('[AFFILIATE_REGISTER] Success:', result)
     return c.json({ success: true, data: result });
   } catch (e) {
-    return c.json({ error: 'Erro interno' }, 500);
+    console.error('[AFFILIATE_REGISTER] Critical Exception:', e)
+    return c.json({ error: 'Erro interno', details: (e as any).message }, 500);
   }
 }
 
@@ -1001,16 +1050,20 @@ app.post('/api/admin/invoices/generate', async (c) => {
     // 4. Monta Payload do PagBank
     const pagbankToken = Deno.env.get('PAGBANK_TOKEN')
     if (!pagbankToken) return c.json({ error: 'Erro de configuração: Token PagBank ausente' }, 500)
-    // Formata telefone
+    
+    // Formata telefone (PagBank exige area=2 e number=8|9)
     const rawPhone = String((company as any).telefone || '').replace(/\D/g, '')
     const area = rawPhone.substring(0, 2)
-    const number = rawPhone.substring(2)
-    // Formata CPF/CNPJ
-    const taxId = String((company as any).cnpj || '').replace(/\D/g, '')
+    const number = rawPhone.substring(2).substring(0, 9)
+    
+    // Formata CPF/CNPJ (PagBank exige estrictamente 11 ou 14 dígitos)
+    const taxId = String((company as any).cnpj || '').replace(/\D/g, '').substring(0, 14)
+    const customerName = String((company as any).nome_fantasia || (company as any).razao_social || 'Empresa').substring(0, 100).trim()
+    const postalCode = String((company as any).address_zip || '').replace(/\D/g, '').substring(0, 8)
     const payload = {
       reference_id: `inv_${company_id}_${Date.now()}`,
       customer: {
-        name: (company as any).nome_fantasia,
+        name: customerName,
         email: (company as any).email,
         tax_id: taxId,
         phones: [
@@ -1032,14 +1085,14 @@ app.post('/api/admin/invoices/generate', async (c) => {
       ],
       shipping: {
         address: {
-          street: (company as any).address_street,
-          number: (company as any).address_number || 'S/N',
-          complement: 'Comercial',
-          locality: (company as any).address_district || 'Centro',
-          city: (company as any).address_city,
-          region_code: (company as any).address_state,
+          street: String((company as any).address_street || '').substring(0, 100),
+          number: String((company as any).address_number || 'S/N').substring(0, 20),
+          complement: String((company as any).address_complement || 'Comercial').substring(0, 40),
+          locality: String((company as any).address_district || 'Centro').substring(0, 60),
+          city: String((company as any).address_city || '').substring(0, 60),
+          region_code: String((company as any).address_state || '').substring(0, 2),
           country: 'BRA',
-          postal_code: String((company as any).address_zip || '').replace(/\D/g, ''),
+          postal_code: postalCode,
         },
       },
       charges: [
@@ -1056,17 +1109,17 @@ app.post('/api/admin/invoices/generate', async (c) => {
                 line_2: 'Não receber após o vencimento',
               },
               holder: {
-                name: (company as any).nome_fantasia,
+                name: customerName,
                 tax_id: taxId,
                 email: (company as any).email,
                 address: {
-                  street: (company as any).address_street,
-                  number: (company as any).address_number || 'S/N',
-                  locality: (company as any).address_district || 'Centro',
-                  city: (company as any).address_city,
-                  region: (company as any).address_state,
+                  street: String((company as any).address_street || '').substring(0, 100),
+                  number: String((company as any).address_number || 'S/N').substring(0, 20),
+                  locality: String((company as any).address_district || 'Centro').substring(0, 60),
+                  city: String((company as any).address_city || '').substring(0, 60),
+                  region: String((company as any).address_state || '').substring(0, 2),
                   country: 'BRA',
-                  postal_code: String((company as any).address_zip || '').replace(/\D/g, ''),
+                  postal_code: postalCode,
                 },
               },
             },
@@ -1076,7 +1129,7 @@ app.post('/api/admin/invoices/generate', async (c) => {
     }
     // --- FORÇANDO PRODUÇÃO ---
     const url = 'https://api.pagseguro.com/orders'
-    console.log('>>> MODO PRODUÇÃO ATIVO: Enviando para api.pagseguro.com')
+    console.log('>>> PAYLOAD PAGBANK:', JSON.stringify(payload, null, 2))
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -1086,8 +1139,16 @@ app.post('/api/admin/invoices/generate', async (c) => {
       },
       body: JSON.stringify(payload),
     })
-    const result = await response.json()
+    const text = await response.text()
+    let result: any
+    try {
+      result = JSON.parse(text)
+    } catch {
+      result = { raw_response: text }
+    }
+
     if (!response.ok) {
+      console.error('>>> ERRO PAGBANK:', JSON.stringify(result, null, 2))
       return c.json({ error: 'Erro ao gerar boleto no PagBank', details: result }, 400)
     }
     // 6. Sucesso: Extrai o link
@@ -1588,26 +1649,35 @@ async function getChildInSlot(supabase: any, parentId: number, slotIdx: number):
   return (data as any)?.id ?? null
 }
 
-async function findPlacementTarget(supabase: any, rootSponsorId: number, preference: 'automatic' | 'left' | 'center' | 'right', maxDepth = 10, debugLog?: string[]): Promise<number> {
+async function findPlacementTargetAndSlot(supabase: any, rootSponsorId: number, preference: 'automatic' | 'left' | 'center' | 'right', maxDepth = 10): Promise<{ parentId: number, slot: number }> {
   if (preference === 'automatic') {
-    const rootSlots = await getChildrenBySlot(supabase, rootSponsorId)
-    if (rootSlots.some((s) => s === undefined)) return rootSponsorId
     const queue: number[] = [rootSponsorId]
     let depth = 0
     while (queue.length && depth <= maxDepth) {
       const current = queue.shift() as number
       const slots = await getChildrenBySlot(supabase, current)
-      if (debugLog) debugLog.push(`AUTO depth=${depth} current=${current} free=${slots.some(s => s === undefined)}`)
-      if (slots.some((s) => s === undefined)) return current
-      for (const c of slots) if (typeof c === 'number') queue.push(c)
+      
+      // Encontra o primeiro slot livre (undefined)
+      for (let i = 0; i < 3; i++) {
+        if (slots[i] === undefined) {
+          return { parentId: current, slot: i }
+        }
+      }
+      
+      // Adiciona filhos à fila para busca por nível (BFS)
+      for (const c of slots) {
+        if (typeof c === 'number') queue.push(c)
+      }
       depth++
     }
-    return rootSponsorId
+    // Fallback improvável em árvore finita
+    return { parentId: rootSponsorId, slot: 0 }
   }
+
   const idx = LEG_TO_SLOT[preference as 'left' | 'center' | 'right']
-  if (idx === undefined || idx === null) return rootSponsorId
   let currentId = rootSponsorId
   let level = 0
+  
   while (level <= maxDepth) {
     const { data: child } = await supabase
       .from('affiliates')
@@ -1616,13 +1686,24 @@ async function findPlacementTarget(supabase: any, rootSponsorId: number, prefere
       .eq('is_active', true)
       .eq('position_slot', idx)
       .maybeSingle()
+      
     const childId = (child as any)?.id ?? null
-    if (debugLog) debugLog.push(`STRICT level=${level} current=${currentId} idx=${idx} child=${childId ?? 'null'}`)
-    if (!childId) return currentId
+    if (!childId) {
+      // Slot encontrado vago nesta perna
+      return { parentId: currentId, slot: idx }
+    }
+    
+    // Continua descendo na mesma perna
     currentId = childId
     level++
   }
-  return rootSponsorId
+  
+  return { parentId: rootSponsorId, slot: 0 }
+}
+
+async function findPlacementTarget(supabase: any, rootSponsorId: number, preference: 'automatic' | 'left' | 'center' | 'right', maxDepth = 10, debugLog?: string[]): Promise<number> {
+  const result = await findPlacementTargetAndSlot(supabase, rootSponsorId, preference, maxDepth)
+  return result.parentId
 }
 
 app.post('/affiliate/login', async (c) => {
@@ -2030,8 +2111,17 @@ app.post('/api/withdrawals/request', async (c) => {
     if (updateErr) return c.json({ error: 'Erro ao processar saldo. Tente novamente.' }, 500)
     const { error: insertErr } = await supabase
       .from('withdrawals')
-      .insert({ user_id: profileId, affiliate_id: affiliateId, amount_requested: amount, status: 'pending', pix_key: pixKey, created_at: new Date().toISOString() })
+      .insert({ 
+        user_id: profileId, 
+        amount_requested: amount, 
+        fee_amount: 0,
+        net_amount: amount,
+        status: 'pending', 
+        pix_key: pixKey, 
+        created_at: new Date().toISOString() 
+      })
     if (insertErr) {
+      console.error('[WITHDRAWAL_ERROR] Insert error:', insertErr)
       await supabase.from('user_settings').update({ available_balance: currentBalance, updated_at: new Date().toISOString() }).eq('user_id', profileId)
       return c.json({ error: 'Erro ao registrar saque' }, 500)
     }
@@ -2089,11 +2179,22 @@ app.post('/api/withdrawals', async (c) => {
     if (!(settings as any).is_active_this_month) return c.json({ error: 'Você precisa ter feito pelo menos uma compra no mês anterior' }, 400)
     const available = Number((settings as any).available_balance || 0)
     if (amount > available) return c.json({ error: 'Saldo insuficiente' }, 400)
+    // Validação de Data (Dias 10 e 15)
+    // p_current_day permite testar alterando a data no front/máquina
+    const serverDay = now.getDate()
+    const clientDay = Number(body?.p_current_day)
+    const effectiveDay = !isNaN(clientDay) ? clientDay : serverDay
+    
+    console.log(`[WITHDRAWAL_DEBUG] ServerDay: ${serverDay}, ClientDay: ${clientDay}, EffectiveDay: ${effectiveDay}`)
+    
+    if (effectiveDay !== 10 && effectiveDay !== 15) {
+      return c.json({ error: 'Solicitações de saque permitidas apenas nos dias 10 e 15 de cada mês.' }, 400)
+    }
+
     const { data: withdrawal, error: wErr } = await supabase
       .from('withdrawals')
       .insert({
         user_id: profileId,
-        affiliate_id: affiliateId,
         amount_requested: amount,
         fee_amount: 0,
         net_amount: amount,
@@ -2102,8 +2203,12 @@ app.post('/api/withdrawals', async (c) => {
         created_at: new Date().toISOString(),
       })
       .select()
-      .single()
-    if (wErr || !withdrawal) return c.json({ error: 'Erro ao criar solicitação de saque' }, 500)
+      .maybeSingle()
+    
+    if (wErr || !withdrawal) {
+      console.error('[WITHDRAWAL_ERROR] Insert error:', wErr)
+      return c.json({ error: 'Erro ao criar solicitação de saque em nossa base.' }, 500)
+    }
     const { error: upErr } = await supabase
       .from('user_settings')
       .update({
