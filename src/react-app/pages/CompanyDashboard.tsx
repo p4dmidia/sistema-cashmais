@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Building2, Users, TrendingUp, LogOut, Plus, Eye, AlertCircle, Edit2, Trash2, Lock, Unlock, Calendar, FileDown, Filter } from 'lucide-react';
+import { Building2, Users, TrendingUp, LogOut, Plus, Eye, AlertCircle, Edit2, Trash2, Lock, Unlock, Calendar, FileDown, Filter, Menu, X } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -88,6 +88,7 @@ export default function CompanyDashboard() {
   const [profileFormData, setProfileFormData] = useState<Partial<Company>>({});
   const [cepLoading, setCepLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -551,9 +552,76 @@ export default function CompanyDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011] flex">
-      {/* Sidebar */}
-      <div className="w-80 bg-black/20 backdrop-blur-xl border-r border-white/10 flex flex-col">
+    <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011] flex flex-col lg:flex-row">
+      {/* Mobile Header (Hambúrguer) - Visible only on mobile/tablet */}
+      <div className="lg:hidden bg-black/40 backdrop-blur-xl border-b border-white/10 p-4 sticky top-0 z-50 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <img src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" alt="CashMais" className="h-8 w-auto" />
+          <h1 className="text-lg font-bold text-white">Empresas</h1>
+        </div>
+        <button 
+          onClick={() => setIsMenuOpen(!isMenuOpen)}
+          className="p-2 text-gray-300 hover:text-[#70ff00] focus:outline-none focus:ring-2 focus:ring-[#70ff00]/50 rounded-lg transition-all"
+          aria-label={isMenuOpen ? "Fechar menu" : "Abrir menu"}
+        >
+          {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+        </button>
+      </div>
+
+      {/* Mobile Navigation Dropdown */}
+      {isMenuOpen && (
+        <div className="lg:hidden fixed inset-0 top-[65px] bg-black/60 backdrop-blur-md z-40 animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="bg-[#001144]/95 border-b border-white/10 p-6 space-y-6 shadow-2xl">
+            <nav className="space-y-4">
+              {[
+                { key: 'overview', label: 'Visão Geral', icon: TrendingUp },
+                { key: 'cashiers', label: 'Caixas', icon: Users },
+                { key: 'reports', label: 'Relatórios', icon: Eye },
+                { key: 'settings', label: 'Configurações', icon: Building2 }
+              ].map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setActiveTab(key);
+                    setIsMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center space-x-4 p-4 rounded-xl font-medium text-base transition-all ${
+                    activeTab === key
+                      ? 'bg-[#70ff00]/20 text-[#70ff00] border border-[#70ff00]/30'
+                      : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent'
+                  }`}
+                >
+                  <Icon className="h-6 w-6" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </nav>
+
+            <div className="pt-6 border-t border-white/10">
+              <div className="px-4 mb-6">
+                <p className="text-xs text-gray-500 uppercase tracking-widest font-bold">Empresa</p>
+                <p className="text-lg text-white font-medium">{company?.nome_fantasia}</p>
+                <p className="text-sm text-gray-400">ID: {company?.id}</p>
+              </div>
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setIsMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-center space-x-2 p-4 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all font-bold"
+              >
+                <LogOut className="h-5 w-5" />
+                <span>Sair do Sistema</span>
+              </button>
+            </div>
+          </div>
+          {/* Overlay to close when clicking outside */}
+          <div className="h-full" onClick={() => setIsMenuOpen(false)}></div>
+        </div>
+      )}
+
+      {/* Sidebar - Desktop Only */}
+      <div className="hidden lg:flex w-80 bg-black/20 backdrop-blur-xl border-r border-white/10 flex-col sticky top-0 h-screen">
         {/* Logo e Nome do Sistema */}
         <div className="p-6 border-b border-white/10">
           <div className="flex items-center space-x-3">
@@ -607,7 +675,7 @@ export default function CompanyDashboard() {
       </div>
 
       {/* Área de Conteúdo Principal */}
-      <div className="flex-1 p-8 overflow-y-auto">
+      <div className="flex-1 p-4 sm:p-8 overflow-y-auto">
         {/* Conteúdo das Abas */}
         {/* Overview Tab */}
         {activeTab === 'overview' && stats && (
@@ -797,7 +865,7 @@ export default function CompanyDashboard() {
               </button>
             </div>
 
-            <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 overflow-hidden">
+            <div className="bg-white/5 backdrop-blur-md rounded-lg border border-white/10 overflow-x-auto">
               <table className="min-w-full divide-y divide-white/10">
                 <thead className="bg-white/5">
                   <tr>
@@ -1253,8 +1321,8 @@ export default function CompanyDashboard() {
         {/* Cashback Configuration Modal */}
         {showCashbackConfig && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-            <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-6 max-w-md w-full mx-4">
-              <h3 className="text-lg font-medium text-white mb-4">Configurar Percentual de Cashback</h3>
+            <div className="bg-[#001144] backdrop-blur-md border border-white/20 rounded-2xl p-6 sm:p-8 max-w-md w-full mx-4 shadow-2xl">
+              <h3 className="text-xl font-bold text-white mb-4">Configurar Cashback</h3>
               
               <form onSubmit={handleUpdateCashback} className="space-y-4">
                 <div>

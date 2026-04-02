@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { User, LogOut, ShoppingCart, AlertCircle, CheckCircle, Ticket, DollarSign } from 'lucide-react';
+import { User, LogOut, ShoppingCart, AlertCircle, CheckCircle, Ticket, DollarSign, Menu, X } from 'lucide-react';
 
 interface Cashier {
   id: number;
@@ -17,6 +17,7 @@ export default function CashierPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -97,26 +98,70 @@ export default function CashierPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-      {/* Header */}
-      <div className="bg-slate-800/50 backdrop-blur-sm shadow-sm border-b border-slate-700">
+      {/* Header Responsivo */}
+      <div className="bg-slate-800/60 backdrop-blur-md shadow-lg border-b border-white/5 sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <User className="h-8 w-8 text-emerald-400" />
-              <div className="ml-3">
-                <h1 className="text-xl font-semibold text-white">{cashier.name}</h1>
-                <p className="text-sm text-slate-300">{cashier.company_name} - Caixa</p>
+              <div className="bg-emerald-500/20 p-2 rounded-lg mr-3">
+                <User className="h-6 w-6 text-emerald-400" />
+              </div>
+              <div className="hidden sm:block">
+                <h1 className="text-lg font-bold text-white">{cashier.name}</h1>
+                <p className="text-xs text-emerald-400/70 font-medium uppercase tracking-wider">{cashier.company_name} • Caixa</p>
+              </div>
+              <div className="sm:hidden">
+                <h1 className="text-base font-bold text-white leading-tight">Painel do Caixa</h1>
               </div>
             </div>
+
+            {/* Desktop Logout */}
             <button
               onClick={handleLogout}
-              className="flex items-center space-x-2 text-slate-300 hover:text-white"
+              className="hidden sm:flex items-center space-x-2 text-slate-300 hover:text-white px-3 py-2 rounded-lg hover:bg-white/5 transition-all"
             >
-              <LogOut className="h-5 w-5" />
-              <span>Sair</span>
+              <LogOut className="h-4 w-4" />
+              <span className="text-sm font-medium">Sair</span>
+            </button>
+
+            {/* Mobile Menu Button */}
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="sm:hidden p-2 text-slate-300 hover:text-emerald-400 focus:outline-none transition-colors"
+            >
+              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
             </button>
           </div>
         </div>
+
+        {/* Mobile Dropdown Menu */}
+        {isMenuOpen && (
+          <div className="sm:hidden absolute w-full bg-slate-800 border-b border-white/5 shadow-2xl animate-in slide-in-from-top duration-200">
+            <div className="px-4 py-6 space-y-6">
+              <div className="flex items-center p-4 bg-white/5 rounded-xl">
+                <div className="bg-emerald-500 p-3 rounded-full mr-4">
+                  <User className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <p className="text-white font-bold text-lg">{cashier.name}</p>
+                  <p className="text-slate-400 text-sm">{cashier.company_name}</p>
+                  <p className="text-emerald-400 text-xs font-bold uppercase mt-1">Cargo: Caixa</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setIsMenuOpen(false);
+                }}
+                className="w-full flex items-center justify-center space-x-2 p-4 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all font-bold"
+              >
+                <LogOut className="h-5 w-5" />
+                <span>Encerrar Sessão</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
