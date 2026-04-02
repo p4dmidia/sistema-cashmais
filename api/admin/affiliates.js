@@ -34,13 +34,27 @@ export default async function handler(req, res) {
   const offset = (page - 1) * limit
 
   try {
-    // Ultra simple query to validate data visibility
-    const { data: ultra } = await supabase
+    const query = supabase
       .from('affiliates')
-      .select('*')
-    console.log('[API_ADMIN_AFFILIATES] Ultra simple query length:', (ultra || []).length)
-    let affiliates = ultra || []
-    const totalCountValue = (ultra || []).length
+      .select('*', { count: 'exact' })
+
+    if (search) {
+      const isCpf = /^\d+$/.test(search.replace(/\D/g, ''))
+      if (isCpf) {
+        const cleanCpf = search.replace(/\D/g, '')
+        query.or(`cpf.ilike.%${cleanCpf}%,full_name.ilike.%${search}%,email.ilike.%${search}%`)
+      } else {
+        query.or(`full_name.ilike.%${search}%,email.ilike.%${search}%,cpf.ilike.%${search}%`)
+      }
+    }
+
+    const { data: affiliates, count: totalCount, error: fetchError } = await query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1)
+
+    if (fetchError) throw fetchError
+
+    const totalCountValue = totalCount || 0
 
     // Enrich
     const enriched = []
@@ -49,6 +63,7 @@ export default async function handler(req, res) {
         .from('affiliates')
         .select('*', { count: 'exact', head: true })
         .eq('sponsor_id', a.id)
+      
       let totalCashback = 0
       if (a.cpf) {
         const { data: cbRows } = await supabase
@@ -57,6 +72,7 @@ export default async function handler(req, res) {
           .eq('customer_coupon', a.cpf)
         totalCashback = (cbRows || []).reduce((sum, r) => sum + Number(r.cashback_generated || 0), 0)
       }
+
       enriched.push({
         id: a.id,
         full_name: a.full_name,
@@ -80,11 +96,9 @@ export default async function handler(req, res) {
       pagination: {
         page,
         limit,
-        total: totalCountValue || 0,
-        totalPages: Math.ceil((totalCountValue || 0) / limit)
-      },
-      debug_total_rows: enriched.length,
-      supabase_url_used: (process.env.SUPABASE_URL || '').substring(0, 20)
+        total: totalCountValue,
+        totalPages: Math.ceil(totalCountValue / limit)
+      }
     })
   } catch (e) {
     return res.status(500).json({ error: e.message || 'Erro interno', affiliates: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } })

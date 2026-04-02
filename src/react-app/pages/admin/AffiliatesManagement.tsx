@@ -108,8 +108,8 @@ export default function AffiliatesManagement() {
 
   const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  const loadAffiliatesData = async () => {
-    setIsLoading(true);
+  const loadAffiliatesData = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const { authenticatedFetch } = await import('@/react-app/lib/authFetch');
       const [statsResponse, affiliatesResponse] = await Promise.all([
@@ -124,36 +124,16 @@ export default function AffiliatesManagement() {
       if (statsResponse.ok) {
         const statsData = await statsResponse.json();
         setGlobalStats(statsData);
-      } else {
-        setGlobalStats({
-          totalActive: 0,
-          totalInactive: 0,
-          totalCashbackGenerated: 0,
-          totalCommissionsPending: 0,
-          newAffiliatesThisMonth: 0
-        });
       }
 
       if (affiliatesResponse.ok) {
         const affiliatesData = await affiliatesResponse.json();
         setAffiliates(affiliatesData.affiliates || []);
         setPagination(affiliatesData.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 });
-      } else {
-        setAffiliates([]);
-        setPagination({ page: 1, limit: 20, total: 0, totalPages: 0 });
       }
 
     } catch (error) {
       console.error('Error loading affiliates data:', error);
-      setGlobalStats({
-        totalActive: 0,
-        totalInactive: 0,
-        totalCashbackGenerated: 0,
-        totalCommissionsPending: 0,
-        newAffiliatesThisMonth: 0
-      });
-      setAffiliates([]);
-      setPagination({ page: 1, limit: 20, total: 0, totalPages: 0 });
     } finally {
       setIsLoading(false);
     }
@@ -259,17 +239,28 @@ export default function AffiliatesManagement() {
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    setSearch(value); // O input atualiza instantaneamente para digitação fluída
+    setSearch(value);
     
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
     searchTimeoutRef.current = setTimeout(() => {
-      setDebouncedSearch(value); // Só atualiza o termo da API após 300ms (mais rápido)
-      setPagination(prev => ({ ...prev, page: 1 }));
-    }, 300); 
+      setDebouncedSearch(value);
+      loadAffiliatesData(true); // Chamada silenciosa para atualizar dados oficiais/paginação
+    }, 500); 
   };
+
+  // Filtro instantâneo local para resposta imediata na UI
+  const filteredAffiliates = React.useMemo(() => {
+    if (!search) return affiliates;
+    const term = search.toLowerCase();
+    return affiliates.filter(a => 
+      a.full_name.toLowerCase().includes(term) ||
+      a.email.toLowerCase().includes(term) ||
+      a.cpf.includes(term.replace(/\D/g, ''))
+    );
+  }, [affiliates, search]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -475,21 +466,24 @@ export default function AffiliatesManagement() {
             </div>
           </div>
 
-          {isLoading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-400 mx-auto mb-4"></div>
-              <p className="text-gray-400">Carregando dados dos afiliados...</p>
-            </div>
-          ) : affiliates.length === 0 ? (
+          {filteredAffiliates.length === 0 && !isLoading ? (
             <div className="text-center py-12">
               <Users className="h-16 w-16 text-gray-500 mx-auto mb-4" />
               <p className="text-gray-400 text-lg">
-                {search ? 'Nenhum afiliado encontrado' : 'Nenhum afiliado cadastrado'}
+                {search ? 'Nenhum afiliado encontrado com este termo' : 'Nenhum afiliado cadastrado'}
               </p>
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto relative">
+                {isLoading && (
+                  <div className="absolute inset-0 bg-black/10 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-xl">
+                    <div className="bg-gray-900/80 px-4 py-2 rounded-full border border-white/10 flex items-center space-x-2">
+                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-400"></div>
+                       <span className="text-xs text-white">Sincronizando...</span>
+                    </div>
+                  </div>
+                )}
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-white/10">
@@ -503,7 +497,7 @@ export default function AffiliatesManagement() {
                     </tr>
                   </thead>
                   <tbody>
-                    {affiliates.map((affiliate) => (
+                    {filteredAffiliates.map((affiliate) => (
                       <tr key={affiliate.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                         <td className="py-4 px-2">
                           <div>
