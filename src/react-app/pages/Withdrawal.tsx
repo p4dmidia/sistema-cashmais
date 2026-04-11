@@ -333,9 +333,6 @@ function WithdrawalPage() {
                     ? 'Hoje é dia de saque!' 
                     : 'Aguardando dia 10 ou 15 para saque'}
                 </span>
-                <span className="text-xs text-gray-500 ml-2">
-                  (Modo Teste: Alterar relógio do PC libera o botão)
-                </span>
               </div>
             </div>
           )}
