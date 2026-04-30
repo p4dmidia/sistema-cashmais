@@ -1,4 +1,4 @@
-import { LogOut, User, Home, Receipt, Users, DollarSign, Store, Menu, X } from "lucide-react";
+import { LogOut, User, Home, Receipt, Users, DollarSign, Store, Menu, X, LayoutGrid, CreditCard, Shield, FileText, Lock, Settings } from "lucide-react";
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import { type CashMaisUser } from "@/shared/types";
@@ -65,6 +65,7 @@ export default function Layout({ children, user }: LayoutProps) {
                     </div>
                     <nav className="flex items-center space-x-1 border-l border-white/10 pl-6">
                       <NavLink to="/dashboard" icon={Home} label="Dashboard" active={location.pathname === '/dashboard'} />
+                      <NavLink to="/servicos" icon={LayoutGrid} label="Marketplace" active={location.pathname.startsWith('/servicos')} />
                       {user?.profile?.role === 'affiliate' && (
                         <>
                           <NavLink to="/extrato" icon={Receipt} label="Extrato" active={location.pathname === '/extrato'} />
@@ -123,7 +124,20 @@ export default function Layout({ children, user }: LayoutProps) {
                   <MobileNavLink to="/saque" icon={DollarSign} label="Solicitar Saque" active={location.pathname === '/saque'} onClick={closeMenu} />
                 </>
               )}
-              <MobileNavLink to="/perfil" icon={User} label="Perfil" active={location.pathname === '/perfil'} onClick={closeMenu} />
+              <MobileNavLink to="/perfil" icon={User} label="Minha Conta" active={location.pathname === '/perfil'} onClick={closeMenu} />
+              <MobileNavLink to="/admin/affiliates" icon={Users} label="Usuários" active={location.pathname === '/admin/affiliates'} onClick={closeMenu} />
+              
+              <div className="h-px bg-white/5 my-2"></div>
+              
+              <MobileNavLink to="/planos" icon={CreditCard} label="Planos" active={location.pathname === '/planos'} onClick={closeMenu} />
+              <MobileNavLink to="/servicos" icon={LayoutGrid} label="Categorias" active={location.pathname.startsWith('/servicos')} onClick={closeMenu} />
+              <MobileNavLink to="/saque" icon={DollarSign} label="Pagamentos" active={location.pathname === '/saque'} onClick={closeMenu} />
+              
+              <div className="h-px bg-white/5 my-2"></div>
+              
+              <MobileNavLink to="/perfil?tab=password" icon={Lock} label="Alterar Senha" active={false} onClick={closeMenu} />
+              <MobileNavLink to="/termos" icon={FileText} label="Termos de Uso" active={location.pathname === '/termos'} onClick={closeMenu} />
+              <MobileNavLink to="/privacidade" icon={Shield} label="Políticas de Privacidade" active={location.pathname === '/privacidade'} onClick={closeMenu} />
               
               <button
                 onClick={() => {

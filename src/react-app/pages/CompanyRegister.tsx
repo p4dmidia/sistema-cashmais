@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { Building2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Building2, CheckCircle, AlertCircle, Camera, MessageSquare, Info } from 'lucide-react';
+import { supabase } from '@/react-app/lib/supabase';
 
 export default function CompanyRegister() {
   const [formData, setFormData] = useState({
@@ -18,13 +19,69 @@ export default function CompanyRegister() {
     address_district: '',
     address_city: '',
     address_state: '',
-    site_instagram: ''
+    site_instagram: '',
+    description: '',
+    whatsapp: '',
+    thumbnail_url: '',
+    category_id: ''
   });
+  const [categories, setCategories] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch('/api/categories');
+      if (response.ok) {
+        const data = await response.json();
+        setCategories(data.categories || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch categories:', err);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      const filePath = `logos/${fileName}`;
+
+      // Tenta fazer upload para o bucket 'public'
+      const { error: uploadError } = await supabase.storage
+        .from('public')
+        .upload(filePath, file);
+
+      if (uploadError) {
+        console.error('Error uploading to public bucket:', uploadError);
+        throw new Error('Falha ao enviar imagem. Verifique se o bucket "public" existe e tem permissão.');
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('public')
+        .getPublicUrl(filePath);
+
+      setFormData(prev => ({ ...prev, thumbnail_url: publicUrl }));
+    } catch (err: any) {
+      console.error('Error uploading file:', err);
+      setError(err.message || 'Erro ao enviar imagem.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -53,7 +110,7 @@ export default function CompanyRegister() {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData(prev => ({
       ...prev,
       [e.target.name]: e.target.value
@@ -332,12 +389,114 @@ export default function CompanyRegister() {
               </div>
 
               <div className="md:col-span-2 border-t border-white/10 pt-6 mt-2">
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-200 mb-2">
-                  Site/Instagram (Opcional)
+                  Segmento / Categoria *
+                </label>
+                <select
+                  name="category_id"
+                  required
+                  value={formData.category_id}
+                  onChange={handleChange}
+                  className="w-full px-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                >
+                  <option value="" className="bg-[#001144]">Selecione uma categoria</option>
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.id} className="bg-[#001144]">
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-200 mb-2">
+                  WhatsApp de Atendimento *
+                </label>
+                <div className="relative">
+                  <MessageSquare className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    name="whatsapp"
+                    type="text"
+                    required
+                    placeholder="(00) 00000-0000"
+                    value={formData.whatsapp}
+                    onChange={handleChange}
+                    className="w-full pl-10 pr-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-200 mb-2">
+                  Logo / Imagem da Fachada
+                </label>
+                <div className="flex flex-col sm:flex-row items-center gap-4">
+                  <div className="relative flex-1 w-full">
+                    <Camera className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      name="thumbnail_url"
+                      type="text"
+                      placeholder="URL da imagem ou selecione um arquivo"
+                      value={formData.thumbnail_url}
+                      onChange={handleChange}
+                      className="w-full pl-10 pr-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"
+                    />
+                  </div>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="w-full sm:w-auto px-6 py-3 bg-white/10 border border-white/20 rounded-lg text-white hover:bg-white/20 transition-colors disabled:opacity-50 flex items-center justify-center"
+                  >
+                    {uploading ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    ) : (
+                      <Camera className="w-4 h-4 mr-2" />
+                    )}
+                    {uploading ? 'Enviando...' : 'Escolher Arquivo'}
+                  </button>
+                </div>
+                {formData.thumbnail_url && (
+                  <div className="mt-2 text-xs text-[#70ff00] flex items-center">
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    Imagem selecionada com sucesso!
+                  </div>
+                )}
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-200 mb-2">
+                  Breve Descrição do Negócio *
+                </label>
+                <textarea
+                  name="description"
+                  required
+                  rows={3}
+                  placeholder="Ex: Oferecemos as melhores pizzas artesanais da região com ingredientes selecionados."
+                  value={formData.description}
+                  onChange={handleChange}
+                  className="w-full px-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent resize-none"
+                />
+              </div>
+
+              <div className="md:col-span-2 border-t border-white/10 pt-6 mt-2">
+                <label className="block text-sm font-medium text-gray-200 mb-2">
+                  Site ou Instagram (Opcional)
                 </label>
                 <input
                   name="site_instagram"
                   type="text"
+                  placeholder="@seu_perfil ou www.site.com.br"
                   value={formData.site_instagram}
                   onChange={handleChange}
                   className="w-full px-3 py-3 border border-white/20 rounded-lg placeholder-gray-400 text-white bg-white/10 backdrop-blur-md focus:outline-none focus:ring-2 focus:ring-[#70ff00] focus:border-transparent"

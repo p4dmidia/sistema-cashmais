@@ -1,9 +1,27 @@
 import { Link } from 'react-router';
-import { ArrowRight, Users, TrendingUp, Shield, Smartphone, DollarSign, Store } from 'lucide-react';
-import { useEffect } from 'react';
+import { ArrowRight, Users, TrendingUp, Shield, Smartphone, DollarSign, Store, MapPin, Star } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 export default function Home() {
-  useEffect(() => {}, [])
+  const [companies, setCompanies] = useState<any[]>([]);
+  const [loadingCompanies, setLoadingCompanies] = useState(true);
+
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        const response = await fetch('/api/companies/public');
+        if (response.ok) {
+          const data = await response.json();
+          setCompanies(data.companies || []);
+        }
+      } catch (error) {
+        console.error('Error fetching companies:', error);
+      } finally {
+        setLoadingCompanies(false);
+      }
+    };
+    fetchCompanies();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011]">
@@ -20,6 +38,13 @@ export default function Home() {
             </div>
 
             <div className="flex items-center space-x-4">
+              <Link
+                to="/servicos"
+                className="hidden md:flex items-center px-4 py-2 text-white/80 hover:text-[#70ff00] transition-colors font-medium text-sm"
+              >
+                Serviços
+              </Link>
+              
               <Link
                 to="/empresa/cadastro"
                 className="hidden sm:inline-flex items-center px-4 py-2 bg-white/10 backdrop-blur-md border border-[#70ff00] text-[#70ff00] rounded-lg font-semibold hover:bg-[#70ff00] hover:text-white hover:scale-[1.02] transition-all duration-200 text-sm"
@@ -63,13 +88,13 @@ export default function Home() {
                   Começar Agora
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Link>
-                
+
                 <Link
-                  to="/empresa/login"
-                  className="inline-flex items-center justify-center px-8 py-4 bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-xl font-bold text-lg hover:bg-white/20 hover:scale-[1.02] transition-all duration-200"
+                  to="/servicos"
+                  className="inline-flex items-center justify-center px-8 py-4 bg-white/5 backdrop-blur-md border border-[#70ff00] text-[#70ff00] rounded-xl font-bold text-lg hover:bg-[#70ff00] hover:text-white hover:scale-[1.02] transition-all duration-200 shadow-lg shadow-[#70ff00]/10"
                 >
                   <Store className="w-5 h-5 mr-2" />
-                  Sou Empresa
+                  Diretório de Serviços
                 </Link>
               </div>
 
@@ -211,6 +236,75 @@ export default function Home() {
               </p>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Partners Section */}
+      <section className="py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
+            <div>
+              <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+                Empresas <span className="text-[#70ff00]">Parceiras</span>
+              </h2>
+              <p className="text-xl text-gray-400 max-w-2xl">
+                Conheça alguns dos estabelecimentos onde você já pode ganhar cashback e construir sua rede.
+              </p>
+            </div>
+            <Link
+              to="/servicos"
+              className="inline-flex items-center text-[#70ff00] font-semibold hover:underline"
+            >
+              Ver todas as empresas
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Link>
+          </div>
+
+          {loadingCompanies ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="bg-white/5 rounded-2xl h-64 animate-pulse border border-white/10" />
+              ))}
+            </div>
+          ) : companies.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {companies.slice(0, 8).map((company) => (
+                <div 
+                  key={company.id}
+                  className="group bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 overflow-hidden hover:border-[#70ff00]/50 transition-all duration-300"
+                >
+                  <div className="h-40 overflow-hidden relative">
+                    <img 
+                      src={company.thumbnail_url || "https://images.unsplash.com/photo-1578916171728-46686eac8d58?q=80&w=800&auto=format&fit=crop"} 
+                      alt={company.nome_fantasia}
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                    />
+                    <div className="absolute top-2 right-2 bg-[#70ff00] text-[#001144] font-bold px-2 py-1 rounded-lg text-sm shadow-lg">
+                      {company.company_cashback_config?.[0]?.cashback_percentage || 5}% back
+                    </div>
+                  </div>
+                  <div className="p-5">
+                    <div className="flex items-center text-xs text-[#70ff00] font-bold uppercase tracking-wider mb-2">
+                      <Store className="w-3 h-3 mr-1" />
+                      {company.company_categories?.[0]?.categories?.name || 'Varejo'}
+                    </div>
+                    <h3 className="text-white font-bold text-lg mb-1 truncate">
+                      {company.nome_fantasia}
+                    </h3>
+                    <div className="flex items-center text-gray-400 text-sm">
+                      <MapPin className="w-3 h-3 mr-1" />
+                      {company.address_city}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+             <div className="text-center py-20 bg-white/5 rounded-3xl border border-dashed border-white/20">
+                <Store className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400">Novas empresas parceiras estão chegando!</p>
+             </div>
+          )}
         </div>
       </section>
 

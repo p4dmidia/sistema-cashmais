@@ -37,6 +37,30 @@ const PurchaseSchema = z.object({
   purchase_value: z.number().min(0.01),
 });
 
+const CompanyProfileSchema = z.object({
+  nome_fantasia: z.string().optional(),
+  razao_social: z.string().optional(),
+  cnpj: z.string().optional(),
+  email: z.string().email().optional(),
+  telefone: z.string().optional(),
+  responsavel: z.string().optional(),
+  thumbnail_url: z.string().optional(),
+  address_street: z.string().optional(),
+  address_number: z.string().optional(),
+  address_complement: z.string().optional(),
+  address_district: z.string().optional(),
+  address_city: z.string().optional(),
+  address_state: z.string().optional(),
+  address_zip: z.string().optional(),
+  site_instagram: z.string().optional(),
+  site_url: z.string().optional(),
+  description: z.string().optional(),
+  category: z.string().optional(),
+  whatsapp: z.string().optional(),
+  latitude: z.union([z.number(), z.string()]).nullable().optional(),
+  longitude: z.union([z.number(), z.string()]).nullable().optional(),
+});
+
 // Helper function to create Supabase client
 function createSupabaseClient(c: any) {
   return createClient(
@@ -379,15 +403,76 @@ app.get('/api/empresa/me', async (c) => {
     return c.json({ error: 'Não autorizado' }, 401);
   }
 
+  // Buscar os dados MAIS RECENTES da empresa diretamente na tabela companies
+  const supabase = createSupabaseClient(c);
+  const { data: company, error } = await supabase
+    .from('companies')
+    .select('*')
+    .eq('id', session.companies.id)
+    .single();
+
+  if (error || !company) {
+    return c.json({ error: 'Erro ao carregar dados da empresa' }, 500);
+  }
+
+  const { senha_hash, ...companyData } = company;
   return c.json({
     company: {
-      id: session.companies.id,
-      razao_social: session.companies.razao_social,
-      nome_fantasia: session.companies.nome_fantasia,
-      email: session.companies.email,
+      ...companyData,
       role: 'company'
     }
   });
+});
+
+// Update company profile
+app.put('/api/empresa/perfil', async (c) => {
+  const session = await getCompanySession(c);
+  if (!session) {
+    return c.json({ error: 'Não autorizado' }, 401);
+  }
+
+  try {
+    const data = CompanyProfileSchema.parse(await c.req.json());
+    const supabase = createSupabaseClient(c);
+
+    const updateData: any = {
+      updated_at: new Date().toISOString()
+    };
+
+    // Map all fields that might be updated
+    const fields = [
+      'nome_fantasia', 'razao_social', 'cnpj', 'email', 'telefone', 'responsavel',
+      'thumbnail_url', 'address_street', 'address_number', 'address_complement',
+      'address_district', 'address_city', 'address_state', 'address_zip',
+      'site_instagram', 'site_url', 'description', 'category', 'latitude', 'longitude', 'whatsapp'
+    ];
+
+    fields.forEach(field => {
+      if (data[field as keyof typeof data] !== undefined) {
+        let val = data[field as keyof typeof data];
+        // Converter coordenadas para número se vierem como string
+        if ((field === 'latitude' || field === 'longitude') && typeof val === 'string' && val !== '') {
+          val = parseFloat(val);
+        }
+        updateData[field] = val;
+      }
+    });
+
+    const { error } = await supabase
+      .from('companies')
+      .update(updateData)
+      .eq('id', session.companies.id);
+
+    if (error) {
+      console.error('Update company profile error:', error);
+      return c.json({ error: 'Erro ao atualizar perfil', detail: error.message }, 500);
+    }
+
+    return c.json({ success: true, message: 'Perfil atualizado com sucesso!' });
+  } catch (error: any) {
+    console.error('Update company profile error:', error);
+    return c.json({ error: 'Dados inválidos ou erro interno', detail: String(error.message || error) }, 400);
+  }
 });
 
 // Check cashier session

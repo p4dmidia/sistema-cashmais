@@ -5,3 +5,30 @@
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
+
+@layer components {
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_0_rgba(0,0,0,0.37)];
+  }
+
+  .glass-morphism {
+    @apply bg-white/10 backdrop-blur-lg border border-white/20 shadow-xl;
+  }
+
+  .premium-glow {
+    @apply relative overflow-hidden;
+  }
+
+  .premium-glow::after {
+    content: '';
+    @apply absolute -inset-[100%] bg-gradient-to-r from-transparent via-white/5 to-transparent -rotate-45 transition-all duration-700 pointer-events-none;
+  }
+
+  .premium-glow:hover::after {
+    @apply left-[100%];
+  }
+
+  .icon-glow {
+    filter: drop-shadow(0 0 8px rgba(112, 255, 0, 0.4));
+  }
+}

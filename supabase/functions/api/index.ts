@@ -41,18 +41,16 @@ function getCookieOptions(c: any, maxAge: number) {
 }
 
 function getAuthToken(c: any, sessionName: string) {
-  const xSession = c.req.header('x-session-token');
+  const xSession = c.req.header('x-session-token') || c.req.header('X-Session-Token');
   const cookieToken = getCookie(c, sessionName);
-  const authHeader = c.req.header('authorization');
+  const authHeader = c.req.header('authorization') || c.req.header('Authorization');
   let bearerToken = authHeader?.toLowerCase().startsWith('bearer ') ? authHeader.slice(7).trim() : null;
-  
-  // Ignore tokens that look like Supabase JWTs (Anon Keys)
+
   if (bearerToken && (bearerToken.length > 100 || bearerToken.startsWith('eyJ'))) {
     bearerToken = null;
   }
 
-  const token = xSession || cookieToken || bearerToken || null;
-  console.log(`[AUTH_DEBUG] sessionName=${sessionName} xSession=${xSession ? 'YES' : 'NO'} cookie=${cookieToken ? 'YES' : 'NO'} bearer=${bearerToken ? 'YES' : 'NO'} token_found=${token ? 'YES' : 'NO'}`);
+  const token = xSession || bearerToken || cookieToken || null;
   return token;
 }
 
@@ -63,20 +61,8 @@ async function releaseBlockedIfQualified(client: any, affiliateId: number) {
     .eq('sponsor_id', affiliateId)
     .eq('is_active', true)
   if (!count || count < 3) return
-  const { data: profile } = await client
-    .from('user_profiles')
-    .select('id')
-    .eq('mocha_user_id', `affiliate_${affiliateId}`)
-    .single()
-  let profileId = (profile as any)?.id
-  if (!profileId) {
-    const { data: created } = await client
-      .from('user_profiles')
-      .insert({ mocha_user_id: `affiliate_${affiliateId}`, role: 'affiliate', is_active: true })
-      .select('id')
-      .single()
-    profileId = (created as any)?.id
-  }
+  const { data: affData } = await client.from('affiliates').select('cpf').eq('id', affiliateId).single()
+  const profileId = await ensureUserProfileExists(client, affiliateId, affData?.cpf || '')
   if (!profileId) return
   let sumBlocked = 0
   try {
@@ -152,19 +138,9 @@ async function getAffiliateSponsorSupabase(client: any, affiliateId: number) {
 }
 
 async function getOrCreateAffiliateProfileSupabase(client: any, affiliateId: number) {
-  const mochaUserId = `affiliate_${affiliateId}`
-  const { data: profile } = await client
-    .from('user_profiles')
-    .select('id')
-    .eq('mocha_user_id', mochaUserId)
-    .maybeSingle()
-  if (profile?.id) return profile
-  const { data: newProfile } = await client
-    .from('user_profiles')
-    .upsert({ mocha_user_id: mochaUserId, role: 'affiliate', is_active: true, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'mocha_user_id' })
-    .select('id')
-    .single()
-  return newProfile || null
+  const { data: affData } = await client.from('affiliates').select('cpf').eq('id', affiliateId).maybeSingle()
+  const profileId = await ensureUserProfileExists(client, affiliateId, affData?.cpf || '')
+  return profileId ? { id: profileId } : null
 }
 
 async function ensureUserProfileExists(client: any, affiliateId: string | number, cpf: string): Promise<number | null> {
@@ -226,25 +202,41 @@ async function distributeNetworkCommissionsSupabase(client: any, purchaseId: num
   let totalDistributed = 0
 
   if (customerType === 'affiliate') {
-    const { data: customer } = await client
+    const { data: customer, error: custErr } = await client
       .from('affiliates')
       .select('id, sponsor_id')
       .eq('id', customerId)
       .eq('is_active', true)
-      .single()
+      .maybeSingle()
     
+    if (custErr) console.warn('[distributeNetworkCommissionsSupabase] Error fetching customer:', custErr);
+
     if (customer) {
       let currentAffiliateId: number | null = customerId
       let currentLevel = 0
       while (currentAffiliateId && currentLevel < 10) {
         const settingsLevel = currentLevel === 0 ? 1 : currentLevel
         const lvl = settings.find((s: any) => s.level === settingsLevel) || { level: settingsLevel, percentage: 10 }
+        
+        // Safety check for amount
+        const percentage = Number(lvl.percentage || 0);
+        const amount = totalDistributable * (percentage / 100)
+        
+        if (isNaN(amount) || amount < 0) {
+           console.warn(`[distributeNetworkCommissionsSupabase] Invalid amount calculation at level ${currentLevel}:`, { totalDistributable, percentage });
+           break;
+        }
+
         const qualifies = currentLevel <= 1 ? true : await hasMinimumReferralsSupabase(client, currentAffiliateId)
-        const amount = totalDistributable * ((lvl.percentage as number) / 100)
         totalDistributed += amount
-        await recordCommissionSupabase(client, purchaseId, currentAffiliateId, currentLevel, amount, lvl.percentage as number, baseCashback, !qualifies)
+        
+        await recordCommissionSupabase(client, purchaseId, currentAffiliateId, currentLevel, amount, percentage, baseCashback, !qualifies)
+        
         const profile = await getOrCreateAffiliateProfileSupabase(client, currentAffiliateId)
-        if (profile?.id) await updateEarningsSupabase(client, profile.id, amount, !qualifies)
+        if (profile?.id) {
+          await updateEarningsSupabase(client, profile.id, amount, !qualifies)
+        }
+        
         currentAffiliateId = currentLevel === 0 ? (customer as any).sponsor_id : await getAffiliateSponsorSupabase(client, currentAffiliateId)
         currentLevel++
         if (!currentAffiliateId) break
@@ -252,9 +244,18 @@ async function distributeNetworkCommissionsSupabase(client: any, purchaseId: num
     }
   }
 
-  const undistributed = totalDistributable - totalDistributed
-  const finalCashmaisShare = baseCashback * 0.30 + undistributed
-  await client.from('commission_distributions').insert({ purchase_id: purchaseId, affiliate_id: 0, level: 999, commission_amount: finalCashmaisShare, commission_percentage: 0, base_cashback: baseCashback, created_at: new Date().toISOString() })
+  const undistributed = Math.max(0, totalDistributable - totalDistributed)
+  const finalCashmaisShare = (baseCashback * 0.30) + undistributed
+  
+  await client.from('commission_distributions').insert({ 
+    purchase_id: purchaseId, 
+    affiliate_id: 0, 
+    level: 999, 
+    commission_amount: finalCashmaisShare, 
+    commission_percentage: 0, 
+    base_cashback: baseCashback, 
+    created_at: new Date().toISOString() 
+  })
 }
 
 app.use('*', cors({
@@ -302,6 +303,25 @@ const CompanyRegisterSchema = z.object({
   address_state: z.string().min(2),
   address_zip: z.string().min(8),
   site_instagram: z.string().optional(),
+  description: z.string().optional(),
+  whatsapp: z.string().optional(),
+  thumbnail_url: z.string().optional(),
+  category_id: z.string().optional(),
+})
+
+const CategorySchema = z.object({
+  name: z.string().min(1),
+  icon: z.string().min(1),
+  slug: z.string().min(1),
+})
+
+const PublicProfileSchema = z.object({
+  nome_fantasia: z.string().min(1),
+  description: z.string().min(1),
+  whatsapp: z.string().min(10),
+  latitude: z.number(),
+  longitude: z.number(),
+  thumbnail_url: z.string().url().optional(),
 })
 
 app.all('/api/empresa/registrar', async (c: any) => {
@@ -318,18 +338,18 @@ async function handleCompanyRegister(c: any) {
     const body = await c.req.json()
     const parsed = CompanyRegisterSchema.safeParse(body)
     if (!parsed.success) return c.json({ error: 'Dados inválidos', details: parsed.error.format() }, 400)
-    
+
     const data = parsed.data
     const supabase = createSupabase()
     const cleanCnpj = String(data.cnpj).replace(/\D/g, '')
-    
+
     if (cleanCnpj.length !== 14 || /^([0-9])\1{13}$/.test(cleanCnpj)) {
       return c.json({ error: 'CNPJ inválido' }, 400)
     }
 
     const { data: existingEmail } = await supabase.from('companies').select('id').eq('email', data.email).maybeSingle()
     if (existingEmail) return c.json({ error: 'Email já cadastrado' }, 409)
-    
+
     const { data: existingCnpj } = await supabase.from('companies').select('id').eq('cnpj', cleanCnpj).maybeSingle()
     if (existingCnpj) return c.json({ error: 'CNPJ já cadastrado' }, 409)
 
@@ -352,6 +372,9 @@ async function handleCompanyRegister(c: any) {
         address_state: data.address_state,
         address_zip: String(data.address_zip).replace(/\D/g, ''),
         site_instagram: data.site_instagram || '',
+        description: data.description || '',
+        whatsapp: String(data.whatsapp || '').replace(/\D/g, ''),
+        thumbnail_url: data.thumbnail_url || '',
         is_active: true
       })
       .select()
@@ -359,6 +382,13 @@ async function handleCompanyRegister(c: any) {
 
     if (companyError || !newCompany) {
       return c.json({ error: 'Erro ao cadastrar empresa', details: companyError?.message }, 500)
+    }
+
+    if (data.category_id) {
+      await supabase.from('company_categories').insert({
+        company_id: (newCompany as any).id,
+        category_id: data.category_id
+      })
     }
 
     await supabase.from('company_cashback_config').insert({ company_id: (newCompany as any).id, cashback_percentage: 5.0 })
@@ -379,7 +409,7 @@ async function handleAffiliateRegister(c: any) {
   try {
     const body = await c.req.json()
     console.log('[AFFILIATE_REGISTER] Request body received:', JSON.stringify({ ...body, password: '***' }))
-    
+
     const parsed = z.object({
       full_name: z.string().min(1),
       cpf: z.string().min(11),
@@ -388,18 +418,18 @@ async function handleAffiliateRegister(c: any) {
       password: z.string().min(6),
       referral_code: z.string().nullable().optional(),
     }).safeParse(body)
-    
+
     if (!parsed.success) {
-       console.log('[AFFILIATE_REGISTER] Validation failed:', parsed.error.format())
-       return c.json({ error: 'Dados inválidos', field_errors: parsed.error.flatten().fieldErrors }, 400)
+      console.log('[AFFILIATE_REGISTER] Validation failed:', parsed.error.format())
+      return c.json({ error: 'Dados inválidos', field_errors: parsed.error.flatten().fieldErrors }, 400)
     }
-    
+
     const client = createSupabase();
-    
+
     // 1. Criptografar a senha para o banco de dados (bcrypt)
     // Isso garante consistência com o login_affiliate e o cadastro de empresas
     const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-    
+
     // 2. Resolver o Patrocinador Raiz pelo código de indicação do link
     console.log('[AFFILIATE_REGISTER] Resolving root sponsor...')
     const { data: rootSponsor, error: sponsorErr } = await client
@@ -407,25 +437,25 @@ async function handleAffiliateRegister(c: any) {
       .select('id, full_name, referral_code')
       .eq('referral_code', parsed.data.referral_code || '')
       .maybeSingle()
-    
+
     let targetParentId: number | null = null
     let targetSlot: number | null = null
-    
+
     if (rootSponsor) {
-       console.log(`[AFFILIATE_REGISTER] Root Sponsor found: ${rootSponsor.full_name} (ID: ${rootSponsor.id})`)
-       
-       // 3. Buscar preferência e calcular posicionamento (Spillover)
-       const pref = await getSponsorPreference(client, rootSponsor.id)
-       console.log(`[AFFILIATE_REGISTER] Sponsor preference: ${pref}`)
-       
-       const placement = await findPlacementTargetAndSlot(client, rootSponsor.id, pref)
-       targetParentId = placement.parentId
-       targetSlot = placement.slot
-       console.log(`[AFFILIATE_REGISTER] Placement resolved: Parent=${targetParentId}, Slot=${targetSlot}`)
+      console.log(`[AFFILIATE_REGISTER] Root Sponsor found: ${rootSponsor.full_name} (ID: ${rootSponsor.id})`)
+
+      // 3. Buscar preferência e calcular posicionamento (Spillover)
+      const pref = await getSponsorPreference(client, rootSponsor.id)
+      console.log(`[AFFILIATE_REGISTER] Sponsor preference: ${pref}`)
+
+      const placement = await findPlacementTargetAndSlot(client, rootSponsor.id, pref)
+      targetParentId = placement.parentId
+      targetSlot = placement.slot
+      console.log(`[AFFILIATE_REGISTER] Placement resolved: Parent=${targetParentId}, Slot=${targetSlot}`)
     } else {
-       console.warn('[AFFILIATE_REGISTER] No root sponsor found. Registering as top-level.')
-       // Se não tem padrinho, o sistema pode decidir o que fazer. 
-       // Aqui vamos deixar como null e a RPC tratará como lixo/topo se permitido, ou erro se obrigatório.
+      console.warn('[AFFILIATE_REGISTER] No root sponsor found. Registering as top-level.')
+      // Se não tem padrinho, o sistema pode decidir o que fazer. 
+      // Aqui vamos deixar como null e a RPC tratará como lixo/topo se permitido, ou erro se obrigatório.
     }
 
     // 4. Chamar a RPC V3 com o Parente Direto e Slot calculados
@@ -442,13 +472,13 @@ async function handleAffiliateRegister(c: any) {
 
     if (rpcError) {
       console.error('[AFFILIATE_REGISTER] RPC Error:', rpcError);
-      return c.json({ 
-        error: 'Erro ao cadastrar afiliado', 
+      return c.json({
+        error: 'Erro ao cadastrar afiliado',
         details: rpcError.message,
-        hint: rpcError.hint 
+        hint: rpcError.hint
       }, 500);
     }
-    
+
     console.log('[AFFILIATE_REGISTER] Success:', result)
     return c.json({ success: true, data: result });
   } catch (e) {
@@ -505,14 +535,14 @@ app.post('/api/admin/login', async (c) => {
     const parsed = AdminLoginSchema.safeParse(body)
     if (!parsed.success) return c.json({ error: 'Dados inválidos' }, 400)
     const { username, password } = parsed.data
-    
+
     // SANITY CHECK
     const testHash = await bcrypt.hash('admin123', 12)
     const testOk = await bcrypt.compare('admin123', testHash)
     console.log(`[ADMIN_LOGIN] SANITY CHECK: ${testOk ? 'PASSED' : 'FAILED'} | Local Generated Hash: ${testHash}`)
-    
+
     console.log(`[ADMIN_LOGIN] Attempting login for: [${username}] | Pass length: ${password?.length}`)
-    
+
     const supabase = createSupabase()
     const { data: adminUser, error } = await supabase
       .schema('public')
@@ -521,46 +551,46 @@ app.post('/api/admin/login', async (c) => {
       .eq('username', username)
       .eq('is_active', true)
       .maybeSingle()
-      
+
     if (error || !adminUser) {
       console.log('[ADMIN_LOGIN] User not found or DB error:', error || 'User missing')
       return c.json({ error: 'Usuário não encontrado' }, 404)
     }
-    
+
     const ok = await bcrypt.compare(password, (adminUser as any).password_hash)
     console.log(`[ADMIN_LOGIN] Bcrypt result: ${ok} | Pass used: ${password} | Hash in DB: ${adminUser.password_hash}`)
-    
+
     if (!ok) {
       return c.json({ error: 'Credenciais inválidas' }, 401)
     }
-    
+
     const sessionToken = crypto.randomUUID()
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
     const { error: sessErr } = await supabase
       .schema('public')
       .from('admin_sessions')
       .insert({ admin_user_id: (adminUser as any).id, session_token: sessionToken, expires_at: expiresAt })
-    
+
     if (sessErr) {
       console.log('[ADMIN_LOGIN] admin_sessions insert error:', sessErr)
       return c.json({ error: 'Erro interno do servidor' }, 500)
     }
-    
+
     setCookie(c, 'admin_session', sessionToken, getCookieOptions(c, 24 * 60 * 60))
     await supabase
       .schema('public')
       .from('admin_audit_logs')
       .insert({ admin_user_id: (adminUser as any).id, action: 'LOGIN', entity_type: 'admin_session' })
-      
-    return c.json({ 
-      success: true, 
-      token: sessionToken, 
-      admin: { 
-        id: (adminUser as any).id, 
-        username: (adminUser as any).username, 
-        email: (adminUser as any).email, 
-        full_name: (adminUser as any).full_name 
-      } 
+
+    return c.json({
+      success: true,
+      token: sessionToken,
+      admin: {
+        id: (adminUser as any).id,
+        username: (adminUser as any).username,
+        email: (adminUser as any).email,
+        full_name: (adminUser as any).full_name
+      }
     })
   } catch (e) {
     console.error('[ADMIN_LOGIN] Critical Exception:', e)
@@ -674,14 +704,14 @@ app.get('/admin/dashboard/stats', async (c) => {
       .lt('created_at', new Date(year, now.getMonth() + 1, 1).toISOString().split('T')[0])
     const approvedAmount = (approvedWithdrawals || []).reduce((s: number, w: any) => s + Number(w.net_amount || 0), 0)
 
-    return c.json({ 
-      stats: { 
-        totalAffiliates: totalAffiliates || 0, 
-        totalCompanies: totalCompanies || 0, 
-        pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount }, 
+    return c.json({
+      stats: {
+        totalAffiliates: totalAffiliates || 0,
+        totalCompanies: totalCompanies || 0,
+        pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount },
         cashbackThisMonth,
-        affiliatesCommissionsMonth: approvedAmount 
-      } 
+        affiliatesCommissionsMonth: approvedAmount
+      }
     })
   } catch (e) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
@@ -733,16 +763,16 @@ app.get('/api/admin/dashboard/stats', async (c) => {
       }
     } catch { }
 
-    return c.json({ 
-      stats: { 
-        totalAffiliates: totalAffiliates || 0, 
-        totalCompanies: totalCompanies || 0, 
-        pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount }, 
-        cashbackThisMonth, 
-        affiliatesCommissionsMonth, 
-        companyReceivableMonth 
-      }, 
-      recentPurchases 
+    return c.json({
+      stats: {
+        totalAffiliates: totalAffiliates || 0,
+        totalCompanies: totalCompanies || 0,
+        pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount },
+        cashbackThisMonth,
+        affiliatesCommissionsMonth,
+        companyReceivableMonth
+      },
+      recentPurchases
     })
   } catch (e) {
   }
@@ -876,16 +906,16 @@ async function handleAdminCompanyUpdate(c: any) {
     const supabase = createSupabase()
     const { data: comp } = await supabase.from('companies').select('id').eq('id', id).single()
     if (!comp) return c.json({ error: 'Empresa não encontrada' }, 404)
-    
+
     const body = await c.req.json()
     const updateData: any = {}
-    
+
     const fields = [
-      'nome_fantasia', 'razao_social', 'telefone', 'responsavel', 'site_instagram', 
-      'address_street', 'address_number', 'address_complement', 'address_district', 
+      'nome_fantasia', 'razao_social', 'telefone', 'responsavel', 'site_instagram',
+      'address_street', 'address_number', 'address_complement', 'address_district',
       'address_city', 'address_state', 'address_zip'
     ]
-    
+
     fields.forEach(f => {
       if (body[f] !== undefined) updateData[f] = body[f]
     })
@@ -899,7 +929,7 @@ async function handleAdminCompanyUpdate(c: any) {
       .from('companies')
       .update({ ...updateData, updated_at: new Date().toISOString() })
       .eq('id', id)
-      
+
     if (error) return c.json({ error: 'Erro ao atualizar empresa', details: error.message }, 500)
     return c.json({ success: true })
   } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
@@ -958,11 +988,11 @@ async function handleAdminWithdrawals(c: any) {
     const page = parseInt(c.req.query('page') || '1')
     const limit = parseInt(c.req.query('limit') || '20')
     const offset = (page - 1) * limit
-    
+
     console.log(`[ADMIN_WITHDRAWALS_DEBUG] Status recebido: "${rawStatus}", Status processado: "${status}", Page: ${page}`);
-    
+
     const supabase = createSupabase()
-    
+
     // Change: User left join (remove !inner) so records appear even if profile is missing
     const { data: rows, count, error: countErr } = await supabase
       .from('withdrawals')
@@ -970,7 +1000,7 @@ async function handleAdminWithdrawals(c: any) {
       .eq('status', status)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
-      
+
     if (countErr) {
       console.error('[ADMIN_WITHDRAWALS] Fetch error:', countErr)
       return c.json({ error: 'Erro ao buscar saques' }, 500)
@@ -998,36 +1028,36 @@ async function handleAdminWithdrawals(c: any) {
         .from('affiliates')
         .select('id, full_name, cpf, email')
         .in('id', activeAffIds);
-      
+
       (affiliates || []).forEach(a => affiliateMap.set(a.id, a));
     }
 
     for (const w of rowsWithProfile) {
       const aff = w.affId ? affiliateMap.get(w.affId) : null;
       const affiliateInfo = aff || { full_name: 'N/A', cpf: 'N/A', email: 'N/A' };
-      
-      items.push({ 
-        id: (w as any).id, 
-        amount_requested: Number((w as any).amount_requested || 0), 
-        fee_amount: Number((w as any).fee_amount || 0), 
-        net_amount: Number((w as any).net_amount || 0), 
-        status: (w as any).status, 
-        pix_key: (w as any).pix_key || '', 
-        created_at: (w as any).created_at, 
-        full_name: affiliateInfo.full_name, 
-        cpf: affiliateInfo.cpf, 
-        email: affiliateInfo.email 
+
+      items.push({
+        id: (w as any).id,
+        amount_requested: Number((w as any).amount_requested || 0),
+        fee_amount: Number((w as any).fee_amount || 0),
+        net_amount: Number((w as any).net_amount || 0),
+        status: (w as any).status,
+        pix_key: (w as any).pix_key || '',
+        created_at: (w as any).created_at,
+        full_name: affiliateInfo.full_name,
+        cpf: affiliateInfo.cpf,
+        email: affiliateInfo.email
       });
     }
 
-    return c.json({ 
-      withdrawals: items, 
-      pagination: { 
-        page, 
-        limit, 
-        total: count || 0, 
-        totalPages: Math.ceil((count || 0) / limit) 
-      } 
+    return c.json({
+      withdrawals: items,
+      pagination: {
+        page,
+        limit,
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit)
+      }
     })
   } catch (e) {
     console.error('[ADMIN_WITHDRAWALS] Unexpected error:', e)
@@ -1133,12 +1163,12 @@ app.post('/api/admin/invoices/generate', async (c) => {
     // 4. Monta Payload do PagBank
     const pagbankToken = Deno.env.get('PAGBANK_TOKEN')
     if (!pagbankToken) return c.json({ error: 'Erro de configuração: Token PagBank ausente' }, 500)
-    
+
     // Formata telefone (PagBank exige area=2 e number=8|9)
     const rawPhone = String((company as any).telefone || '').replace(/\D/g, '')
     const area = rawPhone.substring(0, 2)
     const number = rawPhone.substring(2).substring(0, 9)
-    
+
     // Formata CPF/CNPJ (PagBank exige estrictamente 11 ou 14 dígitos)
     const taxId = String((company as any).cnpj || '').replace(/\D/g, '').substring(0, 14)
     const customerName = String((company as any).nome_fantasia || (company as any).razao_social || 'Empresa').substring(0, 100).trim()
@@ -1509,7 +1539,7 @@ app.patch('/api/admin/affiliates/:id', async (c) => {
 
     const { data: exists } = await supabase.from('affiliates').select('id').eq('id', numId).single()
     if (!exists) return c.json({ error: 'Afiliado não encontrado' }, 404)
-    
+
     // Removendo updated_at por segurança (caso a coluna não exista) e focando nos dados enviados
     const { error } = await supabase.from('affiliates').update(update).eq('id', numId)
     if (error) {
@@ -1741,14 +1771,14 @@ async function findPlacementTargetAndSlot(supabase: any, rootSponsorId: number, 
     while (queue.length && depth <= maxDepth) {
       const current = queue.shift() as number
       const slots = await getChildrenBySlot(supabase, current)
-      
+
       // Encontra o primeiro slot livre (undefined)
       for (let i = 0; i < 3; i++) {
         if (slots[i] === undefined) {
           return { parentId: current, slot: i }
         }
       }
-      
+
       // Adiciona filhos à fila para busca por nível (BFS)
       for (const c of slots) {
         if (typeof c === 'number') queue.push(c)
@@ -1762,7 +1792,7 @@ async function findPlacementTargetAndSlot(supabase: any, rootSponsorId: number, 
   const idx = LEG_TO_SLOT[preference as 'left' | 'center' | 'right']
   let currentId = rootSponsorId
   let level = 0
-  
+
   while (level <= maxDepth) {
     const { data: child } = await supabase
       .from('affiliates')
@@ -1771,18 +1801,18 @@ async function findPlacementTargetAndSlot(supabase: any, rootSponsorId: number, 
       .eq('is_active', true)
       .eq('position_slot', idx)
       .maybeSingle()
-      
+
     const childId = (child as any)?.id ?? null
     if (!childId) {
       // Slot encontrado vago nesta perna
       return { parentId: currentId, slot: idx }
     }
-    
+
     // Continua descendo na mesma perna
     currentId = childId
     level++
   }
-  
+
   return { parentId: rootSponsorId, slot: 0 }
 }
 
@@ -2196,14 +2226,14 @@ app.post('/api/withdrawals/request', async (c) => {
     if (updateErr) return c.json({ error: 'Erro ao processar saldo. Tente novamente.' }, 500)
     const { error: insertErr } = await supabase
       .from('withdrawals')
-      .insert({ 
-        user_id: profileId, 
-        amount_requested: amount, 
+      .insert({
+        user_id: profileId,
+        amount_requested: amount,
         fee_amount: 0,
         net_amount: amount,
-        status: 'pending', 
-        pix_key: pixKey, 
-        created_at: new Date().toISOString() 
+        status: 'pending',
+        pix_key: pixKey,
+        created_at: new Date().toISOString()
       })
     if (insertErr) {
       console.error('[WITHDRAWAL_ERROR] Insert error:', insertErr)
@@ -2269,9 +2299,9 @@ app.post('/api/withdrawals', async (c) => {
     const serverDay = now.getDate()
     const clientDay = Number(body?.p_current_day)
     const effectiveDay = !isNaN(clientDay) ? clientDay : serverDay
-    
+
     console.log(`[WITHDRAWAL_DEBUG] ServerDay: ${serverDay}, ClientDay: ${clientDay}, EffectiveDay: ${effectiveDay}`)
-    
+
     if (effectiveDay !== 10 && effectiveDay !== 15) {
       return c.json({ error: 'Solicitações de saque permitidas apenas nos dias 10 e 15 de cada mês.' }, 400)
     }
@@ -2289,7 +2319,7 @@ app.post('/api/withdrawals', async (c) => {
       })
       .select()
       .maybeSingle()
-    
+
     if (wErr || !withdrawal) {
       console.error('[WITHDRAWAL_ERROR] Insert error:', wErr)
       return c.json({ error: 'Erro ao criar solicitação de saque em nossa base.' }, 500)
@@ -2518,9 +2548,9 @@ app.post('/api/empresa/login', async (c) => {
     const supabase = createSupabase()
     let email = ''
     let senha = ''
-    if ((body as any).email) { 
-      email = (body as any).email; 
-      senha = (body as any).senha 
+    if ((body as any).email) {
+      email = (body as any).email;
+      senha = (body as any).senha
     }
     else if ((body as any).cnpj) {
       const cleanCnpj = String((body as any).cnpj).replace(/\D/g, '')
@@ -2540,21 +2570,21 @@ app.post('/api/empresa/login', async (c) => {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
     await supabase.from('company_sessions').insert({ company_id: (company as any).id, session_token: sessionToken, expires_at: expiresAt.toISOString() })
     setCookie(c, 'company_session', sessionToken, getCookieOptions(c, 24 * 60 * 60))
-    return c.json({ 
-      success: true, 
-      token: sessionToken, 
-      company: { 
-        id: (company as any).id, 
-        razao_social: (company as any).razao_social, 
-        nome_fantasia: (company as any).nome_fantasia, 
-        email: (company as any).email, 
+    return c.json({
+      success: true,
+      token: sessionToken,
+      company: {
+        id: (company as any).id,
+        razao_social: (company as any).razao_social,
+        nome_fantasia: (company as any).nome_fantasia,
+        email: (company as any).email,
         address_street: (company as any).address_street,
         address_number: (company as any).address_number,
         address_city: (company as any).address_city,
         address_state: (company as any).address_state,
         address_zip: (company as any).address_zip,
-        role: 'company' 
-      } 
+        role: 'company'
+      }
     })
   } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
 })
@@ -2567,35 +2597,47 @@ app.get('/api/empresa/me', async (c) => {
     const supabase = createSupabase()
     const { data: session, error: sessError } = await supabase
       .from('company_sessions')
-      .select('*, companies!inner(id, razao_social, nome_fantasia, email, telefone, responsavel, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip)')
+      .select('*, companies!inner(id, razao_social, nome_fantasia, email, telefone, responsavel, address_street, address_number, address_complement, address_district, address_city, address_state, address_zip, description, whatsapp, thumbnail_url, latitude, longitude)')
       .eq('session_token', token)
       .gt('expires_at', new Date().toISOString())
       .single()
-    
     if (sessError || !session) {
       console.log(`[COMPANY_ME] Session lookup failed: ${sessError?.message || 'Not found or expired'}`)
       return c.json({ error: 'Não autorizado (Sessão inválida)', debug_info: sessError?.message }, 401)
     }
+
     const comp = (session as any).companies
-    return c.json({ 
-      id: comp.id, 
-      razao_social: comp.razao_social, 
-      nome_fantasia: comp.nome_fantasia, 
-      email: comp.email, 
-      telefone: comp.telefone,
-      responsavel: comp.responsavel,
-      address_street: comp.address_street,
-      address_number: comp.address_number,
-      address_complement: comp.address_complement,
-      address_district: comp.address_district,
-      address_city: comp.address_city,
-      address_state: comp.address_state,
-      address_zip: comp.address_zip,
-      role: 'company' 
+    
+    // Buscar dados mais recentes para garantir que o 401 não aconteça por dados dessincronizados
+    const { data: latestCompany } = await supabase.from('companies').select('*').eq('id', comp.id).single()
+    const finalComp = latestCompany || comp
+
+    return c.json({
+      company: {
+        id: finalComp.id,
+        razao_social: finalComp.razao_social,
+        nome_fantasia: finalComp.nome_fantasia,
+        email: finalComp.email,
+        telefone: finalComp.telefone,
+        responsavel: finalComp.responsavel,
+        address_street: finalComp.address_street,
+        address_number: finalComp.address_number,
+        address_complement: finalComp.address_complement,
+        address_district: finalComp.address_district,
+        address_city: finalComp.address_city,
+        address_state: finalComp.address_state,
+        address_zip: finalComp.address_zip,
+        description: finalComp.description,
+        whatsapp: finalComp.whatsapp,
+        thumbnail_url: finalComp.thumbnail_url,
+        latitude: finalComp.latitude,
+        longitude: finalComp.longitude,
+        role: 'company'
+      }
     })
-  } catch (e) { 
+  } catch (e) {
     console.error(`[COMPANY_ME] Catch error:`, e)
-    return c.json({ error: 'Erro interno do servidor', details: (e as any).message }, 500) 
+    return c.json({ error: 'Erro interno do servidor', details: (e as any).message }, 500)
   }
 })
 
@@ -2607,6 +2649,73 @@ app.put('/empresa/perfil', async (c) => {
 })
 
 async function handleCompanyProfileUpdate(c: any) {
+  try {
+    const token = getAuthToken(c, 'company_session')
+    if (!token) return c.json({ error: 'Não autorizado' }, 401)
+    
+    const supabase = createSupabase()
+    const { data: session, error: sessError } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+      
+    if (sessError || !session) {
+      return c.json({ error: 'Não autorizado (Sessão inválida)', details: sessError?.message }, 401)
+    }
+
+    const body = await c.req.json()
+    const updateData: any = {}
+
+    const fields = [
+      'nome_fantasia', 'razao_social', 'telefone', 'responsavel', 'site_instagram',
+      'address_street', 'address_number', 'address_complement', 'address_district',
+      'address_city', 'address_state', 'address_zip',
+      'description', 'whatsapp', 'thumbnail_url', 'latitude', 'longitude'
+    ];
+
+    fields.forEach(f => {
+      if (body[f] !== undefined) {
+        let val = body[f];
+        if ((f === 'latitude' || f === 'longitude') && typeof val === 'string' && val !== '') {
+          val = parseFloat(val);
+        }
+        updateData[f] = val;
+      }
+    });
+
+    if (updateData.telefone) updateData.telefone = String(updateData.telefone).replace(/\D/g, '')
+    if (updateData.address_zip) updateData.address_zip = String(updateData.address_zip).replace(/\D/g, '')
+
+    if (Object.keys(updateData).length === 0) return c.json({ error: 'Nenhum dado para atualizar' }, 400)
+
+    const companyId = (session as any).companies.id;
+    const { data: updated, error: updError } = await supabase
+      .from('companies')
+      .update({ ...updateData, updated_at: new Date().toISOString() })
+      .eq('id', companyId)
+      .select();
+
+    if (updError) {
+      return c.json({ error: 'Erro ao salvar no banco', details: updError.message }, 500);
+    }
+
+    return c.json({ success: true, message: 'Perfil atualizado com sucesso', data: updated?.[0] });
+  } catch (e: any) {
+    console.error('[PROFILE_UPDATE_CRITICAL]', e);
+    return c.json({ error: 'Erro crítico no servidor', message: e.message, stack: e.stack }, 500);
+  }
+}
+
+app.get('/api/empresa/galeria', async (c) => {
+  return await handleGetGallery(c)
+})
+app.get('/empresa/galeria', async (c) => {
+  return await handleGetGallery(c)
+})
+
+async function handleGetGallery(c: any) {
   const token = getAuthToken(c, 'company_session')
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
@@ -2615,36 +2724,84 @@ async function handleCompanyProfileUpdate(c: any) {
       .from('company_sessions')
       .select('*, companies!inner(id)')
       .eq('session_token', token)
-      .gt('expires_at', new Date().toISOString())
       .single()
     if (!session) return c.json({ error: 'Não autorizado' }, 401)
-    
-    const body = await c.req.json()
-    const updateData: any = {}
-    
-    const fields = [
-      'nome_fantasia', 'razao_social', 'telefone', 'responsavel', 'site_instagram', 
-      'address_street', 'address_number', 'address_complement', 'address_district', 
-      'address_city', 'address_state', 'address_zip'
-    ]
-    
-    fields.forEach(f => {
-      if (body[f] !== undefined) updateData[f] = body[f]
-    })
 
-    if (updateData.telefone) updateData.telefone = String(updateData.telefone).replace(/\D/g, '')
-    if (updateData.address_zip) updateData.address_zip = String(updateData.address_zip).replace(/\D/g, '')
+    const { data: images, error } = await supabase
+      .from('company_images')
+      .select('*')
+      .eq('company_id', (session as any).companies.id)
+      .order('order_index', { ascending: true })
 
-    if (Object.keys(updateData).length === 0) return c.json({ error: 'Nenhum dado para atualizar' }, 400)
+    if (error) return c.json({ error: 'Erro ao buscar galeria' }, 500)
+    return c.json(images)
+  } catch (e) { return c.json({ error: 'Erro interno' }, 500) }
+}
+
+app.post('/api/empresa/galeria', async (c) => {
+  return await handleAddGalleryImage(c)
+})
+app.post('/empresa/galeria', async (c) => {
+  return await handleAddGalleryImage(c)
+})
+
+async function handleAddGalleryImage(c: any) {
+  const token = getAuthToken(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+
+    const { image_url } = await c.req.json()
+    if (!image_url) return c.json({ error: 'URL da imagem é obrigatória' }, 400)
 
     const { error } = await supabase
-      .from('companies')
-      .update({ ...updateData, updated_at: new Date().toISOString() })
-      .eq('id', (session as any).companies.id)
-      
-    if (error) return c.json({ error: 'Erro ao atualizar perfil', details: error.message }, 500)
-    return c.json({ success: true, message: 'Perfil atualizado com sucesso' })
-  } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
+      .from('company_images')
+      .insert({
+        company_id: (session as any).companies.id,
+        image_url,
+        order_index: 0
+      })
+
+    if (error) return c.json({ error: 'Erro ao adicionar imagem' }, 500)
+    return c.json({ success: true })
+  } catch (e) { return c.json({ error: 'Erro interno' }, 500) }
+}
+
+app.delete('/api/empresa/galeria/:id', async (c) => {
+  return await handleDeleteGalleryImage(c)
+})
+app.delete('/empresa/galeria/:id', async (c) => {
+  return await handleDeleteGalleryImage(c)
+})
+
+async function handleDeleteGalleryImage(c: any) {
+  const token = getAuthToken(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autorizado' }, 401)
+  try {
+    const id = c.req.param('id')
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('*, companies!inner(id)')
+      .eq('session_token', token)
+      .single()
+    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+
+    const { error } = await supabase
+      .from('company_images')
+      .delete()
+      .eq('id', id)
+      .eq('company_id', (session as any).companies.id)
+
+    if (error) return c.json({ error: 'Erro ao excluir imagem' }, 500)
+    return c.json({ success: true })
+  } catch (e) { return c.json({ error: 'Erro interno' }, 500) }
 }
 
 app.post('/api/empresa/logout', async (c) => {
@@ -2717,127 +2874,162 @@ app.get('/api/caixa/me', async (c) => {
 app.post('/api/caixa/compra', async (c) => {
   const token = getAuthToken(c, 'cashier_session')
   if (!token) return c.json({ error: 'Não autorizado', error_code: 'NO_SESSION' }, 401)
+  
+  console.log('[API_COMPRA] Request received');
+
   try {
     const body = await c.req.json()
-    const rawCoupon = String((body as any)?.customer_coupon || '').trim()
-    let rawValue = (body as any)?.purchase_value
+    const rawCoupon = String(body?.customer_coupon || '').trim()
+    let rawValue = body?.purchase_value
+    
+    console.log(`[API_COMPRA] Data: coupon=${rawCoupon}, value=${rawValue}`);
+
     const parseMoney = (v: any): number => {
       if (typeof v === 'number') return v
       const s = String(v || '').trim()
       if (!s) return NaN
       const br = s.replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(/,/g, '.')
-      const n = parseFloat(br)
-      return isNaN(n) ? NaN : n
+      return parseFloat(br)
     }
+
     const purchaseValue = parseMoney(rawValue)
     if (!rawCoupon || isNaN(purchaseValue) || purchaseValue <= 0) {
-      return c.json({ error: 'Dados da compra inválidos', error_code: 'INVALID_INPUT', details: { customer_coupon: rawCoupon, purchase_value: rawValue } }, 400)
+      console.warn('[API_COMPRA] Invalid input detected');
+      return c.json({ error: 'Dados da compra inválidos', error_code: 'INVALID_INPUT' }, 400)
     }
+
     const supabase = createSupabase()
-    const { data: session } = await supabase
+    
+    // 1. Session check
+    const { data: session, error: sessErr } = await supabase
       .from('cashier_sessions')
       .select('*, company_cashiers!inner(id, cpf, companies!inner(id))')
       .eq('session_token', token)
       .gt('expires_at', new Date().toISOString())
-      .single()
+      .maybeSingle()
+
+    if (sessErr) {
+       console.error('[API_COMPRA] Session DB Error:', sessErr);
+       return c.json({ error: 'Erro ao validar sessão', details: sessErr.message }, 500);
+    }
     if (!session) return c.json({ error: 'Não autorizado', error_code: 'SESSION_EXPIRED' }, 401)
+
     const cleanCpf = rawCoupon.replace(/\D/g, '')
-    const cleanCashierCpf = String((session as any).company_cashiers.cpf).replace(/[.-]/g, '')
-    if (cleanCpf === cleanCashierCpf) return c.json({ error: 'Você não pode usar seu próprio CPF', error_code: 'OWN_CPF_BLOCKED' }, 400)
-    let { data: customer } = await supabase
+    const cleanCashierCpf = String((session as any).company_cashiers.cpf).replace(/\D/g, '')
+    
+    if (cleanCpf === cleanCashierCpf) {
+      return c.json({ error: 'Você não pode usar seu próprio CPF', error_code: 'OWN_CPF_BLOCKED' }, 400)
+    }
+
+    console.log(`[API_COMPRA] Identifying customer: ${cleanCpf}`);
+
+    // 2. Resolve Customer
+    let { data: customer, error: affErr } = await supabase
       .from('affiliates')
       .select('id, cpf, full_name, is_active')
       .eq('cpf', cleanCpf)
       .eq('is_active', true)
-      .single()
+      .maybeSingle()
+    
+    if (affErr) console.warn('[API_COMPRA] Affiliate search error:', affErr);
+
     let customerType: 'affiliate' | 'user' = 'affiliate'
     let customerData: any = customer
+
     if (!customer) {
-      const { data: userData } = await supabase
+      console.log('[API_COMPRA] Not an affiliate. Checking user_profiles...');
+      const { data: userData, error: userErr } = await supabase
         .from('user_profiles')
         .select('id, cpf, mocha_user_id, is_active')
         .eq('cpf', cleanCpf)
         .eq('is_active', true)
-        .single()
+        .maybeSingle()
+      
+      if (userErr) console.warn('[API_COMPRA] User profile search error:', userErr);
+
       if (userData) {
         customerType = 'user'
         customerData = { id: userData.id, cpf: userData.cpf, full_name: userData.mocha_user_id, is_active: userData.is_active }
       }
     }
-    if (!customerData) return c.json({ error: 'CPF não encontrado ou cliente inativo', error_code: 'CUSTOMER_NOT_FOUND', details: { cpf: cleanCpf } }, 404)
-    let { data: config } = await supabase
+
+    if (!customerData) {
+      console.warn('[API_COMPRA] Customer not found:', cleanCpf);
+      return c.json({ error: 'CPF não encontrado ou cliente inativo', error_code: 'CUSTOMER_NOT_FOUND' }, 404)
+    }
+
+    console.log(`[API_COMPRA] Processing as ${customerType}: ${customerData.full_name}`);
+
+    // 3. Cashback Config
+    let { data: config, error: cfgErr } = await supabase
       .from('company_cashback_config')
       .select('cashback_percentage')
       .eq('company_id', (session as any).company_cashiers.companies.id)
-      .single()
+      .maybeSingle()
+    
     if (!config) {
+      console.log('[API_COMPRA] Defaulting cashback to 5%');
       await supabase
         .from('company_cashback_config')
         .upsert({ company_id: (session as any).company_cashiers.companies.id, cashback_percentage: 5.0 }, { onConflict: 'company_id' })
-      const cfgRes = await supabase
+      
+      const { data: newCfg } = await supabase
         .from('company_cashback_config')
         .select('cashback_percentage')
         .eq('company_id', (session as any).company_cashiers.companies.id)
-        .single()
-      config = cfgRes.data as any
+        .maybeSingle()
+      config = newCfg as any
     }
-    const cashbackPercentage = (config as any)?.cashback_percentage ?? 5.0
+
+    const cashbackPercentage = config?.cashback_percentage ?? 5.0
     const cashbackGenerated = (purchaseValue * cashbackPercentage) / 100
-    let { data: customerCouponData } = await supabase
+
+    // 4. Coupons and Profile Resolution
+    console.log('[API_COMPRA] Resolving coupon and user profile...');
+    let { data: customerCouponData, error: coupErr } = await supabase
       .from('customer_coupons')
       .select('id, user_id, is_active, total_usage_count')
       .eq('coupon_code', cleanCpf)
       .maybeSingle()
-    // Resolve user_id for coupon (create profile for affiliate if missing)
+    
+    if (coupErr) console.error('[API_COMPRA] Coupon fetch error:', coupErr);
+
     let userIdForCoupon: number | null = customerType === 'user' ? (customerData as any).id : null
     if (customerType === 'affiliate') {
-      const { data: userProfile } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('mocha_user_id', `affiliate_${customerData.id}`)
-        .single()
-      if (userProfile) userIdForCoupon = (userProfile as any).id
-      else {
-        const { data: newProfile } = await supabase
-          .from('user_profiles')
-          .upsert({ mocha_user_id: `affiliate_${customerData.id}`, cpf: customerData.cpf, role: 'affiliate', is_active: true }, { onConflict: 'mocha_user_id' })
-          .select()
-          .single()
-        userIdForCoupon = (newProfile as any)?.id || null
-      }
+      userIdForCoupon = await ensureUserProfileExists(supabase, customerData.id, customerData.cpf)
     }
+
     if (!customerCouponData) {
-      const { data: inserted } = await supabase
+      console.log('[API_COMPRA] Creating new coupon for CPF:', cleanCpf);
+      const { data: inserted, error: insCoupErr } = await supabase
         .from('customer_coupons')
-        .insert({ coupon_code: cleanCpf, user_id: userIdForCoupon, is_active: true })
+        .insert({ coupon_code: cleanCpf, user_id: userIdForCoupon, is_active: true, cpf: cleanCpf, affiliate_id: customerType === 'affiliate' ? customerData.id : null })
         .select()
-        .single()
-      customerCouponData = inserted
-      if (customerCouponData) {
-        await supabase
-          .from('customer_coupons')
-          .update({ cpf: cleanCpf, affiliate_id: customerType === 'affiliate' ? customerData.id : null })
-          .eq('id', (customerCouponData as any).id)
+        .maybeSingle()
+      
+      if (insCoupErr) {
+        console.error('[API_COMPRA] Failed to insert coupon:', insCoupErr);
+        // If conflict error, try to fetch it again
+        if (insCoupErr.code === '23505' || String(insCoupErr.message).includes('already exists')) {
+           const { data: retry } = await supabase.from('customer_coupons').select('id, user_id, is_active, total_usage_count').eq('coupon_code', cleanCpf).maybeSingle();
+           customerCouponData = retry;
+        }
+      } else {
+        customerCouponData = inserted
       }
-    } else if (!(customerCouponData as any).is_active) {
-      const { data: activated } = await supabase
-        .from('customer_coupons')
-        .update({ is_active: true })
-        .eq('id', (customerCouponData as any).id)
-        .select()
-        .single()
-      customerCouponData = activated || customerCouponData
+    } else {
+       // Update existing coupon if needed
+       if (!customerCouponData.user_id && userIdForCoupon) {
+          await supabase.from('customer_coupons').update({ user_id: userIdForCoupon }).eq('id', customerCouponData.id);
+       }
     }
-    // Ensure coupon has user_id set
-    if (customerCouponData && !(customerCouponData as any).user_id && userIdForCoupon) {
-      const { data: fixedCoupon } = await supabase
-        .from('customer_coupons')
-        .update({ user_id: userIdForCoupon })
-        .eq('id', (customerCouponData as any).id)
-        .select()
-        .single()
-      customerCouponData = fixedCoupon || customerCouponData
+
+    if (!customerCouponData) {
+       throw new Error('Falha ao resolver cupom do cliente (provavelmente duplicado ou erro de banco).');
     }
+
+    // 5. Insert Purchase
+    console.log('[API_COMPRA] Inserting purchase record...');
     const { data: purchase, error: purchaseError } = await supabase
       .from('company_purchases')
       .insert({
@@ -2853,26 +3045,51 @@ app.post('/api/caixa/compra', async (c) => {
         purchase_time: new Date().toTimeString().split(' ')[0]
       })
       .select()
-      .single()
-    if (purchaseError) return c.json({ error: 'Erro ao registrar compra', error_code: 'PURCHASE_INSERT_FAILED' }, 500)
-    const { error: couponError } = await supabase
-      .from('customer_coupons')
-      .update({ last_used_at: new Date().toISOString(), total_usage_count: ((customerCouponData as any).total_usage_count || 0) + 1 })
-      .eq('id', (customerCouponData as any).id)
-    if (couponError) { }
-    let customerCommissionMessage = ''
-    if (customerType === 'affiliate') {
-      const customerCommission = cashbackGenerated * 0.70 * 0.10
-      customerCommissionMessage = `Comissão de R$ ${customerCommission.toFixed(2)} será creditada para ${customerData.full_name} (cashback de R$ ${cashbackGenerated.toFixed(2)} gerado)`
-    } else {
-      customerCommissionMessage = `Cashback de R$ ${cashbackGenerated.toFixed(2)} creditado para ${customerData.full_name}`
+      .maybeSingle()
+
+    if (purchaseError) {
+      console.error('[API_COMPRA] Purchase recording failed:', purchaseError);
+      return c.json({ error: 'Erro ao registrar compra no banco', details: purchaseError.message, code: purchaseError.code, hint: purchaseError.hint }, 500)
     }
+
+    console.log('[API_COMPRA] Purchase recorded ID:', purchase?.id);
+
+    // 6. Update Usage Stats
+    await supabase.from('customer_coupons')
+      .update({ last_used_at: new Date().toISOString(), total_usage_count: ((customerCouponData as any).total_usage_count || 0) + 1 })
+      .eq('id', customerCouponData.id);
+
+    // 7. Network Commissions
+    let customerCommissionMessage = ''
     try {
+      console.log('[API_COMPRA] Starting commission distribution...');
       await distributeNetworkCommissionsSupabase(supabase, (purchase as any).id, customerType, customerData.id, cashbackGenerated)
-    } catch { }
-    return c.json({ success: true, message: `Compra registrada! ${customerCommissionMessage}`, cashback_generated: cashbackGenerated, customer_name: customerData.full_name })
-  } catch (e) {
-    return c.json({ error: 'Erro interno do servidor', error_code: 'UNEXPECTED_SERVER_ERROR' }, 500)
+      
+      if (customerType === 'affiliate') {
+        customerCommissionMessage = `Comissão gerada para ${customerData.full_name}.`
+      } else {
+        customerCommissionMessage = `Cashback processado para ${customerData.full_name}.`
+      }
+    } catch (commErr: any) {
+       console.error('[API_COMPRA] Commission distribution failed (silent recovery):', commErr);
+       customerCommissionMessage = 'Processamento de comissão em andamento.'
+    }
+
+    return c.json({ 
+      success: true, 
+      message: `Compra registrada com sucesso! ${customerCommissionMessage}`, 
+      cashback_generated: cashbackGenerated, 
+      customer_name: customerData.full_name || 'Cliente' 
+    })
+
+  } catch (e: any) {
+    console.error('[API_COMPRA_CRITICAL] Exception:', e);
+    return c.json({ 
+      error: 'Erro inesperado no processamento', 
+      error_code: 'UNEXPECTED_SERVER_ERROR',
+      message: e.message,
+      stack: e.stack
+    }, 500)
   }
 })
 
@@ -3251,17 +3468,17 @@ app.get('/api/empresa/estatisticas', async (c) => {
       .single()
     if (!session) return c.json({ error: 'Não autorizado' }, 401)
     const companyId = (session as any).companies.id
-    
+
     // Buscar estatísticas mensais (últimos registros do mês atual)
     const now = new Date()
     const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
-    
+
     const { data: monthlyRows } = await supabase
       .from('company_purchases')
       .select('purchase_value, cashback_generated')
       .eq('company_id', companyId)
       .gte('purchase_date', monthStart)
-      
+
     const monthly = (monthlyRows || []).reduce((acc: any, r: any) => ({
       sales_count: acc.sales_count + 1,
       sales_value: acc.sales_value + Number(r.purchase_value || 0),
@@ -3677,9 +3894,206 @@ app.get('/api/affiliate/network/tree', async (c) => {
 })
 
 
+// --- SERVICE DIRECTORY ENDPOINTS ---
+
+// 1. PUBLIC: List Categories
+app.get('/api/categories', async (c) => {
+  try {
+    const supabase = createSupabase()
+    const { data: categories, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name')
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ categories })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+})
+
+app.get('/categories', async (c) => {
+  try {
+    const supabase = createSupabase()
+    const { data: categories, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('name')
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ categories })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+})
+
+// 2. PUBLIC: Search Companies
+app.get('/api/companies/public', async (c) => {
+  return await handlePublicCompanies(c)
+})
+
+app.get('/companies/public', async (c) => {
+  return await handlePublicCompanies(c)
+})
+
+async function handlePublicCompanies(c: any) {
+  try {
+    const category = c.req.query('category')
+    const city = c.req.query('city')
+    const search = c.req.query('search')
+    const supabase = createSupabase()
+
+    let query = supabase
+      .from('companies')
+      .select(`
+        id, nome_fantasia, thumbnail_url, address_city, is_verified,
+        company_cashback_config(cashback_percentage),
+        company_categories(categories(name))
+      `)
+      .eq('is_active', true)
+
+    if (city) query = query.ilike('address_city', `%${city}%`)
+    if (search) query = query.ilike('nome_fantasia', `%${search}%`)
+    
+    if (category) {
+      // Filter by category slug or ID
+      const { data: catData } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('slug', category)
+        .maybeSingle()
+      
+      if (catData) {
+        const { data: relData } = await supabase
+          .from('company_categories')
+          .select('company_id')
+          .eq('category_id', (catData as any).id)
+        
+        const ids = (relData || []).map((r: any) => r.company_id)
+        query = query.in('id', ids)
+      }
+    }
+
+    const { data: companies, error } = await query
+    if (error) return c.json({ error: error.message }, 500)
+
+    // Format output
+    const formatted = (companies || []).map((co: any) => ({
+      id: co.id,
+      name: co.nome_fantasia,
+      thumbnail: co.thumbnail_url,
+      city: co.address_city,
+      is_verified: co.is_verified,
+      cashback: co.company_cashback_config?.[0]?.cashback_percentage || 5,
+      categories: co.company_categories?.map((cc: any) => cc.categories?.name) || []
+    }))
+
+    return c.json({ companies: formatted })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+}
+
+// 3. PUBLIC: Get Company Public Profile
+app.get('/api/companies/:id/public', async (c) => {
+  const id = c.req.param('id')
+  try {
+    const supabase = createSupabase()
+    const { data: company, error } = await supabase
+      .from('companies')
+      .select(`
+        *,
+        company_cashback_config(cashback_percentage),
+        company_images(*),
+        company_categories(categories(*)),
+        company_reviews(*, user_profiles(mocha_user_id))
+      `)
+      .eq('id', id)
+      .eq('is_active', true)
+      .maybeSingle()
+
+    if (error || !company) return c.json({ error: 'Empresa não encontrada' }, 404)
+
+    return c.json({ company })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+})
+
+// 4. COMPANY: Update Public Profile
+app.put('/api/empresa/perfil-publico', async (c) => {
+  const token = getAuthToken(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const body = await c.req.json()
+    const parsed = PublicProfileSchema.partial().safeParse(body)
+    if (!parsed.success) return c.json({ error: 'Dados inválidos' }, 400)
+
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('company_id')
+      .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
+      .single()
+    if (!session) return c.json({ error: 'Sessão inválida' }, 401)
+
+    const { error } = await supabase
+      .from('companies')
+      .update(parsed.data)
+      .eq('id', (session as any).company_id)
+
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+})
+
+// 5. COMPANY: Manage Gallery
+app.post('/api/empresa/galeria', async (c) => {
+  const token = getAuthToken(c, 'company_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const { image_url } = await c.req.json()
+    const supabase = createSupabase()
+    const { data: session } = await supabase
+      .from('company_sessions')
+      .select('company_id')
+      .eq('session_token', token)
+      .single()
+    if (!session) return c.json({ error: 'Sessão inválida' }, 401)
+
+    const { error } = await supabase
+      .from('company_images')
+      .insert({ company_id: (session as any).company_id, image_url })
+    
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+})
+
+// 6. ADMIN: Manage Categories
+app.post('/api/admin/categories', async (c) => {
+  const token = getAuthToken(c, 'admin_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const body = await c.req.json()
+    const parsed = CategorySchema.safeParse(body)
+    if (!parsed.success) return c.json({ error: 'Dados inválidos' }, 400)
+
+    const supabase = createSupabase()
+    const { error } = await supabase.from('categories').insert(parsed.data)
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+})
+
 app.notFound((c: any) => {
-  return c.json({ 
-    error: 'Not found by Hono Catch-all', 
+  return c.json({
+    error: 'Not found by Hono Catch-all',
     version: 'v20-header-fix',
     path: c.req.path,
     method: c.req.method,

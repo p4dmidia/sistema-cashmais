@@ -21,6 +21,12 @@ import CompanyRegister from '@/react-app/pages/CompanyRegister';
 import CompanyDashboard from '@/react-app/pages/CompanyDashboard';
 import CashierLogin from '@/react-app/pages/CashierLogin';
 import CashierPage from '@/react-app/pages/CashierPage';
+import ServiceDirectory from '@/react-app/pages/services/ServiceDirectory';
+import CategoryView from '@/react-app/pages/services/CategoryView';
+import CompanyProfile from '@/react-app/pages/services/CompanyProfile';
+import CategoryManagement from '@/react-app/pages/admin/CategoryManagement';
+import PlansPage from '@/react-app/pages/PlansPage';
+import LegalPage from '@/react-app/pages/LegalPage';
 
 // Admin components
 import AdminLogin from '@/react-app/pages/admin/AdminLogin';
@@ -78,6 +84,17 @@ function App() {
           <Route path="/admin/companies" element={<CompaniesManagement />} />
           <Route path="/admin/reports" element={<Reports />} />
           <Route path="/admin/settings" element={<SystemSettings />} />
+          <Route path="/admin/categorias" element={<CategoryManagement />} />
+          
+          {/* Marketplace / Service Directory */}
+          <Route path="/servicos" element={<ServiceDirectory />} />
+          <Route path="/servicos/categoria/:id" element={<CategoryView />} />
+          <Route path="/servicos/empresa/:id" element={<CompanyProfile />} />
+          
+          <Route path="/planos" element={<PlansPage />} />
+          <Route path="/termos" element={<LegalPage />} />
+          <Route path="/privacidade" element={<LegalPage />} />
+          
           <Route path="*" element={<Home />} />
         </Routes>
       </div>

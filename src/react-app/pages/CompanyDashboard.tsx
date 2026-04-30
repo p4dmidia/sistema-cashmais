@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Building2, Users, TrendingUp, LogOut, Plus, Eye, AlertCircle, Edit2, Trash2, Lock, Unlock, Calendar, FileDown, Filter, Menu, X } from 'lucide-react';
+import { Building2, Users, TrendingUp, LogOut, Plus, Eye, AlertCircle, Edit2, Trash2, Lock, Unlock, Calendar, FileDown, Filter, Menu, X, Settings, MapPin, ShieldCheck, Camera } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -20,7 +20,17 @@ interface Company {
   address_city?: string;
   address_state?: string;
   address_zip?: string;
+  description?: string;
+  whatsapp?: string;
+  thumbnail_url?: string;
+  latitude?: string;
+  longitude?: string;
   role: string;
+}
+
+interface GalleryImage {
+  id: string;
+  image_url: string;
 }
 
 interface Cashier {
@@ -89,6 +99,23 @@ export default function CompanyDashboard() {
   const [cepLoading, setCepLoading] = useState(false);
   const [error, setError] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [directoryFormData, setDirectoryFormData] = useState({
+    description: '',
+    whatsapp: '',
+    thumbnail_url: '',
+    latitude: '',
+    longitude: '',
+    address_zip: '',
+    address_street: '',
+    address_number: '',
+    address_district: '',
+    address_city: '',
+    address_state: ''
+  });
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const galleryFileInputRef = React.useRef<HTMLInputElement>(null);
+  const [gallery, setGallery] = useState<GalleryImage[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -100,18 +127,110 @@ export default function CompanyDashboard() {
     filterPurchases();
   }, [purchases, dateFilter, customStartDate, customEndDate]);
 
+  useEffect(() => {
+    if (company) {
+      const initialData = {
+        description: company.description || '',
+        whatsapp: company.whatsapp || '',
+        thumbnail_url: company.thumbnail_url || '',
+        latitude: company.latitude || '',
+        longitude: company.longitude || '',
+        address_zip: company.address_zip || '',
+        address_street: company.address_street || '',
+        address_number: company.address_number || '',
+        address_district: company.address_district || '',
+        address_city: company.address_city || '',
+        address_state: company.address_state || ''
+      };
+      setDirectoryFormData(initialData);
+      
+      // Sincroniza também o formulário de dados básicos da empresa
+      setProfileFormData({
+        razao_social: company.razao_social || '',
+        nome_fantasia: company.nome_fantasia || '',
+        cnpj: company.cnpj || '',
+        email: company.email || '',
+        telefone: company.telefone || '',
+        responsavel: company.responsavel || '',
+        ...initialData
+      });
+
+      // Se tiver CEP mas não tiver coordenadas, busca automaticamente
+      if (company.address_zip && (!company.latitude || !company.longitude)) {
+        setTimeout(() => {
+          handleAutoGetCoordinates(initialData);
+        }, 500);
+      }
+      if (company.address_zip && (!company.latitude || !company.longitude)) {
+        handleAutoGetCoordinates();
+      }
+    }
+  }, [company]);
+
+  // Função auxiliar para busca automática de coordenadas sem alert
+  const handleAutoGetCoordinates = async (data = directoryFormData) => {
+    if (!data) return;
+    const { address_street, address_city, address_state, address_zip } = data;
+    if (!address_zip && (!address_street || !address_city)) return;
+
+    try {
+      const query = address_street && address_city 
+        ? `${address_street}, ${address_city}, ${address_state}, Brasil`
+        : `${address_zip}, Brasil`;
+        
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+      const geoData = await response.json();
+      
+      if (geoData && geoData.length > 0) {
+        setDirectoryFormData(prev => ({
+          ...prev,
+          latitude: String(geoData[0].lat),
+          longitude: String(geoData[0].lon)
+        }));
+      }
+    } catch (err) {
+      console.error('Auto geo error:', err);
+    }
+  };
+
   const checkAuth = async () => {
     try {
-      const response = await fetch('/api/empresa/me', { credentials: 'include' });
+      const token = localStorage.getItem('company_token');
+      const response = await fetch('/api/empresa/me', { 
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'X-Session-Token': token || ''
+        },
+        credentials: 'include' 
+      });
       if (response.ok) {
         const data = await response.json();
-        setCompany(data); // The endpoint now returns the company object directly or flattened
+        setCompany(data.company);
+        fetchGallery();
       } else {
         navigate('/empresa/login');
       }
     } catch (e) {
       console.error(`[COMPANY_ME] Catch error:`, e)
       navigate('/empresa/login');
+    }
+  };
+
+  const fetchGallery = async () => {
+    try {
+      const token = localStorage.getItem('company_token');
+      const response = await fetch('/api/empresa/galeria', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setGallery(data);
+      }
+    } catch (err) {
+      console.error('Error fetching gallery:', err);
     }
   };
 
@@ -167,13 +286,221 @@ export default function CompanyDashboard() {
     }
   };
 
+  const handleDirectoryChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setDirectoryFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleDirectoryCepChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setDirectoryFormData(prev => ({ ...prev, address_zip: value }));
+    
+    const cep = value.replace(/\D/g, '');
+    if (cep.length === 8) {
+      setCepLoading(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await response.json();
+        if (!data.erro) {
+          // Prepare address data
+          const addressData = {
+            address_zip: value,
+            address_street: data.logradouro,
+            address_district: data.bairro,
+            address_city: data.localidade,
+            address_state: data.uf
+          };
+
+          // Try to get coordinates automatically
+          const query = `${data.logradouro}, ${data.localidade}, ${data.uf}, Brasil`;
+          try {
+            const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+            const geoData = await geoRes.json();
+            
+            if (geoData && geoData.length > 0) {
+              setDirectoryFormData(prev => ({
+                ...prev,
+                ...addressData,
+                latitude: String(geoData[0].lat),
+                longitude: String(geoData[0].lon)
+              }));
+            } else {
+              // Set address even if geo fails
+              setDirectoryFormData(prev => ({ ...prev, ...addressData }));
+            }
+          } catch (geoErr) {
+            console.error('Geo error:', geoErr);
+            setDirectoryFormData(prev => ({ ...prev, ...addressData }));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch CEP:', err);
+      } finally {
+        setCepLoading(false);
+      }
+    }
+  };
+
+  const handleGetCoordinates = async () => {
+    const { address_street, address_number, address_city, address_state } = directoryFormData;
+    if (!address_street || !address_city) {
+      alert('Preencha pelo menos a rua e a cidade para buscar as coordenadas.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const query = `${address_street}, ${address_number}, ${address_city}, ${address_state}, Brasil`;
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      
+      if (data && data.length > 0) {
+        setDirectoryFormData(prev => ({
+          ...prev,
+          latitude: data[0].lat,
+          longitude: data[0].lon
+        }));
+        alert('Coordenadas encontradas e atualizadas!');
+      } else {
+        alert('Não foi possível encontrar as coordenadas para este endereço. Tente ajustar os dados.');
+      }
+    } catch (err) {
+      console.error('Error fetching coordinates:', err);
+      alert('Erro ao buscar coordenadas.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDirectoryFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const { supabase } = await import('@/react-app/lib/supabase');
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+      const filePath = `logos/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('public')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('public')
+        .getPublicUrl(filePath);
+
+      setDirectoryFormData(prev => ({ ...prev, thumbnail_url: publicUrl }));
+    } catch (err: any) {
+      console.error('Error uploading file:', err);
+      setError('Erro ao enviar imagem: ' + err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    try {
+      const { supabase } = await import('@/react-app/lib/supabase');
+      const uploadPromises = Array.from(files).map(async (file) => {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+        const filePath = `gallery/${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('public')
+          .upload(filePath, file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('public')
+          .getPublicUrl(filePath);
+
+        return fetch('/api/empresa/galeria', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image_url: publicUrl }),
+          credentials: 'include',
+        });
+      });
+
+      await Promise.all(uploadPromises);
+      fetchGallery();
+    } catch (err: any) {
+      console.error('Error uploading to gallery:', err);
+      setError('Erro ao enviar imagem: ' + err.message);
+    } finally {
+      setUploading(false);
+      if (galleryFileInputRef.current) galleryFileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteGalleryImage = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta imagem?')) return;
+
+    try {
+      const response = await fetch(`/api/empresa/galeria/${id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        fetchGallery();
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Erro ao excluir imagem');
+      }
+    } catch (err) {
+      setError('Erro de conexão');
+    }
+  };
+
+  const handleSaveDirectoryInfo = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const token = localStorage.getItem('company_token');
+      const response = await fetch('/api/empresa/perfil', {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(directoryFormData),
+        credentials: 'include',
+      });
+      if (response.ok) {
+        await checkAuth(); // Refresh data
+        alert('Informações atualizadas com sucesso!');
+      } else {
+        const data = await response.json();
+        setError(data.error || 'Erro ao atualizar informações');
+      }
+    } catch (err) {
+      setError('Erro de conexão');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const loadData = async () => {
     try {
+      const token = localStorage.getItem('company_token');
+      const authHeader = { 'Authorization': `Bearer ${token}` };
+      
       const [cashiersRes, purchasesRes, statsRes, monthlyRes] = await Promise.all([
-        fetch('/api/empresa/caixas', { credentials: 'include' }),
-        fetch('/api/empresa/relatorio', { credentials: 'include' }),
-        fetch('/api/empresa/estatisticas', { credentials: 'include' }),
-        fetch('/api/empresa/dados-mensais', { credentials: 'include' })
+        fetch('/api/empresa/caixas', { headers: authHeader, credentials: 'include' }),
+        fetch('/api/empresa/relatorio', { headers: authHeader, credentials: 'include' }),
+        fetch('/api/empresa/estatisticas', { headers: authHeader, credentials: 'include' }),
+        fetch('/api/empresa/dados-mensais', { headers: authHeader, credentials: 'include' })
       ]);
 
       if (cashiersRes.ok) {
@@ -208,9 +535,13 @@ export default function CompanyDashboard() {
     setError('');
 
     try {
+      const token = localStorage.getItem('company_token');
       const response = await fetch('/api/empresa/caixas', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(newCashier),
         credentials: 'include'
       });
@@ -266,9 +597,13 @@ export default function CompanyDashboard() {
 
   const handleToggleCashier = async (cashierId: number) => {
     try {
-      const response = await fetch(`/api/empresa/caixas/${cashierId}/toggle`, {
+      const token = localStorage.getItem('company_token');
+      const response = await fetch(`/api/empresa/caixas/${cashierId}/toggle`, { 
         method: 'PATCH',
-        credentials: 'include'
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include' 
       });
 
       const data = await response.json();
@@ -286,9 +621,13 @@ export default function CompanyDashboard() {
     if (!deletingCashierId) return;
 
     try {
-      const response = await fetch(`/api/empresa/caixas/${deletingCashierId}`, {
+      const token = localStorage.getItem('company_token');
+      const response = await fetch(`/api/empresa/caixas/${deletingCashierId}`, { 
         method: 'DELETE',
-        credentials: 'include'
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        credentials: 'include' 
       });
 
       const data = await response.json();
@@ -577,7 +916,8 @@ export default function CompanyDashboard() {
                 { key: 'overview', label: 'Visão Geral', icon: TrendingUp },
                 { key: 'cashiers', label: 'Caixas', icon: Users },
                 { key: 'reports', label: 'Relatórios', icon: Eye },
-                { key: 'settings', label: 'Configurações', icon: Building2 }
+                { key: 'directory', label: 'Meu Perfil Público', icon: Building2 },
+                { key: 'settings', label: 'Configurações', icon: Settings }
               ].map(({ key, label, icon: Icon }) => (
                 <button
                   key={key}
@@ -639,7 +979,8 @@ export default function CompanyDashboard() {
               { key: 'overview', label: 'Visão Geral', icon: TrendingUp },
               { key: 'cashiers', label: 'Caixas', icon: Users },
               { key: 'reports', label: 'Relatórios', icon: Eye },
-              { key: 'settings', label: 'Configurações', icon: Building2 }
+              { key: 'directory', label: 'Meu Perfil Público', icon: Building2 },
+              { key: 'settings', label: 'Configurações', icon: Settings }
             ].map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -803,9 +1144,9 @@ export default function CompanyDashboard() {
                           type="monotone" 
                           dataKey="sales_value" 
                           stroke="#70ff00" 
-                          strokeWidth={3}
-                          dot={{ fill: '#70ff00', strokeWidth: 2, r: 6 }}
-                          activeDot={{ r: 8, stroke: '#70ff00', strokeWidth: 2 }}
+                          strokeWidth={2} 
+                          dot={{ fill: '#70ff00', strokeWidth: 2, r: 4 }} 
+                          activeDot={{ r: 6, strokeWidth: 0 }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -847,7 +1188,285 @@ export default function CompanyDashboard() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
 
+        {/* Directory (Public Profile) Tab */}
+        {activeTab === 'directory' && (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-2">Meu Perfil Público</h2>
+              <p className="text-[#70ff00]">Gerencie como os clientes veem sua empresa no diretório</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Left Column: Info */}
+              <div className="lg:col-span-2 space-y-8">
+                <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8">
+                  <h3 className="text-lg font-bold text-white mb-6">Informações Gerais</h3>
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-gray-400 text-sm mb-2">Descrição da Empresa</label>
+                      <textarea 
+                        name="description"
+                        rows={6}
+                        className="w-full bg-black/20 border border-white/10 rounded-2xl p-4 text-white focus:border-[#70ff00] outline-none transition-all"
+                        placeholder="Conte sobre seus serviços, experiência e diferenciais..."
+                        value={directoryFormData.description}
+                        onChange={handleDirectoryChange}
+                      ></textarea>
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-gray-400 text-sm mb-2">WhatsApp de Atendimento</label>
+                        <input 
+                          name="whatsapp"
+                          type="text"
+                          className="w-full bg-black/20 border border-white/10 rounded-2xl p-4 text-white focus:border-[#70ff00] outline-none transition-all"
+                          value={directoryFormData.whatsapp}
+                          onChange={handleDirectoryChange}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-gray-400 text-sm mb-2">Logo / Imagem Principal</label>
+                        <div className="flex flex-col gap-3">
+                          {directoryFormData.thumbnail_url ? (
+                            <div className="relative w-full aspect-video rounded-2xl overflow-hidden group bg-black/40 border border-white/10">
+                              <img 
+                                src={directoryFormData.thumbnail_url} 
+                                alt="Logo Preview" 
+                                className="w-full h-full object-contain"
+                              />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => fileInputRef.current?.click()}
+                                  className="p-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors text-white"
+                                  title="Trocar Imagem"
+                                >
+                                  <Camera className="w-5 h-5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDirectoryFormData(prev => ({ ...prev, thumbnail_url: '' }))}
+                                  className="p-2 bg-red-500/50 hover:bg-red-500/80 rounded-full transition-colors text-white"
+                                  title="Remover"
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={uploading}
+                              className="w-full aspect-video bg-black/20 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-[#70ff00]/50 hover:text-white transition-all group"
+                            >
+                              <div className="p-4 bg-white/5 rounded-full group-hover:bg-[#70ff00]/10 group-hover:text-[#70ff00] transition-colors">
+                                {uploading ? (
+                                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-current"></div>
+                                ) : (
+                                  <Camera className="w-8 h-8" />
+                                )}
+                              </div>
+                              <span className="text-sm font-medium">Clique para subir logo</span>
+                            </button>
+                          )}
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleDirectoryFileChange}
+                            accept="image/*"
+                            className="hidden"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8">
+                  <h3 className="text-lg font-bold text-white mb-6 flex items-center justify-between">
+                    Galeria de Fotos
+                    <button 
+                      onClick={() => galleryFileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="text-sm bg-[#70ff00]/10 text-[#70ff00] px-4 py-1.5 rounded-lg border border-[#70ff00]/20 hover:bg-[#70ff00] hover:text-[#001144] transition-all disabled:opacity-50"
+                    >
+                      {uploading ? 'Subindo...' : '+ Adicionar Foto'}
+                    </button>
+                    <input
+                      type="file"
+                      ref={galleryFileInputRef}
+                      onChange={handleGalleryUpload}
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                    />
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {gallery.length > 0 ? gallery.map((img) => (
+                      <div key={img.id} className="aspect-square bg-black/20 rounded-2xl border border-white/5 group relative overflow-hidden">
+                        <img 
+                          src={img.image_url} 
+                          alt="Gallery" 
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
+                        <button 
+                          onClick={() => handleDeleteGalleryImage(img.id)}
+                          className="absolute top-2 right-2 p-2 bg-red-500/80 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )) : (
+                      <div className="aspect-square bg-black/20 rounded-2xl border border-white/5 flex items-center justify-center group relative overflow-hidden">
+                        <span className="text-gray-600">Vazio</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Location & Verification */}
+              <div className="space-y-8">
+                <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-8">
+                  <h3 className="text-lg font-bold text-white mb-6">Endereço de Atendimento</h3>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-gray-400 text-[10px] uppercase font-bold mb-1">CEP</label>
+                        <div className="relative">
+                          <input 
+                            name="address_zip"
+                            type="text" 
+                            maxLength={9}
+                            className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white text-sm focus:border-[#70ff00] outline-none" 
+                            value={directoryFormData.address_zip} 
+                            onChange={handleDirectoryCepChange}
+                          />
+                          {cepLoading && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-gray-400 text-[10px] uppercase font-bold mb-1">Estado (UF)</label>
+                        <input 
+                          name="address_state"
+                          type="text" 
+                          maxLength={2}
+                          className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white text-sm" 
+                          value={directoryFormData.address_state} 
+                          onChange={handleDirectoryChange}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-gray-400 text-[10px] uppercase font-bold mb-1">Cidade</label>
+                      <input 
+                        name="address_city"
+                        type="text" 
+                        className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white text-sm" 
+                        value={directoryFormData.address_city} 
+                        onChange={handleDirectoryChange}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-gray-400 text-[10px] uppercase font-bold mb-1">Logradouro (Rua/Av)</label>
+                      <input 
+                        name="address_street"
+                        type="text" 
+                        className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white text-sm" 
+                        value={directoryFormData.address_street} 
+                        onChange={handleDirectoryChange}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-gray-400 text-[10px] uppercase font-bold mb-1">Número</label>
+                        <input 
+                          name="address_number"
+                          type="text" 
+                          className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white text-sm" 
+                          value={directoryFormData.address_number} 
+                          onChange={handleDirectoryChange}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-gray-400 text-[10px] uppercase font-bold mb-1">Bairro</label>
+                        <input 
+                          name="address_district"
+                          type="text" 
+                          className="w-full bg-black/20 border border-white/10 rounded-xl p-3 text-white text-sm" 
+                          value={directoryFormData.address_district} 
+                          onChange={handleDirectoryChange}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="pt-6 border-t border-white/10">
+                      <h4 className="text-white text-sm font-bold mb-4 flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-[#70ff00]" />
+                        Localização no Mapa
+                      </h4>
+                      
+                      <div className="aspect-video bg-black/40 rounded-2xl border border-white/10 overflow-hidden relative">
+                        {directoryFormData.latitude && directoryFormData.longitude ? (
+                          <iframe
+                            key={`${directoryFormData.latitude}-${directoryFormData.longitude}`}
+                            width="100%"
+                            height="100%"
+                            style={{ border: 0 }}
+                            src={`https://maps.google.com/maps?q=${directoryFormData.latitude},${directoryFormData.longitude}&z=15&output=embed`}
+                          ></iframe>
+                        ) : (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-500">
+                            <MapPin className="w-8 h-8 opacity-20" />
+                            <span className="text-xs">Aguardando endereço para carregar mapa...</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <p className="text-[10px] text-gray-500 mt-3 italic">
+                        * O mapa é atualizado automaticamente ao digitar o CEP ou endereço.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {company?.is_verified ? (
+                  <div className="bg-[#70ff00]/10 border border-[#70ff00]/30 rounded-3xl p-6 flex items-start gap-4 shadow-lg shadow-[#70ff00]/5">
+                    <ShieldCheck className="w-10 h-10 text-[#70ff00] shrink-0" />
+                    <div>
+                      <p className="text-[#70ff00] font-black text-sm italic uppercase">Perfil Verificado</p>
+                      <p className="text-white/60 text-xs mt-1 leading-relaxed">Sua empresa possui o selo de confiança CashMais.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-blue-600/10 border border-blue-500/30 rounded-3xl p-6 flex items-start gap-4">
+                    <AlertCircle className="w-10 h-10 text-blue-400 shrink-0" />
+                    <div>
+                      <p className="text-white font-bold text-sm">Solicitar Verificação</p>
+                      <p className="text-blue-400/80 text-xs mt-1 leading-relaxed">Complete seu perfil e galeria para solicitar o selo de verificado.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4">
+              <button 
+                onClick={handleSaveDirectoryInfo}
+                disabled={loading}
+                className="bg-[#70ff00] text-[#001144] px-12 py-4 rounded-2xl font-black text-lg shadow-xl shadow-[#70ff00]/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
+              >
+                {loading ? 'SALVANDO...' : 'SALVAR ALTERAÇÕES'}
+              </button>
+            </div>
           </div>
         )}
 
