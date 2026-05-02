@@ -14,15 +14,35 @@ export default function PWAInstallBanner() {
       || document.referrer.includes('android-app://');
     
     setIsStandalone(isStandaloneMode);
+    console.log('PWA: Standalone mode:', isStandaloneMode);
+    console.log('PWA: Is Mobile:', isMobileDevice());
 
-    // Capturar o evento de instalação
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    
+    // No iOS o evento beforeinstallprompt não existe, então mostramos o banner manualmente
+    if (isIOS && !isStandaloneMode) {
+      console.log('PWA: iOS detectado, mostrando banner manualmente');
+      setShowBanner(true);
+    }
+
+    // Capturar o evento de instalação (Android/Chrome)
     const handler = (e: any) => {
+      console.log('PWA: beforeinstallprompt disparado');
       e.preventDefault();
       setDeferredPrompt(e);
       
-      // Mostrar o banner apenas se não estiver em modo standalone e for mobile/tablet
-      if (!isStandaloneMode && isMobileDevice()) {
-        setShowBanner(true);
+      // Mostrar o banner se não estiver em modo standalone
+      // Removi a trava estrita de mobile para permitir testes em janelas menores no desktop
+      if (!isStandaloneMode) {
+        console.log('PWA: Verificando se deve mostrar banner...');
+        const isMobile = isMobileDevice();
+        if (isMobile) {
+          console.log('PWA: Mobile/Tablet detectado, mostrando banner');
+          setShowBanner(true);
+        } else {
+          console.log('PWA: Desktop detectado. Para ver o banner, reduza a largura da janela ou use o modo mobile do DevTools.');
+          // Opcional: Mostrar banner no desktop também se quiser, mas o requisito era mobile/tablet
+        }
       }
     };
 

@@ -17,10 +17,15 @@ export default defineConfig(({ mode }) => {
         workbox: {
           maximumFileSizeToCacheInBytes: 5000000, // Aumentado para 5MB para suportar o bundle principal
         },
+        devOptions: {
+          enabled: true, // Permite testar o PWA em desenvolvimento
+          type: 'module',
+        },
         manifest: {
           name: 'CashMais - Ganhe Dinheiro com Cada Compra',
           short_name: 'CashMais',
           description: 'Sistema de cashback inteligente com MLM de até 10 níveis.',
+          start_url: '/',
           theme_color: '#001144',
           background_color: '#ffffff',
           display: 'standalone',

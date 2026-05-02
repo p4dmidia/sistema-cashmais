@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router';
 import { Toaster } from 'react-hot-toast';
 import { Suspense, lazy } from 'react';
 import Home from '@/react-app/pages/Home';
+import PWAInstallBanner from '@/react-app/components/PWAInstallBanner';
 import { setupAuthInterceptor } from '@/react-app/hooks/useAuth';
 import Login from '@/react-app/pages/Login';
 import Register from '@/react-app/pages/Register';
@@ -101,6 +102,7 @@ function App() {
           
           <Route path="*" element={<Home />} />
         </Routes>
+        <PWAInstallBanner />
       </div>
     </Router>
   );

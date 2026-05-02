@@ -4,7 +4,6 @@ import { Link, useNavigate, useLocation } from "react-router";
 import { type CashMaisUser } from "@/shared/types";
 import { useAuth } from "@/react-app/hooks/useAuth";
 import UserHeaderMenu from "@/react-app/components/UserHeaderMenu";
-import PWAInstallBanner from "@/react-app/components/PWAInstallBanner";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -96,21 +95,31 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
 
             <div className="flex items-center space-x-4">
               {!currentUser ? (
-                <div className="flex items-center space-x-2">
-                  {/* Grupo Empresa */}
-                  <div className="hidden lg:flex items-center bg-white/5 border border-white/10 rounded-xl p-1">
-                    <Link to="/empresa/cadastro" className="px-3 py-1.5 text-[#70ff00] text-[10px] font-black uppercase hover:bg-[#70ff00]/10 rounded-lg transition-all tracking-wider">Cadastro Empresa</Link>
-                    <div className="w-px h-3 bg-white/10 mx-1"></div>
-                    <Link to="/empresa/login" className="px-3 py-1.5 text-white/70 text-[10px] font-black uppercase hover:bg-white/10 rounded-lg transition-all tracking-wider">Login</Link>
+                <>
+                  <div className="hidden md:flex items-center space-x-2">
+                    {/* Grupo Empresa */}
+                    <div className="hidden lg:flex items-center bg-white/5 border border-white/10 rounded-xl p-1">
+                      <Link to="/empresa/cadastro" className="px-3 py-1.5 text-[#70ff00] text-[10px] font-black uppercase hover:bg-[#70ff00]/10 rounded-lg transition-all tracking-wider">Cadastro Empresa</Link>
+                      <div className="w-px h-3 bg-white/10 mx-1"></div>
+                      <Link to="/empresa/login" className="px-3 py-1.5 text-white/70 text-[10px] font-black uppercase hover:bg-white/10 rounded-lg transition-all tracking-wider">Login</Link>
+                    </div>
+
+                    {/* Grupo Afiliado */}
+                    <div className="flex items-center bg-[#70ff00]/5 border border-[#70ff00]/20 rounded-xl p-1">
+                      <Link to="/cadastro" className="px-4 py-1.5 bg-[#70ff00] text-[#001144] text-[10px] font-black uppercase rounded-lg hover:bg-[#50cc00] transition-all tracking-wider shadow-lg shadow-[#70ff00]/25">Cadastro Afiliado</Link>
+                      <div className="w-px h-3 bg-[#70ff00]/20 mx-1"></div>
+                      <Link to="/login" className="px-4 py-1.5 text-[#70ff00] text-[10px] font-black uppercase hover:bg-[#70ff00]/10 rounded-lg transition-all tracking-wider">Entrar</Link>
+                    </div>
                   </div>
 
-                  {/* Grupo Afiliado */}
-                  <div className="flex items-center bg-[#70ff00]/5 border border-[#70ff00]/20 rounded-xl p-1">
-                    <Link to="/cadastro" className="px-4 py-1.5 bg-[#70ff00] text-[#001144] text-[10px] font-black uppercase rounded-lg hover:bg-[#50cc00] transition-all tracking-wider shadow-lg shadow-[#70ff00]/25">Cadastro Afiliado</Link>
-                    <div className="w-px h-3 bg-[#70ff00]/20 mx-1"></div>
-                    <Link to="/login" className="px-4 py-1.5 text-[#70ff00] text-[10px] font-black uppercase hover:bg-[#70ff00]/10 rounded-lg transition-all tracking-wider">Entrar</Link>
-                  </div>
-                </div>
+                  {/* Botão Sanduíche para Mobile (Não logado) */}
+                  <button
+                    onClick={() => setIsMenuOpen(!isMenuOpen)}
+                    className="flex md:hidden p-2 rounded-lg text-[#70ff00] hover:bg-[#70ff00]/10 transition-colors focus:outline-none"
+                  >
+                    {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                  </button>
+                </>
               ) : (
                 <div className="flex items-center space-x-3">
                   {/* User Info (Visible on Desktop via UserHeaderMenu, custom on Mobile) */}
@@ -149,63 +158,99 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
         </div>
 
         {/* Mobile Dropdown Menu (ALL links combined) */}
-        {isMenuOpen && currentUser && (
+        {isMenuOpen && (
           <div className="md:hidden bg-[#001144]/fa divide-y divide-white/5 backdrop-blur-xl border-t border-white/10 animate-in slide-in-from-top-4 duration-200">
-            <nav className="py-2 px-4 space-y-1">
-              {/* Navigation Section */}
-              {role === 'affiliate' && navItems.map((item) => (
-                <MobileNavLink 
-                  key={item.to}
-                  to={item.to} 
-                  icon={item.icon} 
-                  label={item.label} 
-                  active={location.pathname === item.to} 
-                  onClick={closeMenu} 
-                />
-              ))}
+            {currentUser ? (
+              <nav className="py-2 px-4 space-y-1">
+                {/* Navigation Section */}
+                {role === 'affiliate' && navItems.map((item) => (
+                  <MobileNavLink 
+                    key={item.to}
+                    to={item.to} 
+                    icon={item.icon} 
+                    label={item.label} 
+                    active={location.pathname === item.to} 
+                    onClick={closeMenu} 
+                  />
+                ))}
 
-              {/* Company Dashboard Items (Contextual) */}
-              {role === 'company' && companyDashboardItems.map((item) => (
-                <MobileNavLink 
-                  key={item.to}
-                  to={item.to} 
-                  icon={item.icon} 
-                  label={item.label} 
-                  active={location.pathname + location.search === item.to} 
-                  onClick={closeMenu} 
-                />
-              ))}
+                {/* Company Dashboard Items (Contextual) */}
+                {role === 'company' && companyDashboardItems.map((item) => (
+                  <MobileNavLink 
+                    key={item.to}
+                    to={item.to} 
+                    icon={item.icon} 
+                    label={item.label} 
+                    active={location.pathname + location.search === item.to} 
+                    onClick={closeMenu} 
+                  />
+                ))}
 
-              {/* Admin Dashboard Items (Contextual) */}
-              {role === 'admin' && adminDashboardItems.map((item) => (
-                <MobileNavLink 
-                  key={item.to}
-                  to={item.to} 
-                  icon={item.icon} 
-                  label={item.label} 
-                  active={location.pathname === item.to} 
-                  onClick={closeMenu} 
-                />
-              ))}
+                {/* Admin Dashboard Items (Contextual) */}
+                {role === 'admin' && adminDashboardItems.map((item) => (
+                  <MobileNavLink 
+                    key={item.to}
+                    to={item.to} 
+                    icon={item.icon} 
+                    label={item.label} 
+                    active={location.pathname === item.to} 
+                    onClick={closeMenu} 
+                  />
+                ))}
 
-              <div className="h-px bg-white/5 my-2"></div>
-              
-              {/* Account Section */}
-              <MobileNavLink to="/perfil?tab=password" icon={Lock} label="Alterar Senha" active={false} onClick={closeMenu} />
-              <MobileNavLink to="/termos" icon={FileText} label="Termos de Uso" active={location.pathname === '/termos'} onClick={closeMenu} />
-              <MobileNavLink to="/privacidade" icon={Shield} label="Políticas de Privacidade" active={location.pathname === '/privacidade'} onClick={closeMenu} />
-              
-              <button
-                onClick={() => {
-                  closeMenu();
-                  handleLogout();
-                }}
-                className="w-full flex items-center space-x-4 px-4 py-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all font-medium"
-              >
-                <LogOut className="w-5 h-5" />
-                <span>Encerrar Sessão</span>
-              </button>
-            </nav>
+                <div className="h-px bg-white/5 my-2"></div>
+                
+                {/* Account Section */}
+                <MobileNavLink to="/perfil?tab=password" icon={Lock} label="Alterar Senha" active={false} onClick={closeMenu} />
+                <MobileNavLink to="/termos" icon={FileText} label="Termos de Uso" active={location.pathname === '/termos'} onClick={closeMenu} />
+                <MobileNavLink to="/privacidade" icon={Shield} label="Políticas de Privacidade" active={location.pathname === '/privacidade'} onClick={closeMenu} />
+                
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    handleLogout();
+                  }}
+                  className="w-full flex items-center space-x-4 px-4 py-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all font-medium"
+                >
+                  <LogOut className="w-5 h-5" />
+                  <span>Encerrar Sessão</span>
+                </button>
+              </nav>
+            ) : (
+              /* Menu para não logados no Layout global */
+              <nav className="py-4 px-4 space-y-4">
+                <div className="space-y-2">
+                  <p className="px-4 text-[10px] font-black text-white/40 uppercase tracking-widest">Área do Afiliado</p>
+                  <Link to="/login" className="flex items-center space-x-4 px-4 py-3 text-white hover:bg-white/5 rounded-xl transition-all" onClick={closeMenu}>
+                    <User className="w-5 h-5 text-[#70ff00]" />
+                    <span className="font-bold">Login Afiliado</span>
+                  </Link>
+                  <Link to="/cadastro" className="flex items-center space-x-4 px-4 py-3 bg-[#70ff00]/10 text-[#70ff00] border border-[#70ff00]/20 rounded-xl transition-all" onClick={closeMenu}>
+                    <Users className="w-5 h-5" />
+                    <span className="font-bold">Cadastro Afiliado</span>
+                  </Link>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <p className="px-4 text-[10px] font-black text-white/40 uppercase tracking-widest">Área da Empresa</p>
+                  <Link to="/empresa/login" className="flex items-center space-x-4 px-4 py-3 text-white hover:bg-white/5 rounded-xl transition-all" onClick={closeMenu}>
+                    <Lock className="w-5 h-5 text-white/70" />
+                    <span className="font-bold">Login Empresa</span>
+                  </Link>
+                  <Link to="/empresa/cadastro" className="flex items-center space-x-4 px-4 py-3 text-[#70ff00] hover:bg-[#70ff00]/10 rounded-xl transition-all" onClick={closeMenu}>
+                    <Building2 className="w-5 h-5" />
+                    <span className="font-bold">Cadastro Empresa</span>
+                  </Link>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-white/5">
+                  <Link to="/servicos" className="flex items-center space-x-4 px-4 py-3 text-gray-300 hover:bg-white/5 rounded-xl transition-all" onClick={closeMenu}>
+                    <Store className="w-5 h-5" />
+                    <span className="font-bold">Diretório de Serviços</span>
+                  </Link>
+                </div>
+              </nav>
+            )}
           </div>
         )}
       </header>
@@ -236,9 +281,6 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
           </div>
         </div>
       </footer>
-      
-      {/* PWA Install Offer */}
-      <PWAInstallBanner />
     </div>
   );
 }
