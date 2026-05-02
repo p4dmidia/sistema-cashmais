@@ -14,6 +14,9 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'maskable-icon.png'],
+        workbox: {
+          maximumFileSizeToCacheInBytes: 5000000, // Aumentado para 5MB para suportar o bundle principal
+        },
         manifest: {
           name: 'CashMais - Ganhe Dinheiro com Cada Compra',
           short_name: 'CashMais',
