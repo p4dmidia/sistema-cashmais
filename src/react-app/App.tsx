@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router';
+import { Toaster } from 'react-hot-toast';
 import { Suspense, lazy } from 'react';
 import Home from '@/react-app/pages/Home';
 import { setupAuthInterceptor } from '@/react-app/hooks/useAuth';
@@ -25,6 +26,7 @@ import ServiceDirectory from '@/react-app/pages/services/ServiceDirectory';
 import CategoryView from '@/react-app/pages/services/CategoryView';
 import CompanyProfile from '@/react-app/pages/services/CompanyProfile';
 import CategoryManagement from '@/react-app/pages/admin/CategoryManagement';
+import ReviewManagement from '@/react-app/pages/admin/ReviewManagement';
 import PlansPage from '@/react-app/pages/PlansPage';
 import LegalPage from '@/react-app/pages/LegalPage';
 
@@ -41,6 +43,7 @@ function App() {
   setupAuthInterceptor();
   return (
     <Router>
+      <Toaster position="top-right" toastOptions={{ duration: 3000, style: { background: '#1e293b', color: '#fff' } }} />
       <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011]">
         <Routes>
           {/* Home routes */}
@@ -85,6 +88,7 @@ function App() {
           <Route path="/admin/reports" element={<Reports />} />
           <Route path="/admin/settings" element={<SystemSettings />} />
           <Route path="/admin/categorias" element={<CategoryManagement />} />
+          <Route path="/admin/reviews" element={<ReviewManagement />} />
           
           {/* Marketplace / Service Directory */}
           <Route path="/servicos" element={<ServiceDirectory />} />

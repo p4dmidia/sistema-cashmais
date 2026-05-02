@@ -46,17 +46,27 @@ export default function ServiceDirectory() {
       return;
     }
 
-    const term = searchTerm.toLowerCase();
-    const city = cityFilter.toLowerCase();
+    const normalize = (str: string) => 
+      (str || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+    const term = normalize(searchTerm);
+    const city = normalize(cityFilter);
 
     const filteredCats = categories.filter(c => 
-      c.name.toLowerCase().includes(term)
+      normalize(c.name).includes(term)
     );
 
     const filteredComps = companies.filter(c => {
-      const matchesTerm = c.nome_fantasia?.toLowerCase().includes(term) || 
-                          c.company_categories?.some((cc: any) => cc.categories?.name?.toLowerCase().includes(term));
-      const matchesCity = city === "" || c.address_city?.toLowerCase().includes(city);
+      const companyName = normalize(c.nome_fantasia || "");
+      const companyCity = normalize(c.address_city || "");
+      const companyCats = (c.company_categories || []).map((cc: any) => normalize(cc.categories?.name || ""));
+      
+      const matchesTerm = term === "" || 
+                          companyName.includes(term) || 
+                          companyCats.some(cat => cat.includes(term));
+                          
+      const matchesCity = city === "" || companyCity.includes(city);
+      
       return matchesTerm && matchesCity;
     });
 
@@ -162,11 +172,11 @@ export default function ServiceDirectory() {
         <div className="mb-20">
           {searchTerm || cityFilter ? (
             <div className="space-y-12">
-              {/* Filtered Categories */}
-              {filteredCategories.length > 0 && (
+              {/* Filtered Categories - First priority */}
+              {searchTerm && filteredCategories.length > 0 && (
                 <div>
                   <h3 className="text-xl font-bold text-white mb-6 flex items-center">
-                    Categorias Encontradas <span className="ml-3 px-2 py-1 bg-[#70ff00]/20 text-[#70ff00] text-xs rounded-lg">{filteredCategories.length}</span>
+                    Categorias Sugeridas <span className="ml-3 px-2 py-1 bg-[#70ff00]/20 text-[#70ff00] text-xs rounded-lg">{filteredCategories.length}</span>
                   </h3>
                   <motion.div 
                     variants={container}
@@ -189,11 +199,12 @@ export default function ServiceDirectory() {
                 </div>
               )}
 
-              {/* Filtered Companies */}
+              {/* Filtered Companies - Second priority */}
               {filteredCompanies.length > 0 ? (
                 <div>
                   <h3 className="text-xl font-bold text-white mb-6 flex items-center">
-                    Empresas Encontradas <span className="ml-3 px-2 py-1 bg-[#70ff00]/20 text-[#70ff00] text-xs rounded-lg">{filteredCompanies.length}</span>
+                    {cityFilter ? `Empresas em ${cityFilter}` : 'Empresas Encontradas'} 
+                    <span className="ml-3 px-2 py-1 bg-[#70ff00]/20 text-[#70ff00] text-xs rounded-lg">{filteredCompanies.length}</span>
                   </h3>
                   <motion.div 
                     variants={container}
@@ -215,12 +226,17 @@ export default function ServiceDirectory() {
                             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                           />
                           <div className="absolute top-4 right-4 bg-[#70ff00] text-[#001144] font-bold px-3 py-1.5 rounded-xl text-sm shadow-xl">
-                            {company.company_cashback_config?.[0]?.cashback_percentage || 5}% back
+                            {company.cashback}% back
                           </div>
+                          {company.is_verified && (
+                            <div className="absolute bottom-4 left-4 bg-blue-500 text-white p-1.5 rounded-full shadow-lg">
+                              <Search className="w-3 h-3" />
+                            </div>
+                          )}
                         </div>
                         <div className="p-6">
                           <div className="flex items-center text-xs text-[#70ff00] font-bold uppercase tracking-wider mb-2">
-                            {company.company_categories?.[0]?.categories?.name || 'Serviço'}
+                            {company.categories?.[0] || 'Serviço'}
                           </div>
                           <h3 className="text-white font-bold text-xl mb-2 group-hover:text-[#70ff00] transition-colors">
                             {company.nome_fantasia}
@@ -235,20 +251,17 @@ export default function ServiceDirectory() {
                   </motion.div>
                 </div>
               ) : (
-                searchTerm && filteredCategories.length === 0 && (
+                (searchTerm || cityFilter) && filteredCategories.length === 0 && (
                   <div className="text-center py-20 bg-white/5 rounded-[40px] border border-dashed border-white/10">
-                    <p className="text-gray-500 text-lg">Nenhum resultado encontrado para "{searchTerm}"</p>
+                    <p className="text-gray-500 text-lg">Nenhum serviço encontrado para sua busca.</p>
                   </div>
                 )
               )}
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between mb-8">
+              <div className="mb-8">
                 <h2 className="text-2xl font-bold text-white tracking-tight">Navegue por Categoria</h2>
-                <button className="text-[#70ff00] hover:underline flex items-center text-sm font-semibold">
-                  Ver todas as categorias <ArrowRight className="w-4 h-4 ml-1" />
-                </button>
               </div>
 
               {loading ? (

@@ -61,6 +61,11 @@ export default function CompanyProfile() {
 
   const galleryImages = company.company_images?.map((img: any) => img.image_url) || [];
   const cashback = company.company_cashback_config?.[0]?.cashback_percentage || 5;
+  const reviews = company.company_reviews || [];
+  const totalReviews = reviews.length;
+  const averageRating = totalReviews > 0 
+    ? (reviews.reduce((acc: number, r: any) => acc + r.rating, 0) / totalReviews).toFixed(1)
+    : "0.0";
 
   const handleWhatsApp = () => {
     const text = encodeURIComponent(`Olá ${company.nome_fantasia}, vi seu perfil no CashMais e gostaria de saber mais sobre seus serviços.`);
@@ -97,7 +102,7 @@ export default function CompanyProfile() {
                       <MapPin className="w-4 h-4 text-[#70ff00]" /> {company.address_city}, {company.address_state}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <Star className="w-4 h-4 text-yellow-400 fill-current" /> 4.8 (24 avaliações)
+                      <Star className="w-4 h-4 text-yellow-400 fill-current" /> {averageRating} ({totalReviews} {totalReviews === 1 ? 'avaliação' : 'avaliações'})
                     </span>
                   </div>
                 </div>

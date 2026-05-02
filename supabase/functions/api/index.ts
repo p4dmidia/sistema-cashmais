@@ -307,6 +307,8 @@ const CompanyRegisterSchema = z.object({
   whatsapp: z.string().optional(),
   thumbnail_url: z.string().optional(),
   category_id: z.string().optional(),
+  latitude: z.number().nullable().optional(),
+  longitude: z.number().nullable().optional(),
 })
 
 const CategorySchema = z.object({
@@ -375,6 +377,8 @@ async function handleCompanyRegister(c: any) {
         description: data.description || '',
         whatsapp: String(data.whatsapp || '').replace(/\D/g, ''),
         thumbnail_url: data.thumbnail_url || '',
+        latitude: data.latitude,
+        longitude: data.longitude,
         is_active: true
       })
       .select()
@@ -763,10 +767,15 @@ app.get('/api/admin/dashboard/stats', async (c) => {
       }
     } catch { }
 
+    const { count: verifiedCompanies } = await supabase.from('companies').select('*', { count: 'exact', head: true }).eq('is_verified', true)
+    const { count: pendingReviews } = await supabase.from('company_reviews').select('*', { count: 'exact', head: true })
+
     return c.json({
       stats: {
         totalAffiliates: totalAffiliates || 0,
         totalCompanies: totalCompanies || 0,
+        verifiedCompanies: verifiedCompanies || 0,
+        pendingReviews: pendingReviews || 0,
         pendingWithdrawals: { count: pendingCount, totalAmount: pendingAmount },
         cashbackThisMonth,
         affiliatesCommissionsMonth,
@@ -813,7 +822,7 @@ app.get('/api/admin/companies', async (c) => {
     const supabase = createSupabase()
     let select = supabase
       .from('companies')
-      .select('id,nome_fantasia,razao_social,cnpj,email,telefone,responsavel,is_active,created_at', { count: 'exact' })
+      .select('id,nome_fantasia,razao_social,cnpj,email,telefone,responsavel,is_active,is_verified,created_at', { count: 'exact' })
       .order('created_at', { ascending: false })
     if (search) select = select.or(`nome_fantasia.ilike.%${search}%,razao_social.ilike.%${search}%,cnpj.ilike.%${search}%,email.ilike.%${search}%`)
     const { data: companies, count } = await select.range(offset, offset + limit - 1)
@@ -972,6 +981,42 @@ async function handleAdminCompanyToggleStatus(c: any) {
     return c.json({ error: 'Erro interno do servidor' }, 500)
   }
 }
+
+app.patch('/api/admin/companies/:id/toggle-verify', async (c) => {
+  try {
+    const id = Number(c.req.param('id'))
+    const supabase = createSupabase()
+    const { data: comp } = await supabase.from('companies').select('id, is_verified').eq('id', id).single()
+    if (!comp) return c.json({ error: 'Empresa não encontrada' }, 404)
+    const newStatus = !(comp as any).is_verified
+    const { error } = await supabase.from('companies').update({ is_verified: newStatus, updated_at: new Date().toISOString() }).eq('id', id)
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ success: true, newStatus })
+  } catch (e) { return c.json({ error: 'Erro interno' }, 500) }
+})
+
+app.get('/api/admin/reviews', async (c) => {
+  try {
+    const supabase = createSupabase()
+    const { data, error } = await supabase
+      .from('company_reviews')
+      .select('*, companies(nome_fantasia), user_profiles(mocha_user_id)')
+      .order('created_at', { ascending: false })
+    
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ reviews: data })
+  } catch (e) { return c.json({ error: 'Erro interno' }, 500) }
+})
+
+app.delete('/api/admin/reviews/:id', async (c) => {
+  try {
+    const id = c.req.param('id')
+    const supabase = createSupabase()
+    const { error } = await supabase.from('company_reviews').delete().eq('id', id)
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ success: true })
+  } catch (e) { return c.json({ error: 'Erro interno' }, 500) }
+})
 
 app.get('/admin/withdrawals', async (c) => {
   return await handleAdminWithdrawals(c)
@@ -3944,9 +3989,11 @@ async function handlePublicCompanies(c: any) {
     let query = supabase
       .from('companies')
       .select(`
-        id, nome_fantasia, thumbnail_url, address_city, is_verified,
+        id, nome_fantasia, thumbnail_url, address_city, is_verified, description,
+        latitude, longitude,
         company_cashback_config(cashback_percentage),
-        company_categories(categories(name))
+        company_categories(categories(name)),
+        company_reviews(rating)
       `)
       .eq('is_active', true)
 
@@ -3976,15 +4023,32 @@ async function handlePublicCompanies(c: any) {
     if (error) return c.json({ error: error.message }, 500)
 
     // Format output
-    const formatted = (companies || []).map((co: any) => ({
-      id: co.id,
-      name: co.nome_fantasia,
-      thumbnail: co.thumbnail_url,
-      city: co.address_city,
-      is_verified: co.is_verified,
-      cashback: co.company_cashback_config?.[0]?.cashback_percentage || 5,
-      categories: co.company_categories?.map((cc: any) => cc.categories?.name) || []
-    }))
+    const formatted = (companies || []).map((co: any) => {
+      const reviews = co.company_reviews || [];
+      const totalReviews = reviews.length;
+      const averageRating = totalReviews > 0 
+        ? (reviews.reduce((acc: number, r: any) => acc + r.rating, 0) / totalReviews).toFixed(1)
+        : "0.0";
+
+      return {
+        id: co.id,
+        name: co.nome_fantasia,
+        nome_fantasia: co.nome_fantasia, // Preserve for map
+        thumbnail: co.thumbnail_url,
+        thumbnail_url: co.thumbnail_url, // Preserve for map
+        city: co.address_city,
+        address_city: co.address_city, // Preserve for map
+        latitude: co.latitude,
+        longitude: co.longitude,
+        is_verified: co.is_verified,
+        description: co.description,
+        cashback: co.company_cashback_config?.[0]?.cashback_percentage || 5,
+        categories: co.company_categories?.map((cc: any) => cc.categories?.name) || [],
+        company_categories: co.company_categories, // For category name in map
+        rating_avg: averageRating,
+        rating_count: totalReviews
+      };
+    })
 
     return c.json({ companies: formatted })
   } catch (e) {
@@ -4075,6 +4139,13 @@ app.post('/api/empresa/galeria', async (c) => {
 
 // 6. ADMIN: Manage Categories
 app.post('/api/admin/categories', async (c) => {
+  return await handleCategoryCreate(c)
+})
+app.post('/admin/categories', async (c) => {
+  return await handleCategoryCreate(c)
+})
+
+async function handleCategoryCreate(c: any) {
   const token = getAuthToken(c, 'admin_session')
   if (!token) return c.json({ error: 'Não autenticado' }, 401)
   try {
@@ -4089,7 +4160,49 @@ app.post('/api/admin/categories', async (c) => {
   } catch (e) {
     return c.json({ error: 'Erro interno' }, 500)
   }
+}
+
+app.put('/api/admin/categories/:id', async (c) => {
+  return await handleCategoryUpdate(c)
 })
+app.put('/admin/categories/:id', async (c) => {
+  return await handleCategoryUpdate(c)
+})
+
+async function handleCategoryUpdate(c: any) {
+  const token = getAuthToken(c, 'admin_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const id = c.req.param('id')
+    const body = await c.req.json()
+    const parsed = CategorySchema.safeParse(body)
+    if (!parsed.success) return c.json({ error: 'Dados inválidos' }, 400)
+
+    const supabase = createSupabase()
+    const { error } = await supabase.from('categories').update(parsed.data).eq('id', id)
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ success: true })
+  } catch (e) { return c.json({ error: 'Erro interno' }, 500) }
+}
+
+app.delete('/api/admin/categories/:id', async (c) => {
+  return await handleCategoryDelete(c)
+})
+app.delete('/admin/categories/:id', async (c) => {
+  return await handleCategoryDelete(c)
+})
+
+async function handleCategoryDelete(c: any) {
+  const token = getAuthToken(c, 'admin_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const id = c.req.param('id')
+    const supabase = createSupabase()
+    const { error } = await supabase.from('categories').delete().eq('id', id)
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ success: true })
+  } catch (e) { return c.json({ error: 'Erro interno' }, 500) }
+}
 
 app.notFound((c: any) => {
   return c.json({

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Building2, CreditCard, Lock, AlertCircle, Users, Eye, EyeOff } from 'lucide-react';
+import { Building2, CreditCard, Lock, AlertCircle, Users, Eye, EyeOff, ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router';
 
 export default function CompanyLogin() {
   const [identifier, setIdentifier] = useState('');
@@ -115,7 +116,17 @@ export default function CompanyLogin() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011]">
       <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="max-w-md w-full space-y-8">
+        <div className="max-w-md w-full">
+          {/* Back to home */}
+          <Link
+            to="/"
+            className="inline-flex items-center text-gray-300 hover:text-white mb-8 transition-colors group"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform" />
+            Voltar ao início
+          </Link>
+
+          <div className="space-y-8">
           <div className="text-center">
             <img src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" alt="CashMais" className="mx-auto h-16 w-auto" />
             <h2 className="mt-6 text-3xl font-bold text-white">Acesso Empresarial</h2>
@@ -222,6 +233,7 @@ export default function CompanyLogin() {
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 }

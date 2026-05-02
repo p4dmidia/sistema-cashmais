@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router';
+import { useSearchParams, useNavigate } from 'react-router';
 import { Building2, Users, TrendingUp, LogOut, Plus, Eye, AlertCircle, Edit2, Trash2, Lock, Unlock, Calendar, FileDown, Filter, Menu, X, Settings, MapPin, ShieldCheck, Camera } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import Layout from '@/react-app/components/Layout';
+import { useAuth } from '@/react-app/hooks/useAuth';
 
 interface Company {
   id: number;
@@ -80,7 +82,10 @@ export default function CompanyDashboard() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [stats, setStats] = useState<CompanyStats | null>(null);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'overview';
+  const setActiveTab = (tab: string) => setSearchParams({ tab });
+
   const [filteredPurchases, setFilteredPurchases] = useState<Purchase[]>([]);
   const [dateFilter, setDateFilter] = useState('all');
   const [customStartDate, setCustomStartDate] = useState('');
@@ -98,7 +103,6 @@ export default function CompanyDashboard() {
   const [profileFormData, setProfileFormData] = useState<Partial<Company>>({});
   const [cepLoading, setCepLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [directoryFormData, setDirectoryFormData] = useState({
     description: '',
@@ -167,21 +171,40 @@ export default function CompanyDashboard() {
     }
   }, [company]);
 
+  // Efeito para geocodificação automática no formulário do diretório
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (directoryFormData.address_street && directoryFormData.address_city) {
+        handleAutoGetCoordinates(directoryFormData);
+      }
+    }, 1500); // Debounce maior para não sobrecarregar API
+    return () => clearTimeout(timer);
+  }, [
+    directoryFormData.address_street, 
+    directoryFormData.address_number, 
+    directoryFormData.address_city, 
+    directoryFormData.address_state
+  ]);
+
   // Função auxiliar para busca automática de coordenadas sem alert
   const handleAutoGetCoordinates = async (data = directoryFormData) => {
     if (!data) return;
-    const { address_street, address_city, address_state, address_zip } = data;
+    const { address_street, address_number, address_city, address_state, address_zip } = data;
     if (!address_zip && (!address_street || !address_city)) return;
 
     try {
-      const query = address_street && address_city 
-        ? `${address_street}, ${address_city}, ${address_state}, Brasil`
-        : `${address_zip}, Brasil`;
-        
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+      // Tenta primeiro com endereço completo (mais preciso)
+      const fullQuery = address_street && address_number && address_city
+        ? `${address_street}, ${address_number}, ${address_city}, ${address_state}, Brasil`
+        : address_street && address_city 
+          ? `${address_street}, ${address_city}, ${address_state}, Brasil`
+          : `${address_zip}, Brasil`;
+          
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(fullQuery)}&limit=1`);
       const geoData = await response.json();
       
       if (geoData && geoData.length > 0) {
+        console.log('[GEO] Encontrado:', geoData[0].lat, geoData[0].lon);
         setDirectoryFormData(prev => ({
           ...prev,
           latitude: String(geoData[0].lat),
@@ -302,73 +325,20 @@ export default function CompanyDashboard() {
         const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
         const data = await response.json();
         if (!data.erro) {
-          // Prepare address data
-          const addressData = {
+          setDirectoryFormData(prev => ({
+            ...prev,
             address_zip: value,
             address_street: data.logradouro,
             address_district: data.bairro,
             address_city: data.localidade,
             address_state: data.uf
-          };
-
-          // Try to get coordinates automatically
-          const query = `${data.logradouro}, ${data.localidade}, ${data.uf}, Brasil`;
-          try {
-            const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
-            const geoData = await geoRes.json();
-            
-            if (geoData && geoData.length > 0) {
-              setDirectoryFormData(prev => ({
-                ...prev,
-                ...addressData,
-                latitude: String(geoData[0].lat),
-                longitude: String(geoData[0].lon)
-              }));
-            } else {
-              // Set address even if geo fails
-              setDirectoryFormData(prev => ({ ...prev, ...addressData }));
-            }
-          } catch (geoErr) {
-            console.error('Geo error:', geoErr);
-            setDirectoryFormData(prev => ({ ...prev, ...addressData }));
-          }
+          }));
         }
       } catch (err) {
         console.error('Failed to fetch CEP:', err);
       } finally {
         setCepLoading(false);
       }
-    }
-  };
-
-  const handleGetCoordinates = async () => {
-    const { address_street, address_number, address_city, address_state } = directoryFormData;
-    if (!address_street || !address_city) {
-      alert('Preencha pelo menos a rua e a cidade para buscar as coordenadas.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const query = `${address_street}, ${address_number}, ${address_city}, ${address_state}, Brasil`;
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
-      const data = await response.json();
-      
-      if (data && data.length > 0) {
-        setDirectoryFormData(prev => ({
-          ...prev,
-          latitude: data[0].lat,
-          longitude: data[0].lon
-        }));
-        alert('Coordenadas encontradas e atualizadas!');
-      } else {
-        alert('Não foi possível encontrar as coordenadas para este endereço. Tente ajustar os dados.');
-      }
-    } catch (err) {
-      console.error('Error fetching coordinates:', err);
-      alert('Erro ao buscar coordenadas.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -891,32 +861,17 @@ export default function CompanyDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011] flex flex-col lg:flex-row">
-      {/* Mobile Header (Hambúrguer) - Visible only on mobile/tablet */}
-      <div className="lg:hidden bg-black/40 backdrop-blur-xl border-b border-white/10 p-4 sticky top-0 z-50 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <img src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" alt="CashMais" className="h-8 w-auto" />
-          <h1 className="text-lg font-bold text-white">Empresas</h1>
-        </div>
-        <button 
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
-          className="p-2 text-gray-300 hover:text-[#70ff00] focus:outline-none focus:ring-2 focus:ring-[#70ff00]/50 rounded-lg transition-all"
-          aria-label={isMenuOpen ? "Fechar menu" : "Abrir menu"}
-        >
-          {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
-      </div>
-
-      {/* Mobile Navigation Dropdown */}
-      {isMenuOpen && (
-        <div className="lg:hidden fixed inset-0 top-[65px] bg-black/60 backdrop-blur-md z-40 animate-in fade-in slide-in-from-top-4 duration-300">
-          <div className="bg-[#001144]/95 border-b border-white/10 p-6 space-y-6 shadow-2xl">
-            <nav className="space-y-4">
+    <Layout fullWidth={true}>
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Sidebar Local do Dashboard (Desktop) */}
+        <div className="hidden lg:block w-full lg:w-64 shrink-0">
+          <div className="bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 p-4 sticky top-24">
+            <nav className="space-y-2">
               {[
                 { key: 'overview', label: 'Visão Geral', icon: TrendingUp },
                 { key: 'cashiers', label: 'Caixas', icon: Users },
                 { key: 'reports', label: 'Relatórios', icon: Eye },
-                { key: 'directory', label: 'Meu Perfil Público', icon: Building2 },
+                { key: 'directory', label: 'Perfil Público', icon: Building2 },
                 { key: 'settings', label: 'Configurações', icon: Settings }
               ].map(({ key, label, icon: Icon }) => (
                 <button
@@ -924,100 +879,25 @@ export default function CompanyDashboard() {
                   onClick={() => {
                     setActiveTab(key);
                     setIsMenuOpen(false);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  className={`w-full flex items-center space-x-4 p-4 rounded-xl font-medium text-base transition-all ${
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200 ${
                     activeTab === key
-                      ? 'bg-[#70ff00]/20 text-[#70ff00] border border-[#70ff00]/30'
-                      : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent'
+                      ? 'bg-[#70ff00] text-[#001144] shadow-lg shadow-[#70ff00]/20'
+                      : 'text-gray-300 hover:text-white hover:bg-white/5'
                   }`}
                 >
-                  <Icon className="h-6 w-6" />
+                  <Icon className="h-5 w-5" />
                   <span>{label}</span>
                 </button>
               ))}
             </nav>
-
-            <div className="pt-6 border-t border-white/10">
-              <div className="px-4 mb-6">
-                <p className="text-xs text-gray-500 uppercase tracking-widest font-bold">Empresa</p>
-                <p className="text-lg text-white font-medium">{company?.nome_fantasia}</p>
-                <p className="text-sm text-gray-400">ID: {company?.id}</p>
-              </div>
-              <button
-                onClick={() => {
-                  handleLogout();
-                  setIsMenuOpen(false);
-                }}
-                className="w-full flex items-center justify-center space-x-2 p-4 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all font-bold"
-              >
-                <LogOut className="h-5 w-5" />
-                <span>Sair do Sistema</span>
-              </button>
-            </div>
-          </div>
-          {/* Overlay to close when clicking outside */}
-          <div className="h-full" onClick={() => setIsMenuOpen(false)}></div>
-        </div>
-      )}
-
-      {/* Sidebar - Desktop Only */}
-      <div className="hidden lg:flex w-80 bg-black/20 backdrop-blur-xl border-r border-white/10 flex-col sticky top-0 h-screen">
-        {/* Logo e Nome do Sistema */}
-        <div className="p-6 border-b border-white/10">
-          <div className="flex items-center space-x-3">
-            <img src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" alt="CashMais" className="h-10 w-auto" />
-            <div>
-              <h1 className="text-xl font-bold text-white">Empresas</h1>
-            </div>
           </div>
         </div>
 
-        {/* Menu de Navegação */}
-        <div className="flex-1 py-6">
-          <nav className="space-y-2 px-4">
-            {[
-              { key: 'overview', label: 'Visão Geral', icon: TrendingUp },
-              { key: 'cashiers', label: 'Caixas', icon: Users },
-              { key: 'reports', label: 'Relatórios', icon: Eye },
-              { key: 'directory', label: 'Meu Perfil Público', icon: Building2 },
-              { key: 'settings', label: 'Configurações', icon: Settings }
-            ].map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => setActiveTab(key)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-medium text-sm transition-all duration-200 ${
-                  activeTab === key
-                    ? 'bg-[#70ff00]/20 text-[#70ff00] shadow-lg shadow-[#70ff00]/10'
-                    : 'text-gray-300 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <Icon className="h-5 w-5" />
-                <span>{label}</span>
-              </button>
-            ))}
-          </nav>
-        </div>
-
-        {/* Informações da Empresa e Sair */}
-        <div className="p-4 border-t border-white/10">
-          <div className="mb-3">
-            <p className="text-xs text-gray-400">Empresa</p>
-            <p className="text-sm text-white font-medium">{company?.nome_fantasia}</p>
-            <p className="text-xs text-gray-500">ID: {company?.id}</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-white hover:bg-red-500/10 rounded-lg transition-all duration-200"
-          >
-            <LogOut className="h-4 w-4" />
-            <span className="text-sm">Sair</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Área de Conteúdo Principal */}
-      <div className="flex-1 p-4 sm:p-8 overflow-y-auto">
-        {/* Conteúdo das Abas */}
+        {/* Área de Conteúdo Principal */}
+        <div className="flex-1 min-w-0">
+          {/* Conteúdo das Abas */}
         {/* Overview Tab */}
         {activeTab === 'overview' && stats && (
           <div className="space-y-8">
@@ -2352,6 +2232,7 @@ export default function CompanyDashboard() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </Layout>
   );
 }

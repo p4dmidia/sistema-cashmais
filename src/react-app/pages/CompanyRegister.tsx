@@ -23,8 +23,39 @@ export default function CompanyRegister() {
     description: '',
     whatsapp: '',
     thumbnail_url: '',
-    category_id: ''
+    category_id: '',
+    latitude: null as number | null,
+    longitude: null as number | null
   });
+
+  // Geocoding effect
+  useEffect(() => {
+    const geocodeAddress = async () => {
+      if (formData.address_street && formData.address_number && formData.address_city) {
+        try {
+          const address = `${formData.address_street}, ${formData.address_number}, ${formData.address_city}, ${formData.address_state}, Brazil`;
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`
+          );
+          const data = await response.json();
+          if (data && data.length > 0) {
+            console.log('Geocoding success:', data[0].lat, data[0].lon);
+            setFormData(prev => ({
+              ...prev,
+              latitude: parseFloat(data[0].lat),
+              longitude: parseFloat(data[0].lon)
+            }));
+          }
+        } catch (err) {
+          console.error('Geocoding failed:', err);
+        }
+      }
+    };
+
+    const timer = setTimeout(geocodeAddress, 1000); // Debounce
+    return () => clearTimeout(timer);
+  }, [formData.address_street, formData.address_number, formData.address_city, formData.address_state]);
+
   const [categories, setCategories] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

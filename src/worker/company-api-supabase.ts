@@ -24,6 +24,8 @@ const CompanyRegisterSchema = z.object({
   address_state: z.string().optional(),
   address_zip: z.string().optional(),
   site_instagram: z.string().optional(),
+  latitude: z.union([z.number(), z.string()]).nullable().optional(),
+  longitude: z.union([z.number(), z.string()]).nullable().optional(),
 });
 
 const CreateCashierSchema = z.object({
@@ -157,6 +159,8 @@ app.post('/api/empresa/registrar', async (c) => {
         address_state: data.address_state || '',
         address_zip: data.address_zip || '',
         site_instagram: data.site_instagram || '',
+        latitude: typeof data.latitude === 'string' ? parseFloat(data.latitude) : data.latitude,
+        longitude: typeof data.longitude === 'string' ? parseFloat(data.longitude) : data.longitude,
         is_active: true
       })
       .select()

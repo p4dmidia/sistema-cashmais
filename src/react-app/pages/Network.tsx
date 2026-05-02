@@ -196,32 +196,9 @@ function NetworkPage() {
     return null; // Will redirect via useEffect
   }
 
-  // Create compatible user object for layout
-  const displayUser = affiliateUser ? {
-    id: affiliateUser.id.toString(),
-    email: affiliateUser.email,
-    google_sub: '',
-    profile: {
-      id: affiliateUser.id,
-      mocha_user_id: affiliateUser.id.toString(),
-      cpf: affiliateUser.cpf,
-      role: 'affiliate' as const,
-      is_active: true,
-      sponsor_id: affiliateUser.sponsor_id || null,
-      company_name: null,
-      created_at: affiliateUser.created_at,
-      updated_at: affiliateUser.created_at,
-    }
-  } : null;
-
-  if (!displayUser) {
-    console.log('[NETWORK] No display user, returning null');
-    return null;
-  }
-
-  console.log('[NETWORK] Rendering network page for user:', displayUser.email);
+  console.log('[NETWORK] Rendering network page');
   return (
-    <Layout user={displayUser}>
+    <Layout>
       <div className="space-y-8">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">Minha Rede MLM</h1>

@@ -6,7 +6,9 @@ import {
   DollarSign,
   Activity,
   TrendingUp,
-  BarChart3
+  BarChart3,
+  MessageSquare,
+  ShieldCheck
 } from 'lucide-react';
 import AdminLayout from '@/react-app/components/AdminLayout';
 import { 
@@ -38,6 +40,8 @@ interface Stats {
   cashbackThisMonth: number;
   affiliatesCommissionsMonth?: number;
   companyReceivableMonth?: number;
+  verifiedCompanies: number;
+  pendingReviews: number;
 }
 
 interface Purchase {
@@ -152,6 +156,18 @@ function AdminDashboard() {
       value: formatMoney(stats?.companyReceivableMonth || 0),
       icon: BarChart3,
       gradient: 'from-yellow-500 to-amber-500'
+    },
+    {
+      title: 'Empresas Verificadas',
+      value: stats?.verifiedCompanies || 0,
+      icon: ShieldCheck,
+      gradient: 'from-[#70ff00] to-[#50cc00]'
+    },
+    {
+      title: 'Total de Avaliações',
+      value: stats?.pendingReviews || 0,
+      icon: MessageSquare,
+      gradient: 'from-blue-400 to-indigo-600'
     }
   ];
 

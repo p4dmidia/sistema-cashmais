@@ -169,30 +169,8 @@ ${referralLink}
     );
   }
 
-  // Create compatible user object for layout
-  const displayUser = affiliateUser ? {
-    id: affiliateUser.id.toString(),
-    email: affiliateUser.email,
-    google_sub: '',
-    profile: {
-      id: affiliateUser.id,
-      mocha_user_id: affiliateUser.id.toString(),
-      cpf: affiliateUser.cpf,
-      role: 'affiliate' as const,
-      is_active: true,
-      sponsor_id: affiliateUser.sponsor_id || null,
-      company_name: null,
-      created_at: affiliateUser.created_at,
-      updated_at: affiliateUser.created_at,
-    }
-  } : null;
-
-  if (!displayUser) {
-    return null;
-  }
-
   return (
-    <Layout user={displayUser}>
+    <Layout>
       <div className="space-y-8">
         {/* Welcome Section */}
         <div className="bg-white/5 backdrop-blur-md border border-[#001144]/40 rounded-3xl p-8 shadow-2xl">

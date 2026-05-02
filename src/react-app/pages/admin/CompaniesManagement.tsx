@@ -11,6 +11,8 @@ import {
   DollarSign,
   Percent,
   Settings,
+  ShieldCheck,
+  ShieldAlert
 } from 'lucide-react';
 import AdminLayout from '@/react-app/components/AdminLayout';
 
@@ -23,6 +25,7 @@ interface Company {
   telefone: string;
   responsavel: string;
   is_active: boolean;
+  is_verified: boolean;
   cashback_percentage: number;
   total_purchases: number;
   total_cashback_generated: number;
@@ -61,6 +64,7 @@ export default function CompaniesManagement() {
   const [editFormData, setEditFormData] = useState<Partial<Company>>({});
   const [editLoading, setEditLoading] = useState(false);
   const [cepLoading, setCepLoading] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState<number | null>(null);
 
   useEffect(() => {
     fetchCompanies();
@@ -115,6 +119,33 @@ export default function CompaniesManagement() {
       alert('Erro de conexão');
     } finally {
       setToggleLoading(null);
+    }
+  };
+
+  const handleToggleVerify = async (companyId: number) => {
+    setVerifyLoading(companyId);
+    try {
+      const response = await fetch(`/api/admin/companies/${companyId}/toggle-verify`, {
+        method: 'PATCH',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCompanies(companies.map(company => 
+          company.id === companyId 
+            ? { ...company, is_verified: data.newStatus }
+            : company
+        ));
+      } else {
+        const error = await response.json();
+        alert(error.error || 'Erro ao alterar verificação');
+      }
+    } catch (error) {
+      console.error('Failed to toggle company verification:', error);
+      alert('Erro de conexão');
+    } finally {
+      setVerifyLoading(null);
     }
   };
 
@@ -303,6 +334,7 @@ export default function CompaniesManagement() {
                         <th className="text-left text-sm font-medium text-gray-400 pb-3">Compras</th>
                         <th className="text-left text-sm font-medium text-gray-400 pb-3">Total Gerado</th>
                         <th className="text-left text-sm font-medium text-gray-400 pb-3">Status</th>
+                        <th className="text-left text-sm font-medium text-gray-400 pb-3">Verif.</th>
                         <th className="text-left text-sm font-medium text-gray-400 pb-3">Ações</th>
                       </tr>
                     </thead>
@@ -354,6 +386,13 @@ export default function CompaniesManagement() {
                               {company.is_active ? 'Ativa' : 'Inativa'}
                             </span>
                           </td>
+                          <td className="py-3">
+                            {company.is_verified ? (
+                              <ShieldCheck className="h-5 w-5 text-[#70ff00]" title="Verificada" />
+                            ) : (
+                              <ShieldAlert className="h-5 w-5 text-gray-500" title="Não Verificada" />
+                            )}
+                          </td>
                           <td className="py-3 text-right pr-4">
                             <div className="flex items-center justify-end space-x-2">
                               <button
@@ -372,6 +411,22 @@ export default function CompaniesManagement() {
                                   <XCircle className="h-3 w-3" />
                                 ) : (
                                   <CheckCircle className="h-3 w-3" />
+                                )}
+                              </button>
+                              <button
+                                onClick={() => handleToggleVerify(company.id)}
+                                disabled={verifyLoading === company.id}
+                                className={`p-1.5 rounded-lg border transition-all ${
+                                  company.is_verified 
+                                    ? 'bg-[#70ff00]/10 text-[#70ff00] border-[#70ff00]/20 hover:bg-[#70ff00]/20' 
+                                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+                                }`}
+                                title={company.is_verified ? "Remover Verificação" : "Verificar Empresa"}
+                              >
+                                {verifyLoading === company.id ? (
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b border-current"></div>
+                                ) : (
+                                  <ShieldCheck className="h-3.5 w-3.5" />
                                 )}
                               </button>
                               <button

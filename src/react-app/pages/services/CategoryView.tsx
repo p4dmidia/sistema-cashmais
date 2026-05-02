@@ -4,6 +4,8 @@ import Layout from "@/react-app/components/Layout";
 import CompanyListItem from "@/react-app/components/services/CompanyListItem";
 import { List, Map as MapIcon, ChevronLeft, Search, SlidersHorizontal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import CategoryMap from "@/react-app/components/services/CategoryMap";
+import { supabase } from "@/lib/supabase";
 
 export default function CategoryView() {
   const { id: categorySlug } = useParams();
@@ -20,11 +22,72 @@ export default function CategoryView() {
   const fetchCompanies = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/companies/public?category=${categorySlug}`);
-      if (response.ok) {
-        const data = await response.json();
-        setCompanies(data.companies);
+      // 1. Get Category ID
+      const { data: catData } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('slug', categorySlug)
+        .maybeSingle();
+
+      if (!catData) {
+        setCompanies([]);
+        return;
       }
+
+      // 2. Get Companies IDs for this category
+      const { data: relData } = await supabase
+        .from('company_categories')
+        .select('company_id')
+        .eq('category_id', catData.id);
+
+      const ids = (relData || []).map(r => r.company_id);
+
+      if (ids.length === 0) {
+        setCompanies([]);
+        return;
+      }
+
+      // 3. Fetch Full Company Data
+      const { data: companiesData, error } = await supabase
+        .from('companies')
+        .select(`
+          id, 
+          nome_fantasia, 
+          thumbnail_url, 
+          address_city, 
+          is_verified, 
+          description,
+          latitude, 
+          longitude,
+          company_cashback_config(cashback_percentage),
+          company_categories(categories(name)),
+          company_reviews(rating)
+        `)
+        .in('id', ids)
+        .eq('is_active', true);
+
+      if (error) throw error;
+
+      // 4. Format for UI
+      const formatted = (companiesData || []).map(co => {
+        const reviews = co.company_reviews || [];
+        const totalReviews = reviews.length;
+        const averageRating = totalReviews > 0 
+          ? (reviews.reduce((acc, r) => acc + r.rating, 0) / totalReviews).toFixed(1)
+          : "0.0";
+
+        return {
+          ...co,
+          name: co.nome_fantasia,
+          city: co.address_city,
+          rating_avg: averageRating,
+          rating_count: totalReviews,
+          cashback: co.company_cashback_config?.[0]?.cashback_percentage || 5,
+          categories: co.company_categories?.map((cc: any) => cc.categories?.name) || []
+        };
+      });
+
+      setCompanies(formatted);
     } catch (error) {
       console.error('Error fetching companies:', error);
     } finally {
@@ -141,19 +204,10 @@ export default function CategoryView() {
                 exit={{ opacity: 0, scale: 1.05 }}
                 className="absolute inset-0 bg-white/5 rounded-[40px] border border-white/10 overflow-hidden"
               >
-                {/* Map Implementation Placeholder */}
-                <div className="w-full h-full flex flex-col items-center justify-center bg-[#001144]/40 backdrop-blur-sm">
-                  <div className="w-24 h-24 bg-[#70ff00]/10 rounded-full flex items-center justify-center mb-6 border border-[#70ff00]/30 animate-pulse">
-                    <MapIcon className="w-10 h-10 text-[#70ff00]" />
-                  </div>
-                  <h3 className="text-2xl font-black text-white mb-2">Visualização em Mapa</h3>
-                  <p className="text-gray-400 text-center max-w-md px-6">
-                    Integração com Google Maps para exibir as {companies.length} empresas da região em tempo real.
-                  </p>
-                  <div className="mt-8 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-2xl flex items-center gap-3">
-                    <span className="text-yellow-500 font-bold text-xs">⚠️ Chave da API do Google Maps necessária para exibição completa.</span>
-                  </div>
-                </div>
+                <CategoryMap 
+                  companies={filteredCompanies} 
+                  onCompanyClick={(id) => navigate(`/servicos/empresa/${id}`)}
+                />
               </motion.div>
             )}
           </AnimatePresence>

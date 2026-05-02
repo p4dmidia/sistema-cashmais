@@ -5,7 +5,7 @@ interface CompanyListItemProps {
   company: {
     id: number;
     name: string;
-    thumbnail: string;
+    thumbnail_url: string;
     city: string;
     is_verified: boolean;
     cashback: number;
@@ -24,7 +24,7 @@ export default function CompanyListItem({ company, onClick }: CompanyListItemPro
         {/* Image Container */}
         <div className="relative w-full md:w-48 h-48 md:h-auto shrink-0 overflow-hidden rounded-2xl">
           <img 
-            src={company.thumbnail || "https://images.unsplash.com/photo-1581094794329-c8112a89af12?q=80&w=2070&auto=format&fit=crop"} 
+            src={company.thumbnail_url || "https://images.unsplash.com/photo-1581094794329-c8112a89af12?q=80&w=2070&auto=format&fit=crop"} 
             alt={company.name}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
           />
@@ -66,8 +66,8 @@ export default function CompanyListItem({ company, onClick }: CompanyListItemPro
           <div className="flex items-center justify-between mt-auto pt-4 border-t border-white/5">
             <div className="flex items-center gap-1 text-yellow-400">
               <Star className="w-4 h-4 fill-current" />
-              <span className="text-sm font-bold text-white">4.8</span>
-              <span className="text-xs text-gray-500 font-medium">(24 avaliações)</span>
+              <span className="text-sm font-bold text-white">{(company as any).rating_avg || "0.0"}</span>
+              <span className="text-xs text-gray-500 font-medium">({(company as any).rating_count || 0} {(company as any).rating_count === 1 ? 'avaliação' : 'avaliações'})</span>
             </div>
 
             <button 

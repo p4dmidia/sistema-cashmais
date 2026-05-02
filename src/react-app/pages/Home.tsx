@@ -1,10 +1,14 @@
-import { Link } from 'react-router';
-import { ArrowRight, Users, TrendingUp, Shield, Smartphone, DollarSign, Store, MapPin, Star } from 'lucide-react';
+import { Link, useNavigate } from 'react-router';
+import { ArrowRight, Users, TrendingUp, Shield, Smartphone, DollarSign, Store, MapPin, Star, User, Home as HomeIcon, LogOut, LayoutGrid } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useAuth } from '@/react-app/hooks/useAuth';
+import UserHeaderMenu from '@/react-app/components/UserHeaderMenu';
 
 export default function Home() {
   const [companies, setCompanies] = useState<any[]>([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
     const fetchCompanies = async () => {
@@ -26,40 +30,37 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#001144] to-[#000011]">
       {/* Header */}
-      <header className="bg-white/5 backdrop-blur-md border-b border-[#001144]/40">
+      <header className="bg-white/5 backdrop-blur-md border-b border-[#001144]/40 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-2">
+          <div className="flex justify-between items-center h-20">
+            <Link to="/" className="flex items-center space-x-2 shrink-0">
               <img 
                 src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" 
                 alt="CashMais" 
-                className="h-10 w-auto"
+                className="h-12 md:h-16 w-auto transition-transform hover:scale-105"
               />
-            </div>
+            </Link>
 
             <div className="flex items-center space-x-4">
-              <Link
-                to="/servicos"
-                className="hidden md:flex items-center px-4 py-2 text-white/80 hover:text-[#70ff00] transition-colors font-medium text-sm"
-              >
-                Serviços
-              </Link>
-              
-              <Link
-                to="/empresa/cadastro"
-                className="hidden sm:inline-flex items-center px-4 py-2 bg-white/10 backdrop-blur-md border border-[#70ff00] text-[#70ff00] rounded-lg font-semibold hover:bg-[#70ff00] hover:text-white hover:scale-[1.02] transition-all duration-200 text-sm"
-              >
-                <Store className="w-4 h-4 mr-2" />
-                Empresa Parceira
-              </Link>
-              
-              <Link
-                to="/login"
-                className="inline-flex items-center px-4 py-2 bg-[#70ff00] text-white rounded-lg font-semibold hover:bg-[#50cc00] hover:scale-[1.02] transition-all duration-200 text-sm"
-              >
-                <Users className="w-4 h-4 mr-2" />
-                Área do Afiliado
-              </Link>
+              {!user ? (
+                <div className="flex items-center space-x-3">
+                  {/* Grupo Empresa */}
+                  <div className="hidden lg:flex items-center bg-white/5 border border-white/10 rounded-xl p-1">
+                    <Link to="/empresa/cadastro" className="px-3 py-1.5 text-[#70ff00] text-[10px] font-black uppercase hover:bg-[#70ff00]/10 rounded-lg transition-all tracking-wider">Cadastro Empresa</Link>
+                    <div className="w-px h-3 bg-white/10 mx-1"></div>
+                    <Link to="/empresa/login" className="px-3 py-1.5 text-white/70 text-[10px] font-black uppercase hover:bg-white/10 rounded-lg transition-all tracking-wider">Login</Link>
+                  </div>
+
+                  {/* Grupo Afiliado */}
+                  <div className="flex items-center bg-[#70ff00]/5 border border-[#70ff00]/20 rounded-xl p-1">
+                    <Link to="/cadastro" className="px-4 py-1.5 bg-[#70ff00] text-[#001144] text-[10px] font-black uppercase rounded-lg hover:bg-[#50cc00] transition-all tracking-wider shadow-lg shadow-[#70ff00]/25">Cadastro Afiliado</Link>
+                    <div className="w-px h-3 bg-[#70ff00]/20 mx-1"></div>
+                    <Link to="/login" className="px-4 py-1.5 text-[#70ff00] text-[10px] font-black uppercase hover:bg-[#70ff00]/10 rounded-lg transition-all tracking-wider">Entrar</Link>
+                  </div>
+                </div>
+              ) : (
+                <UserHeaderMenu />
+              )}
             </div>
           </div>
         </div>
@@ -503,16 +504,17 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="bg-white/5 backdrop-blur-md border-t border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="flex items-center space-x-2 mb-4 md:mb-0">
-              <img 
-                src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" 
-                alt="CashMais" 
-                className="h-10 w-auto"
-              />
+            <div className="flex flex-col items-center md:items-start space-y-4 mb-8 md:mb-0">
+              <Link to="/">
+                <img 
+                  src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" 
+                  alt="CashMais" 
+                  className="h-24 w-auto"
+                />
+              </Link>
             </div>
             
             <div className="text-gray-400 text-sm text-center md:text-right">
