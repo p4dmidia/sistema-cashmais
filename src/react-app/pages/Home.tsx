@@ -3,6 +3,7 @@ import { ArrowRight, Users, TrendingUp, Shield, Smartphone, DollarSign, Store, M
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import UserHeaderMenu from '@/react-app/components/UserHeaderMenu';
+import logo from "@/assets/logotipo.png";
 
 export default function Home() {
   const [companies, setCompanies] = useState<any[]>([]);
@@ -36,7 +37,7 @@ export default function Home() {
           <div className="flex justify-between items-center h-20">
             <Link to="/" className="flex items-center space-x-2 shrink-0">
               <img 
-                src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" 
+                src={logo} 
                 alt="CashMais" 
                 className="h-12 md:h-16 w-auto transition-transform hover:scale-105"
               />
@@ -559,7 +560,7 @@ export default function Home() {
             <div className="flex flex-col items-center md:items-start space-y-4 mb-8 md:mb-0">
               <Link to="/">
                 <img 
-                  src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" 
+                  src={logo} 
                   alt="CashMais" 
                   className="h-24 w-auto"
                 />

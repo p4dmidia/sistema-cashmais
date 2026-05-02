@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation } from "react-router";
 import { type CashMaisUser } from "@/shared/types";
 import { useAuth } from "@/react-app/hooks/useAuth";
 import UserHeaderMenu from "@/react-app/components/UserHeaderMenu";
+import logo from "@/assets/logotipo.png";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -75,7 +76,7 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
           <div className="flex justify-between items-center h-20">
             {/* Logo */}
             <Link to="/" className="flex items-center space-x-2 shrink-0">
-              <img src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" alt="CashMais" className="h-10 md:h-16 w-auto transition-transform hover:scale-105" />
+              <img src={logo} alt="CashMais" className="h-10 md:h-16 w-auto transition-transform hover:scale-105" />
             </Link>
 
             {/* Desktop Navigation (Pills) - Only for Affiliates */}
@@ -265,7 +266,7 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
             <div className="flex flex-col items-center md:items-start space-y-4 mb-8 md:mb-0">
               <Link to="/">
                 <img 
-                  src="https://mocha-cdn.com/01995053-6d08-799d-99f1-d9898351a40a/Design-sem-nome.png" 
+                  src={logo} 
                   alt="CashMais" 
                   className="h-24 w-auto"
                 />
