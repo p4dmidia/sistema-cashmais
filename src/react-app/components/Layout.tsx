@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation } from "react-router";
 import { type CashMaisUser } from "@/shared/types";
 import { useAuth } from "@/react-app/hooks/useAuth";
 import UserHeaderMenu from "@/react-app/components/UserHeaderMenu";
+import PWAInstallBanner from "@/react-app/components/PWAInstallBanner";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -235,6 +236,9 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
           </div>
         </div>
       </footer>
+      
+      {/* PWA Install Offer */}
+      <PWAInstallBanner />
     </div>
   );
 }
