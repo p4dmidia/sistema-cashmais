@@ -2631,7 +2631,10 @@ app.post('/api/empresa/login', async (c) => {
         role: 'company'
       }
     })
-  } catch (e) { return c.json({ error: 'Erro interno do servidor' }, 500) }
+  } catch (e) { 
+    console.error('[COMPANY_LOGIN_ERROR]', e);
+    return c.json({ error: 'Erro interno do servidor', details: (e as any).message }, 500) 
+  }
 })
 
 app.get('/api/empresa/me', async (c) => {
@@ -3266,27 +3269,29 @@ app.post('/api/empresa/caixas', async (c) => {
     const parsed = z.object({ name: z.string().min(1), cpf: z.string().min(11), password: z.string().min(6) }).safeParse(body)
     if (!parsed.success) return c.json({ error: 'Dados inválidos' }, 400)
     const supabase = createSupabase()
-    const { data: session } = await supabase
+    const { data: session, error: sessionError } = await supabase
       .from('company_sessions')
       .select('*, companies!inner(id)')
       .eq('session_token', token)
       .gt('expires_at', new Date().toISOString())
-      .single()
-    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+      .maybeSingle()
+    if (sessionError || !session) return c.json({ error: 'Não autorizado ou sessão expirada' }, 401)
+    const companyId = (session as any).companies?.id
+    if (!companyId) return c.json({ error: 'Empresa não encontrada para esta sessão' }, 404)
     const cleanCpf = parsed.data.cpf.replace(/\D/g, '')
     const { data: existingCashier } = await supabase
       .from('company_cashiers')
       .select('id')
-      .eq('company_id', (session as any).companies.id)
+      .eq('company_id', companyId)
       .eq('cpf', cleanCpf)
-      .single()
+      .maybeSingle()
     if (existingCashier) return c.json({ error: 'CPF já cadastrado para esta empresa' }, 400)
     const { data: globalExisting } = await supabase
       .from('company_cashiers')
       .select('id, company_id')
       .eq('cpf', cleanCpf)
-      .single()
-    if (globalExisting && (globalExisting as any).company_id !== (session as any).companies.id) return c.json({ error: 'CPF já vinculado a outra empresa' }, 409)
+      .maybeSingle()
+    if (globalExisting && (globalExisting as any).company_id !== companyId) return c.json({ error: 'CPF já vinculado a outra empresa' }, 409)
     const passwordHash = await bcrypt.hash(parsed.data.password, 10)
     let { data: userProfile } = await supabase
       .from('user_profiles')
@@ -3304,11 +3309,12 @@ app.post('/api/empresa/caixas', async (c) => {
     }
     const { error: cashierError } = await supabase
       .from('company_cashiers')
-      .insert({ company_id: (session as any).companies.id, user_id: (userProfile as any).id, name: parsed.data.name, cpf: cleanCpf, password_hash: passwordHash, is_active: true })
-    if (cashierError) return c.json({ error: 'Erro interno do servidor' }, 500)
+      .insert({ company_id: companyId, user_id: (userProfile as any).id, name: parsed.data.name, cpf: cleanCpf, password_hash: passwordHash, is_active: true })
+    if (cashierError) return c.json({ error: 'Erro ao criar caixa', details: cashierError.message }, 500)
     return c.json({ success: true })
   } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
+    console.error('[POST_COMPANY_CAIXAS_ERROR]', e);
+    return c.json({ error: 'Erro interno do servidor', details: (e as any).message }, 500)
   }
 })
 
@@ -3448,21 +3454,24 @@ app.get('/api/empresa/caixas', async (c) => {
   if (!token) return c.json({ error: 'Não autorizado' }, 401)
   try {
     const supabase = createSupabase()
-    const { data: session } = await supabase
+    const { data: session, error: sessionError } = await supabase
       .from('company_sessions')
       .select('*, companies!inner(id)')
       .eq('session_token', token)
       .gt('expires_at', new Date().toISOString())
-      .single()
-    if (!session) return c.json({ error: 'Não autorizado' }, 401)
+      .maybeSingle()
+    if (sessionError || !session) return c.json({ error: 'Não autorizado ou sessão expirada' }, 401)
+    const companyId = (session as any).companies?.id
+    if (!companyId) return c.json({ error: 'Empresa não encontrada para esta sessão' }, 404)
     const { data: cashiers } = await supabase
       .from('company_cashiers')
       .select('id, name, cpf, is_active, last_access_at, created_at')
-      .eq('company_id', (session as any).companies.id)
+      .eq('company_id', companyId)
       .order('created_at', { ascending: false })
     return c.json({ cashiers: cashiers || [] })
   } catch (e) {
-    return c.json({ error: 'Erro interno do servidor' }, 500)
+    console.error('[GET_COMPANY_CAIXAS_ERROR]', e);
+    return c.json({ error: 'Erro interno do servidor', details: (e as any).message }, 500)
   }
 })
 

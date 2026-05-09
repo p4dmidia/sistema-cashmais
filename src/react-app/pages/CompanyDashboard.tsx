@@ -262,9 +262,13 @@ export default function CompanyDashboard() {
     setLoading(true);
     setError('');
     try {
+      const token = localStorage.getItem('company_token');
       const response = await fetch('/api/empresa/perfil', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(profileFormData),
         credentials: 'include',
       });
@@ -394,9 +398,13 @@ export default function CompanyDashboard() {
           .from('public')
           .getPublicUrl(filePath);
 
+        const token = localStorage.getItem('company_token');
         return fetch('/api/empresa/galeria', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
           body: JSON.stringify({ image_url: publicUrl }),
           credentials: 'include',
         });
@@ -417,8 +425,12 @@ export default function CompanyDashboard() {
     if (!confirm('Tem certeza que deseja excluir esta imagem?')) return;
 
     try {
+      const token = localStorage.getItem('company_token');
       const response = await fetch(`/api/empresa/galeria/${id}`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         credentials: 'include',
       });
 
@@ -542,9 +554,13 @@ export default function CompanyDashboard() {
     if (!editingCashier) return;
 
     try {
+      const token = localStorage.getItem('company_token');
       const response = await fetch(`/api/empresa/caixas/${editingCashier.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           name: editingCashier.name,
           password: editingCashier.password || undefined
@@ -626,9 +642,13 @@ export default function CompanyDashboard() {
     }
 
     try {
+      const token = localStorage.getItem('company_token');
       const response = await fetch('/api/empresa/cashback', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ cashback_percentage: percentage }),
         credentials: 'include'
       });
@@ -878,7 +898,6 @@ export default function CompanyDashboard() {
                   key={key}
                   onClick={() => {
                     setActiveTab(key);
-                    setIsMenuOpen(false);
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-medium text-sm transition-all duration-200 ${
