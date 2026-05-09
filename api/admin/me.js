@@ -13,13 +13,19 @@ export default async function handler(req, res) {
   const cookieToken = cookieMatch ? cookieMatch[1] : ''
   const token = headerAdminToken || xSessionToken || bearer || cookieToken || ''
   try {
-    const { data: session } = await supabase
+    const { data: session, error: sessErr } = await supabase
       .from('admin_sessions')
       .select('*, admin_users!inner(username,email,full_name,is_active)')
       .eq('session_token', token)
+      .gt('expires_at', new Date().toISOString())
       .maybeSingle()
     if (!session) {
-      return res.status(401).json({ error: 'SESSÃO_BLOQUEADA_PELO_ARQUIVO_API_ADMIN_ME', debug_token_recebido: token, debug_header_admin: headerAdminToken })
+      return res.status(401).json({ 
+        error: 'SESSÃO_BLOQUEADA_PELO_ARQUIVO_API_ADMIN_ME', 
+        debug_token_recebido: token, 
+        debug_header_admin: headerAdminToken,
+        db_error: sessErr ? sessErr.message : 'Session not found or expired'
+      })
     }
     return res.status(200).json({
       admin: {

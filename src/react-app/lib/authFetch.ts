@@ -9,18 +9,22 @@ export async function authenticatedFetch(input: RequestInfo, init?: RequestInit)
   const cashierToken = localStorage.getItem('cashier_token')
   
   // Choose the appropriate token based on the route
-  let token = affiliateToken
+  let token = null
   
-  if (url.startsWith('/api/admin')) {
+  const isUrl = (pattern: string) => url.includes(pattern)
+
+  if (isUrl('/api/admin')) {
     token = adminToken
-  } else if (url.startsWith('/api/empresa')) {
+  } else if (isUrl('/api/empresa')) {
     token = companyToken
-  } else if (url.startsWith('/api/caixa')) {
+  } else if (isUrl('/api/caixa')) {
     token = cashierToken
+  } else if (isUrl('/api/affiliate')) {
+    token = affiliateToken
   }
   
   // If no specific token found for route, try ANY token as a fallback for /api routes
-  if (!token && url.startsWith('/api')) {
+  if (!token && isUrl('/api')) {
     token = affiliateToken || adminToken || companyToken || cashierToken
   }
 
@@ -28,6 +32,7 @@ export async function authenticatedFetch(input: RequestInfo, init?: RequestInit)
     if (!headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`)
     headers.set('x-session-token', token)
     headers.set('X-Session-Token', token)
+    headers.set('x-admin-token', token)
   }
   
   return fetch(input, { ...(init || {}), headers, credentials: 'omit' })

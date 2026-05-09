@@ -128,19 +128,43 @@ export function setupAuthInterceptor() {
   const originalFetch = window.fetch;
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : (input instanceof URL ? input.toString() : (input as Request).url);
+    
+    // Only intercept /api/ calls that don't already have auth headers
     if (url.includes('/api/')) {
       const headers = new Headers(init?.headers || {});
-      const token = 
-        localStorage.getItem('affiliate_token') || 
-        localStorage.getItem('company_token') || 
-        localStorage.getItem('admin_token') ||
-        localStorage.getItem('cashier_token');
+      
+      // If headers already exist, don't overwrite them
+      if (!headers.has('Authorization') && !headers.has('x-session-token')) {
+        const affiliateToken = localStorage.getItem('affiliate_token');
+        const companyToken = localStorage.getItem('company_token');
+        const adminToken = localStorage.getItem('admin_token');
+        const cashierToken = localStorage.getItem('cashier_token');
         
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-        headers.set('x-session-token', token);
+        let token = null;
+        
+        // Route-aware token selection
+        if (url.includes('/api/admin')) {
+          token = adminToken;
+        } else if (url.includes('/api/empresa')) {
+          token = companyToken;
+        } else if (url.includes('/api/caixa')) {
+          token = cashierToken;
+        } else if (url.includes('/api/affiliate')) {
+          token = affiliateToken;
+        }
+        
+        // Fallback to any token if no specific route match (for general /api/ calls)
+        if (!token) {
+          token = affiliateToken || companyToken || adminToken || cashierToken;
+        }
+          
+        if (token) {
+          headers.set('Authorization', `Bearer ${token}`);
+          headers.set('x-session-token', token);
+        }
+        
+        return originalFetch(input, { ...(init || {}), headers });
       }
-      return originalFetch(input, { ...(init || {}), headers });
     }
     return originalFetch(input, init);
   };
