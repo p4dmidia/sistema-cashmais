@@ -32,7 +32,7 @@ export default async function handler(req, res) {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
       ...(apikey ? { apikey, Authorization: `Bearer ${apikey}` } : {}),
-      ...(clientX ? { 'x-session-token': clientX, 'X-Session-Token': clientX } : {}),
+      ...(clientX ? { 'x-session-token': clientX } : {}),
       ...(cookie ? { 'Cookie': cookie } : {}),
     }
     const init = {
