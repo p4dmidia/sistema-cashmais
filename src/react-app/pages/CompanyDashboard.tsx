@@ -620,14 +620,13 @@ export default function CompanyDashboard() {
       if (data.success) {
         setShowDeleteConfirm(false);
         setDeletingCashierId(null);
+        setError('');
         loadData();
       } else {
-        setError(data.error);
-        setShowDeleteConfirm(false);
+        setError(data.error || 'Erro ao excluir caixa');
       }
     } catch (error) {
       setError('Erro de conexão. Tente novamente.');
-      setShowDeleteConfirm(false);
     }
   };
 
@@ -1450,6 +1449,7 @@ export default function CompanyDashboard() {
                             onClick={() => {
                               setDeletingCashierId(cashier.id);
                               setShowDeleteConfirm(true);
+                              setError('');
                             }}
                             className="p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-all"
                             title="Excluir"
