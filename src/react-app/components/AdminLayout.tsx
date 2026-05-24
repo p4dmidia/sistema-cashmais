@@ -13,7 +13,8 @@ import {
   X,
   User,
   Tag,
-  MessageSquare
+  MessageSquare,
+  PlayCircle
 } from 'lucide-react';
 import UserHeaderMenu from './UserHeaderMenu';
 import Layout from './Layout';
@@ -50,6 +51,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { path: '/admin/reviews', icon: MessageSquare, label: 'Avaliações' },
     { path: '/admin/reports', icon: BarChart3, label: 'Relatórios' },
     { path: '/admin/settings', icon: Settings, label: 'Configurações' },
+    { path: '/admin/tutoriais', icon: PlayCircle, label: 'Tutoriais' },
   ];
 
   return (

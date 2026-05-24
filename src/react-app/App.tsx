@@ -30,6 +30,8 @@ import CategoryManagement from '@/react-app/pages/admin/CategoryManagement';
 import ReviewManagement from '@/react-app/pages/admin/ReviewManagement';
 import PlansPage from '@/react-app/pages/PlansPage';
 import LegalPage from '@/react-app/pages/LegalPage';
+import VideoTutorials from '@/react-app/pages/VideoTutorials';
+import TutorialsManagement from '@/react-app/pages/admin/TutorialsManagement';
 
 // Admin components
 import AdminLogin from '@/react-app/pages/admin/AdminLogin';
@@ -90,9 +92,11 @@ function App() {
           <Route path="/admin/settings" element={<SystemSettings />} />
           <Route path="/admin/categorias" element={<CategoryManagement />} />
           <Route path="/admin/reviews" element={<ReviewManagement />} />
+          <Route path="/admin/tutoriais" element={<TutorialsManagement />} />
           
           {/* Marketplace / Service Directory */}
           <Route path="/servicos" element={<ServiceDirectory />} />
+          <Route path="/tutoriais" element={<VideoTutorials />} />
           <Route path="/servicos/categoria/:id" element={<CategoryView />} />
           <Route path="/servicos/empresa/:id" element={<CompanyProfile />} />
           

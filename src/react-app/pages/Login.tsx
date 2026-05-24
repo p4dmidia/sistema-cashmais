@@ -251,7 +251,7 @@ function Login() {
               <div>
                 <span className="text-slate-400">Não tem conta? </span>
                 <Link
-                  to="/cadastro"
+                  to="/cadastro?ref=3FE737E4"
                   className="text-[#70ff00] hover:text-[#50cc00] transition-colors font-medium"
                 >
                   Cadastre-se

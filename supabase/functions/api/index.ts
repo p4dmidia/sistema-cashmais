@@ -4213,6 +4213,170 @@ async function handleCategoryDelete(c: any) {
   } catch (e) { return c.json({ error: 'Erro interno' }, 500) }
 }
 
+// --- VIDEO TUTORIALS ENDPOINTS ---
+
+const VideoTutorialSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional().nullable(),
+  video_url: z.string().min(1),
+  thumbnail_url: z.string().optional().nullable(),
+  order_index: z.number().int().optional().default(0),
+  is_active: z.boolean().optional().default(true),
+})
+
+// 1. PUBLIC: List Active Video Tutorials
+app.get('/api/video-tutorials', async (c) => {
+  try {
+    const supabase = createSupabase()
+    const { data: tutorials, error } = await supabase
+      .from('video_tutorials')
+      .select('*')
+      .eq('is_active', true)
+      .order('order_index', { ascending: true })
+      .order('created_at', { ascending: false })
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ tutorials })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+})
+
+app.get('/video-tutorials', async (c) => {
+  try {
+    const supabase = createSupabase()
+    const { data: tutorials, error } = await supabase
+      .from('video_tutorials')
+      .select('*')
+      .eq('is_active', true)
+      .order('order_index', { ascending: true })
+      .order('created_at', { ascending: false })
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ tutorials })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+})
+
+// 2. ADMIN: List All Video Tutorials (Including Inactive)
+app.get('/api/admin/video-tutorials', async (c) => {
+  const token = getAuthToken(c, 'admin_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: tutorials, error } = await supabase
+      .from('video_tutorials')
+      .select('*')
+      .order('order_index', { ascending: true })
+      .order('created_at', { ascending: false })
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ tutorials })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+})
+
+app.get('/admin/video-tutorials', async (c) => {
+  const token = getAuthToken(c, 'admin_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const supabase = createSupabase()
+    const { data: tutorials, error } = await supabase
+      .from('video_tutorials')
+      .select('*')
+      .order('order_index', { ascending: true })
+      .order('created_at', { ascending: false })
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ tutorials })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+})
+
+// 3. ADMIN: Create Video Tutorial
+app.post('/api/admin/video-tutorials', async (c) => {
+  return await handleVideoTutorialCreate(c)
+})
+app.post('/admin/video-tutorials', async (c) => {
+  return await handleVideoTutorialCreate(c)
+})
+
+async function handleVideoTutorialCreate(c: any) {
+  const token = getAuthToken(c, 'admin_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const body = await c.req.json()
+    const parsed = VideoTutorialSchema.safeParse(body)
+    if (!parsed.success) return c.json({ error: 'Dados inválidos', details: parsed.error.format() }, 400)
+
+    const supabase = createSupabase()
+    const { data, error } = await supabase
+      .from('video_tutorials')
+      .insert(parsed.data)
+      .select()
+      .maybeSingle()
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ success: true, tutorial: data })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+}
+
+// 4. ADMIN: Update Video Tutorial
+app.put('/api/admin/video-tutorials/:id', async (c) => {
+  return await handleVideoTutorialUpdate(c)
+})
+app.put('/admin/video-tutorials/:id', async (c) => {
+  return await handleVideoTutorialUpdate(c)
+})
+
+async function handleVideoTutorialUpdate(c: any) {
+  const token = getAuthToken(c, 'admin_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const id = c.req.param('id')
+    const body = await c.req.json()
+    const parsed = VideoTutorialSchema.safeParse(body)
+    if (!parsed.success) return c.json({ error: 'Dados inválidos', details: parsed.error.format() }, 400)
+
+    const supabase = createSupabase()
+    const { data, error } = await supabase
+      .from('video_tutorials')
+      .update(parsed.data)
+      .eq('id', id)
+      .select()
+      .maybeSingle()
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ success: true, tutorial: data })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+}
+
+// 5. ADMIN: Delete Video Tutorial
+app.delete('/api/admin/video-tutorials/:id', async (c) => {
+  return await handleVideoTutorialDelete(c)
+})
+app.delete('/admin/video-tutorials/:id', async (c) => {
+  return await handleVideoTutorialDelete(c)
+})
+
+async function handleVideoTutorialDelete(c: any) {
+  const token = getAuthToken(c, 'admin_session')
+  if (!token) return c.json({ error: 'Não autenticado' }, 401)
+  try {
+    const id = c.req.param('id')
+    const supabase = createSupabase()
+    const { error } = await supabase
+      .from('video_tutorials')
+      .delete()
+      .eq('id', id)
+    if (error) return c.json({ error: error.message }, 500)
+    return c.json({ success: true })
+  } catch (e) {
+    return c.json({ error: 'Erro interno' }, 500)
+  }
+}
+
 app.notFound((c: any) => {
   return c.json({
     error: 'Not found by Hono Catch-all',

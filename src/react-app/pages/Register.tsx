@@ -39,11 +39,9 @@ function Register() {
   // Get referral code from URL parameter
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const refCode = urlParams.get('ref');
+    const refCode = urlParams.get('ref') || '3FE737E4';
     
-    if (refCode) {
-      setFormData(prev => ({ ...prev, referral_code: refCode.toUpperCase() }));
-    }
+    setFormData(prev => ({ ...prev, referral_code: refCode.toUpperCase() }));
   }, []);
 
   // CPF formatting and validation

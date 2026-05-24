@@ -1,4 +1,4 @@
-import { LogOut, User, Home, Receipt, Users, DollarSign, Store, Menu, X, LayoutGrid, CreditCard, Shield, FileText, Lock, Settings, TrendingUp, Building2, Eye, LayoutDashboard, BarChart3, Tag, MessageSquare } from "lucide-react";
+import { LogOut, User, Home, Receipt, Users, DollarSign, Store, Menu, X, LayoutGrid, CreditCard, Shield, FileText, Lock, Settings, TrendingUp, Building2, Eye, LayoutDashboard, BarChart3, Tag, MessageSquare, PlayCircle } from "lucide-react";
 import React, { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router";
 import { type CashMaisUser } from "@/shared/types";
@@ -33,6 +33,7 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
     { to: "/saque", icon: DollarSign, label: "Saque" },
     { to: "/perfil", icon: User, label: "Perfil" },
     { to: "/servicos", icon: Store, label: "Serviços" },
+    { to: "/tutoriais", icon: PlayCircle, label: "Tutoriais" },
   ] : [];
 
   // Itens específicos do painel da empresa para o menu mobile
@@ -98,6 +99,10 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
               {!currentUser ? (
                 <>
                   <div className="hidden md:flex items-center space-x-2">
+                    <Link to="/tutoriais" className="px-3 py-1.5 text-white/70 text-[10px] font-black uppercase hover:text-[#70ff00] rounded-lg transition-all tracking-wider mr-2 flex items-center gap-1">
+                      <PlayCircle className="w-3.5 h-3.5 text-[#70ff00]" />
+                      <span>Tutoriais</span>
+                    </Link>
                     {/* Grupo Empresa */}
                     <div className="hidden lg:flex items-center bg-white/5 border border-white/10 rounded-xl p-1">
                       <Link to="/empresa/cadastro" className="px-3 py-1.5 text-[#70ff00] text-[10px] font-black uppercase hover:bg-[#70ff00]/10 rounded-lg transition-all tracking-wider">Cadastro Empresa</Link>
@@ -107,7 +112,7 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
 
                     {/* Grupo Afiliado */}
                     <div className="flex items-center bg-[#70ff00]/5 border border-[#70ff00]/20 rounded-xl p-1">
-                      <Link to="/cadastro" className="px-4 py-1.5 bg-[#70ff00] text-[#001144] text-[10px] font-black uppercase rounded-lg hover:bg-[#50cc00] transition-all tracking-wider shadow-lg shadow-[#70ff00]/25">Cadastro Afiliado</Link>
+                      <Link to="/cadastro?ref=3FE737E4" className="px-4 py-1.5 bg-[#70ff00] text-[#001144] text-[10px] font-black uppercase rounded-lg hover:bg-[#50cc00] transition-all tracking-wider shadow-lg shadow-[#70ff00]/25">Cadastro Afiliado</Link>
                       <div className="w-px h-3 bg-[#70ff00]/20 mx-1"></div>
                       <Link to="/login" className="px-4 py-1.5 text-[#70ff00] text-[10px] font-black uppercase hover:bg-[#70ff00]/10 rounded-lg transition-all tracking-wider">Entrar</Link>
                     </div>
@@ -226,7 +231,7 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
                     <User className="w-5 h-5 text-[#70ff00]" />
                     <span className="font-bold">Login Afiliado</span>
                   </Link>
-                  <Link to="/cadastro" className="flex items-center space-x-4 px-4 py-3 bg-[#70ff00]/10 text-[#70ff00] border border-[#70ff00]/20 rounded-xl transition-all" onClick={closeMenu}>
+                  <Link to="/cadastro?ref=3FE737E4" className="flex items-center space-x-4 px-4 py-3 bg-[#70ff00]/10 text-[#70ff00] border border-[#70ff00]/20 rounded-xl transition-all" onClick={closeMenu}>
                     <Users className="w-5 h-5" />
                     <span className="font-bold">Cadastro Afiliado</span>
                   </Link>
@@ -248,6 +253,10 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
                   <Link to="/servicos" className="flex items-center space-x-4 px-4 py-3 text-gray-300 hover:bg-white/5 rounded-xl transition-all" onClick={closeMenu}>
                     <Store className="w-5 h-5" />
                     <span className="font-bold">Diretório de Serviços</span>
+                  </Link>
+                  <Link to="/tutoriais" className="flex items-center space-x-4 px-4 py-3 text-gray-300 hover:bg-white/5 rounded-xl transition-all" onClick={closeMenu}>
+                    <PlayCircle className="w-5 h-5 text-[#70ff00]" />
+                    <span className="font-bold">Vídeos Tutoriais</span>
                   </Link>
                 </div>
               </nav>
@@ -274,6 +283,9 @@ export default function Layout({ children, user, fullWidth = false }: LayoutProp
             </div>
             
             <div className="text-gray-400 text-sm text-center md:text-right">
+              <p className="mb-2">
+                <Link to="/tutoriais" className="text-[#70ff00] hover:underline">Vídeos Tutoriais</Link>
+              </p>
               <p>&copy; 2024 CashMais. Sistema de cashback com MMN</p>
               <p className="mt-1">CNPJ: 61356738000180</p>
               <p className="mt-1">CashMais Tecnologia em Consumo e Cashback Ltda</p>

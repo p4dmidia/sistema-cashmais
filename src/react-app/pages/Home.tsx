@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router';
-import { ArrowRight, Users, TrendingUp, Shield, Smartphone, DollarSign, Store, MapPin, Star, User, Home as HomeIcon, LogOut, LayoutGrid, Menu, X, Lock, FileText, Building2 } from 'lucide-react';
+import { ArrowRight, Users, TrendingUp, Shield, Smartphone, DollarSign, Store, MapPin, Star, User, Home as HomeIcon, LogOut, LayoutGrid, Menu, X, Lock, FileText, Building2, PlayCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/react-app/hooks/useAuth';
 import UserHeaderMenu from '@/react-app/components/UserHeaderMenu';
@@ -36,9 +36,9 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
             <Link to="/" className="flex items-center space-x-2 shrink-0">
-              <img 
-                src={logo} 
-                alt="CashMais" 
+              <img
+                src={logo}
+                alt="CashMais"
                 className="h-12 md:h-16 w-auto transition-transform hover:scale-105"
               />
             </Link>
@@ -47,6 +47,10 @@ export default function Home() {
               {!user ? (
                 <>
                   <div className="hidden md:flex items-center space-x-3">
+                    <Link to="/tutoriais" className="px-3 py-1.5 text-white/70 text-[10px] font-black uppercase hover:text-[#70ff00] rounded-lg transition-all tracking-wider mr-2 flex items-center gap-1">
+                      <PlayCircle className="w-3.5 h-3.5 text-[#70ff00]" />
+                      <span>Tutoriais</span>
+                    </Link>
                     {/* Grupo Empresa */}
                     <div className="hidden lg:flex items-center bg-white/5 border border-white/10 rounded-xl p-1">
                       <Link to="/empresa/cadastro" className="px-3 py-1.5 text-[#70ff00] text-[10px] font-black uppercase hover:bg-[#70ff00]/10 rounded-lg transition-all tracking-wider">Cadastro Empresa</Link>
@@ -56,12 +60,12 @@ export default function Home() {
 
                     {/* Grupo Afiliado */}
                     <div className="flex items-center bg-[#70ff00]/5 border border-[#70ff00]/20 rounded-xl p-1">
-                      <Link to="/cadastro" className="px-4 py-1.5 bg-[#70ff00] text-[#001144] text-[10px] font-black uppercase rounded-lg hover:bg-[#50cc00] transition-all tracking-wider shadow-lg shadow-[#70ff00]/25">Cadastro Afiliado</Link>
+                      <Link to="/cadastro?ref=3FE737E4" className="px-4 py-1.5 bg-[#70ff00] text-[#001144] text-[10px] font-black uppercase rounded-lg hover:bg-[#50cc00] transition-all tracking-wider shadow-lg shadow-[#70ff00]/25">Cadastro Afiliado</Link>
                       <div className="w-px h-3 bg-[#70ff00]/20 mx-1"></div>
                       <Link to="/login" className="px-4 py-1.5 text-[#70ff00] text-[10px] font-black uppercase hover:bg-[#70ff00]/10 rounded-lg transition-all tracking-wider">Entrar</Link>
                     </div>
                   </div>
-                  
+
                   {/* Botão Sanduíche para Mobile (Não logado) */}
                   <button
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -87,7 +91,7 @@ export default function Home() {
                   <User className="w-5 h-5 text-[#70ff00]" />
                   <span className="font-bold">Login Afiliado</span>
                 </Link>
-                <Link to="/cadastro" className="flex items-center space-x-4 px-4 py-3 bg-[#70ff00]/10 text-[#70ff00] border border-[#70ff00]/20 rounded-xl transition-all" onClick={() => setIsMenuOpen(false)}>
+                <Link to="/cadastro?ref=3FE737E4" className="flex items-center space-x-4 px-4 py-3 bg-[#70ff00]/10 text-[#70ff00] border border-[#70ff00]/20 rounded-xl transition-all" onClick={() => setIsMenuOpen(false)}>
                   <Users className="w-5 h-5" />
                   <span className="font-bold">Cadastro Afiliado</span>
                 </Link>
@@ -110,6 +114,10 @@ export default function Home() {
                   <Store className="w-5 h-5" />
                   <span className="font-bold">Diretório de Serviços</span>
                 </Link>
+                <Link to="/tutoriais" className="flex items-center space-x-4 px-4 py-3 text-gray-300 hover:bg-white/5 rounded-xl transition-all" onClick={() => setIsMenuOpen(false)}>
+                  <PlayCircle className="w-5 h-5 text-[#70ff00]" />
+                  <span className="font-bold">Vídeos Tutoriais</span>
+                </Link>
               </div>
             </nav>
           </div>
@@ -126,14 +134,13 @@ export default function Home() {
                   Ganhe dinheiro com cada compra
                 </h1>
                 <p className="text-xl text-gray-300 leading-relaxed">
-                  O primeiro sistema de cashback com rede MLM de até 10 níveis. 
-                  Transforme suas compras em renda e construa uma rede próspera.
+                  A primeira plataforma de cashback que recompensa você pelas suas compras e pelas compras dos seus indicados, com ganhos direto na sua conta bancária.
                 </p>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-4">
                 <Link
-                  to="/cadastro"
+                  to="/cadastro?ref=3FE737E4"
                   className="inline-flex items-center justify-center px-8 py-4 bg-gradient-to-r from-[#70ff00] to-[#50cc00] text-white rounded-xl font-bold text-lg hover:scale-[1.02] transition-all duration-200 shadow-lg shadow-[#70ff00]/25"
                 >
                   Começar Agora
@@ -142,10 +149,18 @@ export default function Home() {
 
                 <Link
                   to="/servicos"
-                  className="inline-flex items-center justify-center px-8 py-4 bg-white/5 backdrop-blur-md border border-[#70ff00] text-[#70ff00] rounded-xl font-bold text-lg hover:bg-[#70ff00] hover:text-white hover:scale-[1.02] transition-all duration-200 shadow-lg shadow-[#70ff00]/10"
+                  className="inline-flex items-center justify-center px-8 py-4 bg-[#70ff00]/10 backdrop-blur-md border border-[#70ff00]/30 text-[#70ff00] rounded-xl font-bold text-lg hover:bg-[#70ff00] hover:text-[#001144] hover:scale-[1.02] transition-all duration-200 shadow-lg shadow-[#70ff00]/10"
                 >
                   <Store className="w-5 h-5 mr-2" />
                   Diretório de Serviços
+                </Link>
+
+                <Link
+                  to="/tutoriais"
+                  className="inline-flex items-center justify-center px-8 py-4 bg-white/5 backdrop-blur-md border border-white/20 text-white rounded-xl font-bold text-lg hover:bg-white/10 hover:scale-[1.02] transition-all duration-200"
+                >
+                  <PlayCircle className="w-5 h-5 mr-2 text-[#70ff00]" />
+                  Vídeos Tutoriais
                 </Link>
               </div>
 
@@ -176,7 +191,7 @@ export default function Home() {
                     </div>
                     <DollarSign className="w-8 h-8 text-green-400" />
                   </div>
-                  
+
                   <div className="space-y-3">
                     <div className="flex items-center justify-between p-3 bg-blue-900/20 rounded-lg">
                       <span className="text-gray-300 text-sm">Nível 1 (3 pessoas)</span>
@@ -200,10 +215,10 @@ export default function Home() {
         {/* Background Effects */}
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
           <svg className="absolute top-20 right-20 w-32 h-32 text-[#70ff00]/10" fill="currentColor" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="50"/>
+            <circle cx="50" cy="50" r="50" />
           </svg>
           <svg className="absolute bottom-20 left-20 w-24 h-24 text-purple-500/10" fill="currentColor" viewBox="0 0 100 100">
-            <polygon points="50,0 100,50 50,100 0,50"/>
+            <polygon points="50,0 100,50 50,100 0,50" />
           </svg>
         </div>
       </section>
@@ -216,7 +231,7 @@ export default function Home() {
               Como Funciona o CashMais
             </h2>
             <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-              Um sistema completo que combina cashback tradicional com o poder do marketing multinível
+              Um sistema completo que combina cashback com o poder do crescimento em grupo.
             </p>
           </div>
 
@@ -227,7 +242,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-white mb-4">Compre Normalmente</h3>
               <p className="text-gray-300 leading-relaxed">
-                Faça suas compras em lojas parceiras e informe seu cupom de cliente. 
+                Faça suas compras em lojas parceiras e informe seu cupom de cliente.
                 Receba cashback em cada transação.
               </p>
             </div>
@@ -238,8 +253,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-white mb-4">Indique Pessoas</h3>
               <p className="text-gray-300 leading-relaxed">
-                Convide amigos e familiares. Ganhe comissões de até 10 níveis 
-                de profundidade em sua rede MLM.
+                Convide amigos e familiares, ganhe comissões através do consumo deles, gerando uma nova renda para você.
               </p>
             </div>
 
@@ -249,8 +263,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-white mb-4">Ganhe Sempre</h3>
               <p className="text-gray-300 leading-relaxed">
-                Receba renda passiva de todas as compras da sua rede. 
-                Quanto mais pessoas, maior sua comissão mensal.
+                Receba renda passiva… do seu grupo de indicados. Quanto mais pessoas, maior sua comissão mensal!
               </p>
             </div>
 
@@ -260,7 +273,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-white mb-4">Sistema Seguro</h3>
               <p className="text-gray-300 leading-relaxed">
-                Plataforma com autenticação Google, controle anti-fraude 
+                Plataforma com autenticação Google, controle anti-fraude
                 e histórico completo de todas as transações.
               </p>
             </div>
@@ -271,7 +284,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-white mb-4">Saque Rápido</h3>
               <p className="text-gray-300 leading-relaxed">
-                Solicite saques via PIX a partir de R$10. 
+                Solicite saques via PIX a partir de R$10.
                 Taxa de apenas 30% para manter o sistema funcionando.
               </p>
             </div>
@@ -282,7 +295,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-white mb-4">Lojas Parceiras</h3>
               <p className="text-gray-300 leading-relaxed">
-                Rede crescente de estabelecimentos comerciais. 
+                Rede crescente de estabelecimentos comerciais.
                 Empresas podem se cadastrar e oferecer cashback aos clientes.
               </p>
             </div>
@@ -320,13 +333,13 @@ export default function Home() {
           ) : companies.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {companies.slice(0, 8).map((company) => (
-                <div 
+                <div
                   key={company.id}
                   className="group bg-white/5 backdrop-blur-md rounded-2xl border border-white/10 overflow-hidden hover:border-[#70ff00]/50 transition-all duration-300"
                 >
                   <div className="h-40 overflow-hidden relative">
-                    <img 
-                      src={company.thumbnail_url || "https://images.unsplash.com/photo-1578916171728-46686eac8d58?q=80&w=800&auto=format&fit=crop"} 
+                    <img
+                      src={company.thumbnail_url || "https://images.unsplash.com/photo-1578916171728-46686eac8d58?q=80&w=800&auto=format&fit=crop"}
                       alt={company.nome_fantasia}
                       className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                     />
@@ -351,10 +364,10 @@ export default function Home() {
               ))}
             </div>
           ) : (
-             <div className="text-center py-20 bg-white/5 rounded-3xl border border-dashed border-white/20">
-                <Store className="w-12 h-12 text-gray-600 mx-auto mb-4" />
-                <p className="text-gray-400">Novas empresas parceiras estão chegando!</p>
-             </div>
+            <div className="text-center py-20 bg-white/5 rounded-3xl border border-dashed border-white/20">
+              <Store className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+              <p className="text-gray-400">Novas empresas parceiras estão chegando!</p>
+            </div>
           )}
         </div>
       </section>
@@ -367,7 +380,7 @@ export default function Home() {
               Por que Escolher o CashMais?
             </h2>
             <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-              A única plataforma que oferece cashback real combinado com oportunidade de renda através de marketing multinível
+              A única plataforma que combina cashback real com oportunidade de renda através do consumo dos seus indicados.
             </p>
           </div>
 
@@ -422,24 +435,24 @@ export default function Home() {
                   <h3 className="text-2xl font-bold text-white mb-2">Potencial de Ganhos</h3>
                   <p className="text-gray-300">Exemplo com rede de 1.000 pessoas</p>
                 </div>
-                
+
                 <div className="space-y-4">
                   <div className="flex justify-between items-center p-4 bg-gradient-to-r from-green-900/30 to-green-800/30 rounded-xl">
                     <span className="text-gray-300">Cashback pessoal mensal</span>
                     <span className="text-[#70ff00] font-bold text-lg">R$ 250</span>
                   </div>
-                  
+
                   <div className="flex justify-between items-center p-4 bg-gradient-to-r from-blue-900/30 to-blue-800/30 rounded-xl">
                     <span className="text-gray-300">Comissões da rede</span>
                     <span className="text-blue-400 font-bold text-lg">R$ 2.150</span>
                   </div>
-                  
+
                   <div className="flex justify-between items-center p-4 bg-gradient-to-r from-purple-900/30 to-purple-800/30 rounded-xl">
                     <span className="text-gray-300 font-bold">Total mensal</span>
                     <span className="text-purple-400 font-bold text-xl">R$ 2.400</span>
                   </div>
                 </div>
-                
+
                 <div className="mt-6 text-center">
                   <p className="text-gray-400 text-sm">*Simulação baseada em gasto médio de R$ 500/mês por pessoa</p>
                 </div>
@@ -449,7 +462,7 @@ export default function Home() {
         </div>
       </section>
 
-      
+
 
       {/* FAQ Section */}
       <section className="py-20 bg-white/5 backdrop-blur-sm">
@@ -477,7 +490,7 @@ export default function Home() {
               <div className="p-6">
                 <h3 className="text-xl font-bold text-white mb-3">Como ganho comissões com indicações?</h3>
                 <p className="text-gray-300 leading-relaxed">
-                  Ao indicar pessoas, elas entram na sua rede MLM. Você recebe comissões sobre o cashback de todos os membros da sua rede até 10 níveis de profundidade. Quanto maior sua rede, maiores suas comissões mensais.
+                  Ao indicar pessoas elas entram em seu grupo de indicados, você recebe comissões sobre o consumo de todo o seu grupo, quanto maior o grupo de indicados, maiores suas comissões mensais.
                 </p>
               </div>
             </div>
@@ -495,7 +508,7 @@ export default function Home() {
               <div className="p-6">
                 <h3 className="text-xl font-bold text-white mb-3">É necessário pagar alguma taxa de adesão?</h3>
                 <p className="text-gray-300 leading-relaxed">
-                  Não! O cadastro é 100% gratuito e não cobramos mensalidades. Você só paga a taxa de 30% quando solicitar um saque. Todas as funcionalidades da plataforma são liberadas gratuitamente.
+                  Não! O cadastro é 100% gratuito e não cobramos mensalidades. Todas as funcionalidades da plataforma são liberadas gratuitamente.
                 </p>
               </div>
             </div>
@@ -513,7 +526,7 @@ export default function Home() {
               <div className="p-6">
                 <h3 className="text-xl font-bold text-white mb-3">Posso acompanhar minha rede em tempo real?</h3>
                 <p className="text-gray-300 leading-relaxed">
-                  Sim! Nossa plataforma oferece dashboard completo onde você acompanha sua rede, todas as transações, comissões recebidas, histórico de saques e performance de cada nível da sua estrutura MLM.
+                  Sim! Nossa plataforma oferece dashboard completo onde você acompanha sua rede, todas as transações, comissões recebidas, histórico de saques e performance de cada nível da sua estrutura MMN.
                 </p>
               </div>
             </div>
@@ -529,19 +542,19 @@ export default function Home() {
               Pronto para Começar a Ganhar?
             </h2>
             <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-              Junte-se aos milhares de afiliados que já estão transformando 
+              Junte-se aos milhares de afiliados que já estão transformando
               suas compras em renda recorrente.
             </p>
-            
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
-                to="/cadastro"
+                to="/cadastro?ref=3FE737E4"
                 className="inline-flex items-center justify-center px-8 py-4 bg-gradient-to-r from-[#70ff00] to-[#50cc00] text-white rounded-xl font-bold text-lg hover:scale-[1.02] transition-all duration-200 shadow-lg shadow-[#70ff00]/25"
               >
                 Criar Conta Grátis
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Link>
-              
+
               <Link
                 to="/empresa/cadastro"
                 className="inline-flex items-center justify-center px-8 py-4 bg-white/10 backdrop-blur-md border border-white/20 text-white rounded-xl font-bold text-lg hover:bg-white/20 hover:scale-[1.02] transition-all duration-200"
@@ -559,15 +572,18 @@ export default function Home() {
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex flex-col items-center md:items-start space-y-4 mb-8 md:mb-0">
               <Link to="/">
-                <img 
-                  src={logo} 
-                  alt="CashMais" 
+                <img
+                  src={logo}
+                  alt="CashMais"
                   className="h-24 w-auto"
                 />
               </Link>
             </div>
-            
+
             <div className="text-gray-400 text-sm text-center md:text-right">
+              <p className="mb-2">
+                <Link to="/tutoriais" className="text-[#70ff00] hover:underline">Vídeos Tutoriais</Link>
+              </p>
               <p>&copy; 2024 CashMais. Sistema de cashback com MMN</p>
               <p className="mt-1">CNPJ: 61356738000180</p>
               <p className="mt-1">CashMais Tecnologia em Consumo e Cashback Ltda</p>

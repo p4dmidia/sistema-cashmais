@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { User, LogOut, Home, Store, LayoutGrid, Lock, FileText, LayoutDashboard, CreditCard, Users, Building2, BarChart3, Settings, Tag, MessageSquare } from "lucide-react";
+import { User, LogOut, Home, Store, LayoutGrid, Lock, FileText, LayoutDashboard, CreditCard, Users, Building2, BarChart3, Settings, Tag, MessageSquare, Video } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { useAuth } from "@/react-app/hooks/useAuth";
 
@@ -152,6 +152,15 @@ export default function UserHeaderMenu() {
             >
               <Store className="w-4 h-4 text-[#70ff00]" />
               <span>Empresas parceiras</span>
+            </Link>
+
+            <Link
+              to="/tutoriais"
+              onClick={() => setIsOpen(false)}
+              className="w-full flex items-center space-x-3 px-4 py-3 text-sm text-white hover:bg-white/5 transition-colors"
+            >
+              <Video className="w-4 h-4 text-[#70ff00]" />
+              <span>Vídeos Tutoriais</span>
             </Link>
 
             <div className="h-px bg-white/5 my-2"></div>
